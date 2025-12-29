@@ -1,1 +1,1230 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facilitaki - Seu sucesso académico</title>
+    <style>
+        /* RESET E BASE */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8fafc;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* HEADER */
+        .header-comercial {
+            background: linear-gradient(135deg, #0c4a6e, #1e40af);
+            color: white;
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo-pro {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            text-decoration: none;
+            color: white;
+        }
+        
+        .logo-pro i {
+            font-size: 2.5rem;
+            color: #60a5fa;
+        }
+        
+        .logo-text h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.2rem;
+        }
+        
+        .logo-text .tagline {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        /* MENU DE NAVEGAÇÃO */
+        .nav-menu {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+        
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: background 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .nav-link:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .nav-link.active {
+            background: rgba(255,255,255,0.2);
+            font-weight: bold;
+        }
+        
+        .btn-login {
+            background: white;
+            color: #1e40af;
+            padding: 0.5rem 1.5rem;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: transform 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        /* CONTEÚDO PRINCIPAL */
+        .main-content {
+            flex: 1;
+            padding: 2rem 0;
+        }
+        
+        /* SEÇÕES PRINCIPAIS */
+        .section {
+            padding: 3rem 2rem;
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .section.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .section-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .section-header h2 {
+            font-size: 2.5rem;
+            color: #1e40af;
+            margin-bottom: 1rem;
+        }
+        
+        .section-header p {
+            font-size: 1.1rem;
+            color: #6b7280;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        /* PLANOS DE SERVIÇOS */
+        .planos-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+        
+        .plano-card {
+            background: white;
+            border-radius: 10px;
+            padding: 2.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            border: 2px solid #e5e7eb;
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .plano-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        
+        .plano-card.recomendado {
+            border-color: #3b82f6;
+        }
+        
+        .plano-badge {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #3b82f6;
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .plano-preco {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #1e40af;
+            margin: 1.5rem 0;
+        }
+        
+        .plano-preco span {
+            font-size: 1rem;
+            color: #6b7280;
+        }
+        
+        .plano-features {
+            list-style: none;
+            margin: 1.5rem 0;
+            text-align: left;
+            flex: 1;
+        }
+        
+        .plano-features li {
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .plano-features i.fa-check {
+            color: #10b981;
+        }
+        
+        .plano-features i.fa-times {
+            color: #ef4444;
+        }
+        
+        .btn-comprar {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 5px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 100%;
+            margin-top: auto;
+            transition: background 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-comprar:hover {
+            background: #2563eb;
+        }
+        
+        .btn-comprar.recomendado {
+            background: #1e40af;
+        }
+        
+        /* CHECKOUT SIMPLIFICADO */
+        .checkout-container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .checkout-step {
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .checkout-step:last-child {
+            border-bottom: none;
+        }
+        
+        .checkout-step h3 {
+            margin-bottom: 1rem;
+            color: #1e40af;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #4b5563;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 5px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        /* DASHBOARD */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .dashboard-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .dashboard-card.saldo {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+        
+        .saldo-valor {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 1rem 0;
+        }
+        
+        /* MENSAGENS */
+        .message {
+            padding: 1rem;
+            border-radius: 5px;
+            margin: 1rem 0;
+            display: none;
+        }
+        
+        .message.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+            display: block;
+        }
+        
+        .message.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            display: block;
+        }
+        
+        .message.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+            display: block;
+        }
+        
+        /* MÉTODOS DE PAGAMENTO */
+        .metodos-pagamento {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .metodo-pagamento {
+            background: #f9fafb;
+            border: 1px solid #d1d5db;
+            padding: 0.8rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .metodo-pagamento:hover {
+            background: #e5e7eb;
+        }
+        
+        .metodo-pagamento.ativo {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        
+        /* FOOTER */
+        footer {
+            background: #1f2937;
+            color: white;
+            padding: 3rem 2rem;
+            margin-top: auto;
+        }
+        
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+        
+        .footer-section h4 {
+            margin-bottom: 1rem;
+            color: #60a5fa;
+        }
+        
+        .footer-links {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .footer-links a {
+            color: #d1d5db;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .footer-links a:hover {
+            color: white;
+        }
+        
+        .footer-bottom {
+            text-align: center;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #374151;
+            color: #9ca3af;
+        }
+        
+        /* MODAL - VERSÃO CORRIGIDA E RESPONSIVA */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 100%;
+            animation: modalFadeIn 0.3s ease;
+            max-height: 85vh;
+            overflow-y: auto;
+            margin: 20px;
+        }
+        
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Responsividade para o modal */
+        @media (max-width: 576px) {
+            .modal-content {
+                max-width: 95%;
+                padding: 1.5rem;
+                max-height: 90vh;
+                margin: 0.5rem;
+            }
+        }
+        
+        /* RESPONSIVIDADE GERAL */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .nav-menu {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 1rem;
+            }
+            
+            .section {
+                padding: 2rem 1rem;
+            }
+            
+            .section-header h2 {
+                font-size: 2rem;
+            }
+            
+            .planos-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .plano-card {
+                padding: 2rem;
+            }
+            
+            .metodos-pagamento {
+                grid-template-columns: 1fr;
+            }
+            
+            .footer-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .checkout-container {
+                padding: 1.5rem;
+            }
+            
+            /* Botões do modal em coluna em telas pequenas */
+            .modal-content > div:last-child {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .modal-content .btn {
+                width: 100%;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📚</text></svg>">
+</head>
+<body>
+    <!-- Header com Navegação -->
+    <header class="header-comercial">
+        <div class="container">
+            <div class="header-content">
+                <a href="#" class="logo-pro" onclick="navegarPara('home')">
+                    <i class="fas fa-bookmark"></i>
+                    <div class="logo-text">
+                        <h1>FACILITAKI</h1>
+                        <p class="tagline">SEU SUCESSO ACADÉMICO</p>
+                    </div>
+                </a>
+                
+                <nav class="nav-menu">
+                    <a href="#" class="nav-link active" onclick="navegarPara('home')">
+                        <i class="fas fa-home"></i> Início
+                    </a>
+                    <a href="#" class="nav-link" onclick="navegarPara('planos')">
+                        <i class="fas fa-cog"></i> Serviços
+                    </a>
+                    <a href="#" class="nav-link" onclick="navegarPara('como-funciona')">
+                        <i class="fas fa-info-circle"></i> Ajuda
+                    </a>
+                    <a href="#" class="nav-link" onclick="navegarPara('contato')">
+                        <i class="fas fa-phone"></i> Contacto
+                    </a>
+                    <a href="#" class="btn-login" id="btnLoginHeader" onclick="navegarPara('login')">
+                        <i class="fas fa-user"></i> Área do Cliente
+                    </a>
+                </nav>
+            </div>
+        </div>
+    </header>
 
+    <!-- Conteúdo Principal -->
+    <main class="main-content">
+        <!-- Seção Home (Página Inicial) -->
+        <section id="home" class="section active">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Excelência Acadêmica Garantida</h2>
+                    <p>Apoio profissional para vencer o prazo e alcançar a excelência. Nossa equipe especializada está pronta para ajudar você a alcançar o sucesso acadêmico.</p>
+                </div>
+                
+                <div style="text-align: center; margin: 3rem 0;">
+                    <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 1rem 3rem; border-radius: 5px; font-size: 1.2rem; cursor: pointer; margin-right: 1rem;">
+                        <i class="fas fa-bolt"></i> Ver Serviços
+                    </button>
+                    <button onclick="navegarPara('como-funciona')" style="background: transparent; color: #3b82f6; border: 2px solid #3b82f6; padding: 1rem 3rem; border-radius: 5px; font-size: 1.2rem; cursor: pointer;">
+                        <i class="fas fa-play-circle"></i> Como Funciona
+                    </button>
+                </div>
+                
+                <!-- Estatísticas -->
+                <div style="max-width: 1000px; margin: 3rem auto 0; text-align: center;">
+                    <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 30px;">
+                        <div style="flex: 1; min-width: 180px;">
+                            <div style="font-size: 48px; font-weight: bold; color: #10b981; margin-bottom: 10px;">99,9%</div>
+                            <div style="font-size: 16px; color: #333; font-weight: 500;">Taxa de aprovação</div>
+                        </div>
+                        <div style="flex: 1; min-width: 180px;">
+                            <div style="font-size: 48px; font-weight: bold; color: #007bff; margin-bottom: 10px;">72h</div>
+                            <div style="font-size: 16px; color: #333; font-weight: 500;">Período de espera</div>
+                        </div>
+                        <div style="flex: 1; min-width: 180px;">
+                            <div style="font-size: 48px; font-weight: bold; color: #8b5cf6; margin-bottom: 10px;">500+</div>
+                            <div style="font-size: 16px; color: #333; font-weight: 500;">Projetos</div>
+                        </div>
+                        <div style="flex: 1; min-width: 180px;">
+                            <div style="font-size: 48px; font-weight: bold; color: #f59e0b; margin-bottom: 10px;">100%</div>
+                            <div style="font-size: 16px; color: #333; font-weight: 500;">Compromisso</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção Serviços -->
+        <section id="planos" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Escolha o serviço</h2>
+                    <p>Apoio profissional para vencer o prazo e alcançar a excelência.</p>
+                </div>
+                
+                <div class="planos-container">
+                    <!-- Plano Básico -->
+                    <div class="plano-card">
+                        <h3>Serviços Avulsos</h3>
+
+                        <ul class="plano-features">
+                            <li><i class="fas fa-check"></i> Formatação completa (alinhamento, tamanho e tipos de letra, etc.)</li>
+                            <li><i class="fas fa-check"></i> Paginação e índice automático</li>
+                            <li><i class="fas fa-check"></i> Padronização de tabelas, figuras e equações</li>
+                            <li><i class="fas fa-check"></i> Entrega pronta para submissão em Word e PDF</li>
+                            <li><i class="fas fa-check"></i> Período máximo de entrega 24h</li>
+                        </ul>
+                        
+                        <button class="btn-comprar" onclick="verificarELogar('basico', 100)">
+                            <i class="fas fa-shopping-cart"></i> Solicitar Agora
+                        </button>
+                    </div>
+                    
+                    <!-- Plano Avançado (Recomendado) -->
+                    <div class="plano-card recomendado">
+                        <div class="plano-badge">MAIS POPULAR</div>
+                        <h3>Trabalho de campo</h3>
+                        
+                        <ul class="plano-features">
+                            <li><i class="fas fa-check"></i> Planejamento metodológico completo</li>
+                            <li><i class="fas fa-check"></i> Desenvolvimento de instrumentos de pesquisa validados</li>
+                            <li><i class="fas fa-check"></i> Organização logística e ética da coleta de dados</li>
+                            <li><i class="fas fa-check"></i> Sistematização e análise preliminar dos dados</li>
+                            <li><i class="fas fa-check"></i> Período máximo de entrega em 7 dias</li>
+                        </ul>
+                        
+                        <button class="btn-comprar recomendado" onclick="verificarELogar('avancado', 500)">
+                            <i class="fas fa-bolt"></i> Solicitar Agora
+                        </button>
+                    </div>
+                    
+                    <!-- Plano Premium -->
+                    <div class="plano-card">
+                        <h3>Monografia/TCC</h3>
+                        
+                        <ul class="plano-features">
+                            <li><i class="fas fa-check"></i> Desenvolvimento do projeto de pesquisa</li>
+                            <li><i class="fas fa-check"></i> Pesquisa e organização bibliográfica</li>
+                            <li><i class="fas fa-check"></i> Escrita orientada por capítulos</li>
+                            <li><i class="fas fa-check"></i> Revisão textual e preparação para defesa</li>
+                            <li><i class="fas fa-check"></i> Slides e roteiro de apresentação</li>
+                            <li><i class="fas fa-check"></i> Período máximo de entrega em 3 meses</li>
+                        </ul>
+                        
+                        <button class="btn-comprar" onclick="verificarELogar('premium', 15000)">
+                            <i class="fas fa-crown"></i> Solicitar Agora
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Nota importante -->
+                <div style="background: #f0f9ff; padding: 1.5rem; border-radius: 10px; margin-top: 3rem; text-align: center;">
+                    <h3 style="color: #1e40af; margin-bottom: 1rem;">
+                        <i class="fas fa-info-circle"></i> Importante
+                    </h3>
+                    <p style="color: #4b5563;">
+                        Escolha o serviço pretendido. Lembre-se: O trabalho só será iniciado após a confirmação do pagamento. O prazo de entrega começa a contar a partir do pagamento e do envio de todos os materiais necessários.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção Checkout (SIMPLIFICADA) -->
+        <section id="checkout" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Acesso Necessário</h2>
+                    <p>Para solicitar serviços, você precisa acessar sua conta</p>
+                </div>
+                
+                <div class="checkout-container">
+                    <!-- Mensagem informativa -->
+                    <div class="message info" style="margin-bottom: 2rem;">
+                        <h3 style="color: #1e40af; margin-bottom: 0.5rem;">
+                            <i class="fas fa-info-circle"></i> Acesso Necessário
+                        </h3>
+                        <p>Para continuar com a solicitação do serviço, você precisa acessar sua conta ou criar uma nova.</p>
+                    </div>
+                    
+                    <!-- Resumo do Pedido -->
+                    <div class="checkout-step">
+                        <h3><i class="fas fa-shopping-cart"></i> Serviço Selecionado</h3>
+                        <div id="resumoPedido" style="background: #f9fafb; padding: 1.5rem; border-radius: 5px; text-align: center;">
+                            <p style="color: #6b7280;">Nenhum serviço selecionado</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Botões de Ação -->
+                    <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 2rem;">
+                        <button class="btn-primary" onclick="navegarPara('login')">
+                            <i class="fas fa-sign-in-alt"></i> Acessar Área do Cliente
+                        </button>
+                        
+                        <button class="btn-secondary" onclick="navegarPara('planos')">
+                            <i class="fas fa-arrow-left"></i> Voltar aos Serviços
+                        </button>
+                    </div>
+                    
+                    <!-- Mensagem adicional -->
+                    <div style="text-align: center; margin-top: 2rem; color: #6b7280; font-size: 0.9rem;">
+                        <p><i class="fas fa-lightbulb"></i> Após fazer login, você poderá completar sua solicitação</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção Login/Registro -->
+        <section id="login" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Área do Cliente</h2>
+                    <p>Acesse sua conta ou cadastre-se</p>
+                </div>
+                
+                <div style="max-width: 400px; margin: 0 auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <!-- Login -->
+                    <div id="formLogin">
+                        <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </h3>
+                        
+                        <div class="form-group">
+                            <label for="loginTelefone">WhatsApp *</label>
+                            <input type="tel" id="loginTelefone" placeholder="Ex: 84 123 4567" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="loginSenha">Senha *</label>
+                            <input type="password" id="loginSenha" placeholder="Sua senha" required>
+                        </div>
+                        
+                        <button class="btn-primary" onclick="fazerLogin()" style="margin-bottom: 1rem;">
+                            <i class="fas fa-sign-in-alt"></i> Entrar
+                        </button>
+                        
+                        <p style="text-align: center; color: #6b7280;">
+                            Não tem conta? 
+                            <a href="#" onclick="mostrarCadastro()" style="color: #3b82f6; text-decoration: none;">
+                                Cadastre-se aqui
+                            </a>
+                        </p>
+                    </div>
+                    
+                    <!-- Cadastro -->
+                    <div id="formCadastro" style="display: none;">
+                        <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
+                            <i class="fas fa-user-plus"></i> Cadastro
+                        </h3>
+                        
+                        <div class="form-group">
+                            <label for="cadastroNome">Nome Completo *</label>
+                            <input type="text" id="cadastroNome" placeholder="Seu nome completo" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cadastroTelefone">WhatsApp *</label>
+                            <input type="tel" id="cadastroTelefone" placeholder="Ex: 84 123 4567" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cadastroSenha">Senha *</label>
+                            <input type="password" id="cadastroSenha" placeholder="Crie uma senha" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cadastroSenhaConfirm">Confirmar Senha *</label>
+                            <input type="password" id="cadastroSenhaConfirm" placeholder="Repita a senha" required>
+                        </div>
+                        
+                        <button class="btn-primary" onclick="fazerCadastro()" style="margin-bottom: 1rem;">
+                            <i class="fas fa-check"></i> Cadastrar
+                        </button>
+                        
+                        <button class="btn-secondary" onclick="mostrarLogin()" style="width: 100%;">
+                            <i class="fas fa-arrow-left"></i> Voltar para Login
+                        </button>
+                    </div>
+                    
+                    <!-- Mensagens -->
+                    <div id="mensagemLogin" class="message"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção Dashboard (área logada) -->
+        <section id="dashboard" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Minha Conta</h2>
+                    <p>Gerencie seus serviços e dados</p>
+                </div>
+                
+                <div class="dashboard-grid">
+                    <!-- Valor total por pagar -->
+                    <div class="dashboard-card saldo">
+                        <h3><i class="fas fa-wallet"></i> Valor total por pagar</h3>
+                        <div class="saldo-valor" id="valorTotalPagar">0 MT</div>
+                        <p style="margin-top: 1rem; opacity: 0.9;">Somatório de todos os seus pedidos pendentes</p>
+                    </div>
+                    
+                    <!-- Meus Pedidos -->
+                    <div class="dashboard-card">
+                        <h3><i class="fas fa-history"></i> Meus Pedidos</h3>
+                        <div id="listaPedidos" style="min-height: 200px; color: #6b7280;">
+                            <!-- A estrutura será populada pelo JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Solicite aqui! -->
+                    <div class="dashboard-card">
+                        <h3><i class="fas fa-plus-circle"></i> Solicite aqui!</h3>
+                        <p style="margin-bottom: 1rem;">Escolha o serviço e descreva seu trabalho</p>
+                        
+                        <div class="form-group">
+                            <label>Serviço:</label>
+                            <select id="selectServicoDashboard" style="width: 100%; margin-bottom: 1rem;">
+                                <option value="">Selecione um serviço</option>
+                                <option value="basico">Serviços Avulsos - 100 MT</option>
+                                <option value="avancado">Trabalho de campo - 500 MT</option>
+                                <option value="premium">Monografia/TCC - 15.000 MT</option>
+                            </select>
+                        </div>
+                        
+                        <button onclick="abrirDescricaoTrabalho()" class="btn-primary" style="margin-bottom: 1rem; width: 100%;">
+                            <i class="fas fa-edit"></i> Descrever Trabalho
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 3rem;">
+                    <button onclick="fazerLogout()" style="background: #ef4444; color: white; border: none; padding: 0.8rem 2rem; border-radius: 5px;">
+                        <i class="fas fa-sign-out-alt"></i> Sair da Conta
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção Pagamento Sucesso -->
+        <section id="pagamento-sucesso" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Instruções de Pagamento</h2>
+                    <p>Siga as instruções abaixo para completar seu pagamento</p>
+                </div>
+                
+                <div class="checkout-container">
+                    <!-- Mensagem de sucesso -->
+                    <div class="message success" style="margin-bottom: 2rem;">
+                        <h3 style="color: #065f46; margin-bottom: 0.5rem;">
+                            <i class="fas fa-check-circle"></i> Submetido com sucesso!
+                        </h3>
+                        <p>Seu pedido foi registrado. Complete o pagamento para iniciarmos.</p>
+                    </div>
+                    
+                    <!-- Instruções de Pagamento -->
+                    <div class="checkout-step">
+                        <h3><i class="fas fa-credit-card"></i> Instruções de Pagamento</h3>
+                        <div id="instrucoesDetalhadas" style="background: #f0f9ff; padding: 1.5rem; border-radius: 5px;">
+                            <!-- As instruções serão preenchidas pelo JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Relatório do pagamento  -->
+                    <div class="checkout-step">
+                        <h3><i class="fas fa-money-check-alt"></i> Relatório do pagamento </h3>
+                        <div id="resumoPagamento" style="background: #f9fafb; padding: 1.5rem; border-radius: 5px;">
+                            <!-- O resumo será preenchido pelo JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Botões de Ação -->
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <button class="btn-secondary" onclick="navegarPara('dashboard')">
+                            <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
+                        </button>
+                        <button class="btn-primary" onclick="navegarPara('home')">
+                            <i class="fas fa-home"></i> Ir para Início
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção Como Funciona -->
+        <section id="como-funciona" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Como funciona</h2>
+                    <p>Passo a passo para criar a sua conta e solicitar um serviço</p>
+                </div>
+                
+                <div style="max-width: 800px; margin: 0 auto;">
+                    <!-- Passo 1 -->
+                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
+                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
+                            <i class="fas fa-1"></i>
+                        </div>
+                        <div>
+                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">1. Cadastre a sua conta</h3>
+                            <p style="color: #4b5563; line-height: 1.6;">
+                                Para cadastrar a sua conta no nosso sistema, 
+                                clique no botão "Área do cliente" em seguida "Cadastre-se aqui".
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Passo 2 -->
+                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
+                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
+                            <i class="fas fa-2"></i>
+                        </div>
+                        <div>
+                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">2. Para solicitar um serviço</h3>
+                            <p style="color: #4b5563; line-height: 1.6;">
+                                Se tiver um trabalho, acesse sua conta e solicite o serviço pretendido.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Passo 3 -->
+                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
+                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
+                            <i class="fas fa-3"></i>
+                        </div>
+                        <div>
+                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">3. Pagamento serviços</h3>
+                            <p style="color: #4b5563; line-height: 1.6;">
+                                Após a solicitação do serviço pretendido, faça o pagamento via M-Pesa, e-Mola ou depósito bancário.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Passo 4 -->
+                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
+                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
+                            <i class="fas fa-4"></i>
+                        </div>
+                        <div>
+                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">4. Nós entraremos em contacto</h3>
+                            <p style="color: #4b5563; line-height: 1.6;">
+                                Nossa equipe é especializada para prestar serviços conforme a sua orientação. 
+                                Entraremos em contacto no WhatsApp para confirmar o pagamento e receber o edital do trabalho.
+                            </p>
+                        </div>
+                    </div>
+                    
+                </div>
+                
+                <div style="text-align: center; margin-top: 3rem;">
+                    <button onclick="navegarPara('planos')" class="btn-primary" style="padding: 1rem 3rem;">
+                        <i class="fas fa-play-circle"></i> Solicitar Agora
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção Contato -->
+        <section id="contato" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Entre em Contato</h2>
+                    <p>Tire suas dúvidas ou solicite informações</p>
+                </div>
+                
+                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <div class="form-group">
+                        <label for="contatoNome">Nome *</label>
+                        <input type="text" id="contatoNome" placeholder="Seu nome" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="contatoTelefone">WhatsApp *</label>
+                        <input type="tel" id="contatoTelefone" placeholder="Ex: 84 123 4567" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="contatoMensagem">Mensagem *</label>
+                        <textarea id="contatoMensagem" rows="5" placeholder="Como podemos ajudar?" required></textarea>
+                    </div>
+                    
+                    <button class="btn-primary" onclick="enviarContato()">
+                        <i class="fas fa-paper-plane"></i> Enviar Mensagem
+                    </button>
+                    
+                    <div id="mensagemContato" class="message" style="margin-top: 1rem;"></div>
+                </div>
+                
+                <!-- Informações de Contato -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem; margin-top: 3rem;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;">
+                            <i class="fas fa-phone-alt"></i>
+                        </div>
+                        <h3>Telefone</h3>
+                        <p>+258 84 123 4567</p>
+                        <p style="color: #6b7280;">Segunda a Sexta, 8h às 15h</p>
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <div style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <h3>Email</h3>
+                        <p>suporte@facilitaki.co.mz</p>
+                        <p style="color: #6b7280;">Respondemos em até 24h</p>
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <div style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </div>
+                        <h3>Localização</h3>
+                        <p>Maputo, Moçambique</p>
+                        <p style="color: #6b7280;">Atendimento online</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>
+                    <h4>FacilitAki</h4>
+                    <p>Apoio profissional para vencer o prazo e alcançar a excelência.</p>
+                    <p style="margin-top: 1rem; color: #9ca3af;">
+                        <i class="fas fa-shield-alt"></i> 100% dentro da legalidade
+                    </p>
+                </div>
+                
+                <div>
+                    <h4>Links Rápidos</h4>
+                    <ul class="footer-links">
+                        <li><a href="#" onclick="navegarPara('home')">Início</a></li>
+                        <li><a href="#" onclick="navegarPara('planos')">Serviços</a></li>
+                        <li><a href="#" onclick="navegarPara('como-funciona')">Ajuda</a></li>
+                        <li><a href="#" onclick="navegarPara('contato')">Contato</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4>Legal</h4>
+                    <ul class="footer-links">
+                        <li><a href="#" onclick="mostrarTermos()">Termos de Serviço</a></li>
+                        <li><a href="#" onclick="mostrarPrivacidade()">Política de Privacidade</a></li>
+                        <li><a href="#" onclick="navegarPara('como-funciona')">FAQ</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4>Siga-nos</h4>
+                    <div style="display: flex; gap: 1rem; margin-top: 1rem; justify-content: center;">
+                        <a href="#" style="color: white; font-size: 1.5rem;"><i class="fab fa-facebook"></i></a>
+                        <a href="#" style="color: white; font-size: 1.5rem;"><i class="fab fa-instagram"></i></a>
+                        <a href="#" style="color: white; font-size: 1.5rem;"><i class="fab fa-whatsapp"></i></a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2024 FacilitAki. Todos os direitos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Modal para Descrição do Trabalho - VERSÃO CORRIGIDA E RESPONSIVA -->
+    <div id="modalDescricaoTrabalho" class="modal">
+        <div class="modal-content" style="max-width: 500px; padding: 2rem;">
+            <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
+                <i class="fas fa-book"></i> Descreva seu Trabalho
+            </h3>
+            
+            <div class="form-group">
+                <label for="temaTrabalho">Tema do Trabalho *</label>
+                <input type="text" id="temaTrabalho" placeholder="Ex: Projeto de Pesquisa sobre..." required>
+            </div>
+            
+            <div class="form-group">
+                <label for="disciplinaTrabalho">Disciplina/Cadeira *</label>
+                <input type="text" id="disciplinaTrabalho" placeholder="Ex: Didáctica de Biologia" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="descricaoDetalhada">Descrição</label>
+                <textarea id="descricaoDetalhada" rows="4" placeholder="Descreva os detalhes do trabalho..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="prazoTrabalhoDetalhe">Prazo de Entrega</label>
+                <input type="date" id="prazoTrabalhoDetalhe">
+            </div>
+            
+            <div class="form-group">
+                <label for="metodoPagamentoModal">Método de Pagamento *</label>
+                <select id="metodoPagamentoModal" required>
+                    <option value="">Selecione um método</option>
+                    <option value="mpesa">M-Pesa</option>
+                    <option value="emola">e-Mola</option>
+                    <option value="deposito">Depósito Bancário</option>
+                </select>
+            </div>
+            
+            <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0; border: 1px solid #e5e7eb;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span>Serviço:</span>
+                    <strong id="nomeServicoModal" style="color: #1e40af; font-size: 1.1rem;">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Valor:</span>
+                    <strong style="color: #1e40af; font-size: 1.3rem;" id="valorServicoModal">0 MT</strong>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button class="btn-secondary" onclick="fecharModalDescricao()" style="flex: 1; padding: 1rem;">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button class="btn-primary" onclick="solicitarServicoComDescricao()" style="flex: 1; padding: 1rem;">
+                    <i class="fas fa-paper-plane"></i> Solicitar Serviço
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Recarga -->
+    <div id="modalRecarga" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
+                <i class="fas fa-plus-circle"></i> Recarregar Saldo
+            </h3>
+            
+            <div class="form-group">
+                <label>Valor (MT)</label>
+                <input type="number" id="valorRecarga" min="50" max="5000" value="300" style="width: 100%;">
+            </div>
+            
+            <div class="form-group">
+                <label>Método de Pagamento</label>
+                <select id="metodoRecarga" style="width: 100%;">
+                    <option value="mpesa">M-Pesa</option>
+                    <option value="emola">e-Mola</option>
+                    <option value="deposito">Depósito Bancário</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button class="btn-secondary" onclick="fecharRecarga()" style="flex: 1;">
+                    Cancelar
+                </button>
+                <button class="btn-primary" onclick="processarRecarga()" style="flex: 1;">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
