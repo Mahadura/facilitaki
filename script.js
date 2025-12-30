@@ -55,46 +55,59 @@ function verificarELogar(tipo, preco) {
     }
 }
 
-// ===== GERENCIAMENTO DE USUÁRIOS =====
-function fazerLogin() {
+// ===== GERENCIAMENTO DE USUÁRIOS (LIGAÇÃO AO SERVIDOR RENDER) =====
+async function fazerLogin() {
     const telefone = document.getElementById('loginTelefone').value.trim();
     const senha = document.getElementById('loginSenha').value;
     const mensagem = document.getElementById('mensagemLogin');
     
-    // Validação básica
     if (!telefone || !senha) {
         mostrarMensagem(mensagem, 'Preencha todos os campos', 'error');
         return;
     }
     
-    // Simular busca de usuário
-    const usuario = usuarios.find(u => u.telefone === telefone && u.senha === senha);
-    
-    if (usuario) {
-        usuarioLogado = usuario;
-        localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuario));
-        
-        mostrarMensagem(mensagem, 'Login realizado com sucesso!', 'success');
-        
-        // Atualizar cabeçalho
-        document.getElementById('btnLoginHeader').innerHTML = '<i class="fas fa-user"></i> Minha Conta';
-        document.getElementById('btnLoginHeader').setAttribute('onclick', 'navegarPara(\'dashboard\')');
-        
-        // Ir para dashboard após breve delay
-        setTimeout(() => navegarPara('dashboard'), 1500);
-    } else {
-        mostrarMensagem(mensagem, 'Telefone ou senha incorretos', 'error');
+    try {
+        // Envia os dados para a API no servidor Render
+        const response = await fetch('https://facilitaki.onrender.com/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone, senha })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Se o servidor aceitar, guardamos a sessão
+            usuarioLogado = data.usuario;
+            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
+            localStorage.setItem('token_facilitaki', data.token);
+            
+            mostrarMensagem(mensagem, 'Login realizado com sucesso!', 'success');
+            
+            // Atualiza a interface
+            const btnHeader = document.getElementById('btnLoginHeader');
+            if(btnHeader) {
+                btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+                btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
+            }
+            
+            setTimeout(() => navegarPara('dashboard'), 1500);
+        } else {
+            mostrarMensagem(mensagem, data.erro || 'Telefone ou senha incorretos', 'error');
+        }
+    } catch (error) {
+        console.error("Erro no fetch:", error);
+        mostrarMensagem(mensagem, 'O servidor não respondeu. Tente novamente.', 'error');
     }
 }
 
-function fazerCadastro() {
+async function fazerCadastro() {
     const nome = document.getElementById('cadastroNome').value.trim();
     const telefone = document.getElementById('cadastroTelefone').value.trim();
     const senha = document.getElementById('cadastroSenha').value;
     const confirmarSenha = document.getElementById('cadastroSenhaConfirm').value;
     const mensagem = document.getElementById('mensagemLogin');
     
-    // Validações
     if (!nome || !telefone || !senha || !confirmarSenha) {
         mostrarMensagem(mensagem, 'Preencha todos os campos', 'error');
         return;
@@ -104,40 +117,137 @@ function fazerCadastro() {
         mostrarMensagem(mensagem, 'As senhas não coincidem', 'error');
         return;
     }
-    
-    if (usuarios.find(u => u.telefone === telefone)) {
-        mostrarMensagem(mensagem, 'Este telefone já está cadastrado', 'error');
-        return;
+
+    try {
+        // Envia o novo usuário para o servidor Render
+        const response = await fetch('https://facilitaki.onrender.com/api/cadastrar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, telefone, senha })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Login automático após cadastro
+            const loginResponse = await fetch('https://facilitaki.onrender.com/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone, senha })
+            });
+
+            const loginData = await loginResponse.json();
+
+            if (loginResponse.ok) {
+                usuarioLogado = loginData.usuario;
+                localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(loginData.usuario));
+                localStorage.setItem('token_facilitaki', loginData.token);
+                
+                mostrarMensagem(mensagem, 'Cadastro realizado com sucesso!', 'success');
+                
+                // Atualiza a interface
+                const btnHeader = document.getElementById('btnLoginHeader');
+                if(btnHeader) {
+                    btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+                    btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
+                }
+                
+                setTimeout(() => {
+                    mostrarLogin();
+                    navegarPara('dashboard');
+                }, 2000);
+            } else {
+                mostrarMensagem(mensagem, 'Cadastro realizado! Faça login manualmente.', 'success');
+                mostrarLogin();
+            }
+        } else {
+            mostrarMensagem(mensagem, data.erro || 'Erro ao cadastrar', 'error');
+        }
+    } catch (error) {
+        console.error("Erro no fetch:", error);
+        mostrarMensagem(mensagem, 'Erro de conexão com o servidor.', 'error');
+    }
+}
+
+async function fazerLogout() {
+    try {
+        // Opcional: Chamar endpoint de logout no servidor
+        const token = localStorage.getItem('token_facilitaki');
+        if (token) {
+            await fetch('https://facilitaki.onrender.com/api/logout', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+        }
+    } catch (error) {
+        console.error("Erro ao fazer logout no servidor:", error);
     }
     
-    // Criar novo usuário
-    const novoUsuario = {
-        id: Date.now(),
-        nome: nome,
-        telefone: telefone,
-        senha: senha,
-        dataCadastro: new Date().toISOString(),
-        pedidos: []
-    };
-    
-    usuarios.push(novoUsuario);
-    localStorage.setItem('usuarios_facilitaki', JSON.stringify(usuarios));
-    
-    // Login automático
-    usuarioLogado = novoUsuario;
-    localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(novoUsuario));
-    
-    mostrarMensagem(mensagem, 'Cadastro realizado com sucesso!', 'success');
+    // Limpar dados locais
+    usuarioLogado = null;
+    localStorage.removeItem('usuarioLogado_facilitaki');
+    localStorage.removeItem('token_facilitaki');
     
     // Atualizar cabeçalho
-    document.getElementById('btnLoginHeader').innerHTML = '<i class="fas fa-user"></i> Minha Conta';
-    document.getElementById('btnLoginHeader').setAttribute('onclick', 'navegarPara(\'dashboard\')');
+    const btnHeader = document.getElementById('btnLoginHeader');
+    if(btnHeader) {
+        btnHeader.innerHTML = '<i class="fas fa-user"></i> Área do Cliente';
+        btnHeader.setAttribute('onclick', 'navegarPara(\'login\')');
+    }
     
-    // Ir para dashboard
-    setTimeout(() => {
-        mostrarLogin();
-        navegarPara('dashboard');
-    }, 1500);
+    navegarPara('home');
+}
+
+// ===== FUNÇÕES PARA GESTÃO DE PEDIDOS (LIGAÇÃO AO SERVIDOR) =====
+async function criarPedido(pedidoData) {
+    try {
+        const token = localStorage.getItem('token_facilitaki');
+        const response = await fetch('https://facilitaki.onrender.com/api/pedidos', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(pedidoData)
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            return { success: true, pedido: data.pedido };
+        } else {
+            const error = await response.json();
+            return { success: false, error: error.erro || 'Erro ao criar pedido' };
+        }
+    } catch (error) {
+        console.error("Erro ao criar pedido:", error);
+        return { success: false, error: 'Erro de conexão com o servidor' };
+    }
+}
+
+async function buscarPedidosUsuario() {
+    try {
+        const token = localStorage.getItem('token_facilitaki');
+        const response = await fetch('https://facilitaki.onrender.com/api/meus-pedidos', {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            return { success: true, pedidos: data.pedidos };
+        } else {
+            return { success: false, error: 'Erro ao buscar pedidos' };
+        }
+    } catch (error) {
+        console.error("Erro ao buscar pedidos:", error);
+        return { success: false, error: 'Erro de conexão com o servidor' };
+    }
 }
 
 function mostrarCadastro() {
@@ -148,17 +258,6 @@ function mostrarCadastro() {
 function mostrarLogin() {
     document.getElementById('formCadastro').style.display = 'none';
     document.getElementById('formLogin').style.display = 'block';
-}
-
-function fazerLogout() {
-    usuarioLogado = null;
-    localStorage.removeItem('usuarioLogado_facilitaki');
-    
-    // Atualizar cabeçalho
-    document.getElementById('btnLoginHeader').innerHTML = '<i class="fas fa-user"></i> Área do Cliente';
-    document.getElementById('btnLoginHeader').setAttribute('onclick', 'navegarPara(\'login\')');
-    
-    navegarPara('home');
 }
 
 // ===== PLANOS E CHECKOUT =====
@@ -277,7 +376,7 @@ function atualizarResumoPedido() {
     }
 }
 
-function finalizarCompra() {
+async function finalizarCompra() {
     // Coletar dados do formulário
     const nomeCliente = document.getElementById('nomeCliente').value.trim();
     const telefoneCliente = document.getElementById('telefoneCliente').value.trim();
@@ -302,9 +401,8 @@ function finalizarCompra() {
         return;
     }
     
-    // Criar pedido
-    const novoPedido = {
-        id: Date.now(),
+    // Criar pedido para enviar ao servidor
+    const pedidoData = {
         cliente: nomeCliente,
         telefone: telefoneCliente,
         instituicao: instituicao,
@@ -315,43 +413,35 @@ function finalizarCompra() {
         nomePlano: carrinho.nomePlano,
         preco: carrinho.preco,
         metodoPagamento: carrinho.metodoPagamento,
-        status: 'pendente',
-        dataPedido: new Date().toISOString()
+        status: 'pendente'
     };
     
-    // Adicionar aos pedidos do usuário
-    if (usuarioLogado) {
-        usuarioLogado.pedidos = usuarioLogado.pedidos || [];
-        usuarioLogado.pedidos.push(novoPedido);
+    // Enviar para o servidor
+    const resultado = await criarPedido(pedidoData);
+    
+    if (resultado.success) {
+        // Mostrar mensagem de sucesso
+        mostrarMensagem(document.getElementById('mensagemCheckout'), 'Pedido registrado com sucesso! Redirecionando...', 'success');
         
-        // Atualizar no localStorage
-        const usuarioIndex = usuarios.findIndex(u => u.id === usuarioLogado.id);
-        if (usuarioIndex !== -1) {
-            usuarios[usuarioIndex] = usuarioLogado;
-            localStorage.setItem('usuarios_facilitaki', JSON.stringify(usuarios));
-            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioLogado));
-        }
+        // Limpar formulário
+        document.getElementById('nomeCliente').value = '';
+        document.getElementById('telefoneCliente').value = '';
+        document.getElementById('instituicao').value = '';
+        document.getElementById('curso').value = '';
+        document.getElementById('cadeira').value = '';
+        document.getElementById('descricao').value = '';
+        
+        // Atualizar pedidos locais
+        pedidos.push(resultado.pedido);
+        localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
+        
+        // Mostrar instruções de pagamento
+        setTimeout(() => {
+            navegarPara('pagamento-sucesso');
+        }, 2000);
+    } else {
+        mostrarMensagem(document.getElementById('mensagemCheckout'), resultado.error, 'error');
     }
-    
-    // Adicionar à lista geral de pedidos
-    pedidos.push(novoPedido);
-    localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
-    
-    // Mostrar mensagem de sucesso
-    mostrarMensagem(document.getElementById('mensagemCheckout'), 'Pedido registrado com sucesso! Redirecionando...', 'success');
-    
-    // Limpar formulário
-    document.getElementById('nomeCliente').value = '';
-    document.getElementById('telefoneCliente').value = '';
-    document.getElementById('instituicao').value = '';
-    document.getElementById('curso').value = '';
-    document.getElementById('cadeira').value = '';
-    document.getElementById('descricao').value = '';
-    
-    // Mostrar instruções de pagamento
-    setTimeout(() => {
-        navegarPara('pagamento-sucesso');
-    }, 2000);
 }
 
 function mostrarInstrucoesPagamento() {
@@ -477,7 +567,7 @@ function fecharModalDescricao() {
     document.getElementById('metodoPagamentoModal').selectedIndex = 0;
 }
 
-function solicitarServicoComDescricao() {
+async function solicitarServicoComDescricao() {
     // Coletar dados do modal
     const tema = document.getElementById('temaTrabalho').value.trim();
     const disciplina = document.getElementById('disciplinaTrabalho').value.trim();
@@ -497,9 +587,8 @@ function solicitarServicoComDescricao() {
     const servicoNome = modal.dataset.servicoNome;
     const servicoPreco = parseInt(modal.dataset.servicoPreco);
     
-    // Criar pedido
-    const novoPedido = {
-        id: Date.now(),
+    // Criar pedido para enviar ao servidor
+    const pedidoData = {
         cliente: usuarioLogado ? usuarioLogado.nome : 'Cliente',
         telefone: usuarioLogado ? usuarioLogado.telefone : '',
         instituicao: 'Não informada',
@@ -512,90 +601,89 @@ function solicitarServicoComDescricao() {
         nomePlano: servicoNome,
         preco: servicoPreco,
         metodoPagamento: metodoPagamento,
-        status: 'pendente',
-        dataPedido: new Date().toISOString()
+        status: 'pendente'
     };
     
-    // Adicionar aos pedidos do usuário
-    if (usuarioLogado) {
-        usuarioLogado.pedidos = usuarioLogado.pedidos || [];
-        usuarioLogado.pedidos.push(novoPedido);
+    // Enviar para o servidor
+    const resultado = await criarPedido(pedidoData);
+    
+    if (resultado.success) {
+        // Fechar modal
+        fecharModalDescricao();
         
-        // Atualizar no localStorage
-        const usuarioIndex = usuarios.findIndex(u => u.id === usuarioLogado.id);
-        if (usuarioIndex !== -1) {
-            usuarios[usuarioIndex] = usuarioLogado;
-            localStorage.setItem('usuarios_facilitaki', JSON.stringify(usuarios));
-            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioLogado));
-        }
+        // Atualizar carrinho para mostrar instruções de pagamento
+        carrinho = {
+            plano: servicoTipo,
+            nomePlano: servicoNome,
+            preco: servicoPreco,
+            metodoPagamento: metodoPagamento
+        };
+        
+        // Atualizar pedidos locais
+        pedidos.push(resultado.pedido);
+        localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
+        
+        // Mostrar mensagem de sucesso
+        mostrarMensagemGlobal('Serviço solicitado com sucesso!', 'success');
+        
+        // Ir para instruções de pagamento
+        setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
+    } else {
+        mostrarMensagemGlobal(resultado.error, 'error');
     }
-    
-    // Adicionar à lista geral de pedidos
-    pedidos.push(novoPedido);
-    localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
-    
-    // Fechar modal
-    fecharModalDescricao();
-    
-    // Atualizar dashboard
-    atualizarDashboard();
-    
-    // Mostrar mensagem de sucesso
-    mostrarMensagemGlobal('Serviço solicitado com sucesso!', 'success');
-    
-    // Atualizar carrinho para mostrar instruções de pagamento
-    carrinho = {
-        plano: servicoTipo,
-        nomePlano: servicoNome,
-        preco: servicoPreco,
-        metodoPagamento: metodoPagamento
-    };
-    
-    // Ir para instruções de pagamento
-    setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
 }
 
 // ===== DASHBOARD =====
-function atualizarDashboard() {
+async function atualizarDashboard() {
     if (!usuarioLogado) return;
     
-    // Calcular valor total por pagar
-    const pedidosPendentes = (usuarioLogado.pedidos || []).filter(p => p.status === 'pendente');
-    const valorTotal = pedidosPendentes.reduce((total, pedido) => total + pedido.preco, 0);
+    // Buscar pedidos do servidor
+    const resultado = await buscarPedidosUsuario();
     
-    // Atualizar valor total
-    document.getElementById('valorTotalPagar').textContent = valorTotal.toLocaleString('pt-MZ') + ' MT';
-    
-    // Atualizar lista de pedidos
-    const listaPedidosDiv = document.getElementById('listaPedidos');
-    const pedidosUsuario = usuarioLogado.pedidos || [];
-    
-    if (pedidosUsuario.length === 0) {
-        listaPedidosDiv.innerHTML = '<p style="text-align: center; color: #6b7280;">Nenhum pedido encontrado</p>';
+    if (resultado.success) {
+        usuarioLogado.pedidos = resultado.pedidos || [];
+        localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioLogado));
+        
+        // Calcular valor total por pagar
+        const pedidosPendentes = (usuarioLogado.pedidos || []).filter(p => p.status === 'pendente');
+        const valorTotal = pedidosPendentes.reduce((total, pedido) => total + pedido.preco, 0);
+        
+        // Atualizar valor total
+        document.getElementById('valorTotalPagar').textContent = valorTotal.toLocaleString('pt-MZ') + ' MT';
+        
+        // Atualizar lista de pedidos
+        const listaPedidosDiv = document.getElementById('listaPedidos');
+        const pedidosUsuario = usuarioLogado.pedidos || [];
+        
+        if (pedidosUsuario.length === 0) {
+            listaPedidosDiv.innerHTML = '<p style="text-align: center; color: #6b7280;">Nenhum pedido encontrado</p>';
+        } else {
+            listaPedidosDiv.innerHTML = pedidosUsuario.map(pedido => `
+                <div style="background: #f9fafb; padding: 1rem; border-radius: 5px; margin-bottom: 1rem; border-left: 4px solid ${getStatusColor(pedido.status)};">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <strong>${pedido.nome_plano}</strong>
+                            <div style="font-size: 0.9rem; color: #6b7280;">
+                                ${pedido.cadeira || pedido.tema || 'Serviço'}
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: bold; color: #1e40af;">
+                                ${pedido.preco.toLocaleString('pt-MZ')} MT
+                            </div>
+                            <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${getStatusBackground(pedido.status)}; color: ${getStatusTextColor(pedido.status)};">
+                                ${pedido.status}
+                            </span>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
+                        ${new Date(pedido.data_pedido).toLocaleDateString('pt-MZ')}
+                    </div>
+                </div>
+            `).join('');
+        }
     } else {
-        listaPedidosDiv.innerHTML = pedidosUsuario.map(pedido => `
-            <div style="background: #f9fafb; padding: 1rem; border-radius: 5px; margin-bottom: 1rem; border-left: 4px solid ${getStatusColor(pedido.status)};">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div>
-                        <strong>${pedido.nomePlano}</strong>
-                        <div style="font-size: 0.9rem; color: #6b7280;">
-                            ${pedido.cadeira || pedido.tema || 'Serviço'}
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-weight: bold; color: #1e40af;">
-                            ${pedido.preco.toLocaleString('pt-MZ')} MT
-                        </div>
-                        <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${getStatusBackground(pedido.status)}; color: ${getStatusTextColor(pedido.status)};">
-                            ${pedido.status}
-                        </span>
-                    </div>
-                </div>
-                <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
-                    ${new Date(pedido.dataPedido).toLocaleDateString('pt-MZ')}
-                </div>
-            </div>
-        `).join('');
+        mostrarMensagemGlobal('Erro ao carregar pedidos: ' + resultado.error, 'error');
     }
 }
 
@@ -633,7 +721,7 @@ function getStatusTextColor(status) {
 }
 
 // ===== CONTATO =====
-function enviarContato() {
+async function enviarContato() {
     const nome = document.getElementById('contatoNome').value.trim();
     const telefone = document.getElementById('contatoTelefone').value.trim();
     const email = document.getElementById('contatoEmail').value.trim();
@@ -645,14 +733,29 @@ function enviarContato() {
         return;
     }
     
-    // Simular envio (em produção, enviaria para um servidor)
-    mostrarMensagem(mensagemDiv, 'Mensagem enviada com sucesso! Entraremos em contacto em breve.', 'success');
-    
-    // Limpar formulário
-    document.getElementById('contatoNome').value = '';
-    document.getElementById('contatoTelefone').value = '';
-    document.getElementById('contatoEmail').value = '';
-    document.getElementById('contatoMensagem').value = '';
+    try {
+        // Enviar mensagem para o servidor
+        const response = await fetch('https://facilitaki.onrender.com/api/contato', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, telefone, email, mensagem })
+        });
+
+        if (response.ok) {
+            mostrarMensagem(mensagemDiv, 'Mensagem enviada com sucesso! Entraremos em contacto em breve.', 'success');
+            
+            // Limpar formulário
+            document.getElementById('contatoNome').value = '';
+            document.getElementById('contatoTelefone').value = '';
+            document.getElementById('contatoEmail').value = '';
+            document.getElementById('contatoMensagem').value = '';
+        } else {
+            mostrarMensagem(mensagemDiv, 'Erro ao enviar mensagem. Tente novamente.', 'error');
+        }
+    } catch (error) {
+        console.error("Erro ao enviar contato:", error);
+        mostrarMensagem(mensagemDiv, 'Erro de conexão. Tente novamente.', 'error');
+    }
 }
 
 // ===== FUNÇÕES AUXILIARES =====
@@ -694,13 +797,21 @@ function mostrarMensagemGlobal(texto, tipo) {
 function inicializarApp() {
     // Verificar se há usuário logado
     const usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
-    if (usuarioSalvo) {
+    const tokenSalvo = localStorage.getItem('token_facilitaki');
+    
+    if (usuarioSalvo && tokenSalvo) {
         usuarioLogado = JSON.parse(usuarioSalvo);
-        document.getElementById('btnLoginHeader').innerHTML = '<i class="fas fa-user"></i> Minha Conta';
-        document.getElementById('btnLoginHeader').setAttribute('onclick', 'navegarPara(\'dashboard\')');
+        const btnHeader = document.getElementById('btnLoginHeader');
+        if(btnHeader) {
+            btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+            btnHeader.setAttribute('onclick', 'navegarPara(\'dashboard\')');
+        }
+        
+        // Verificar se o token ainda é válido
+        verificarToken();
     }
     
-    // Carregar dados do localStorage
+    // Carregar dados do localStorage (fallback)
     const pedidosSalvos = localStorage.getItem('pedidos_facilitaki');
     if (pedidosSalvos) {
         pedidos = JSON.parse(pedidosSalvos);
@@ -750,6 +861,28 @@ function inicializarApp() {
         }
     `;
     document.head.appendChild(style);
+}
+
+async function verificarToken() {
+    try {
+        const token = localStorage.getItem('token_facilitaki');
+        if (!token) return;
+        
+        const response = await fetch('https://facilitaki.onrender.com/api/verificar-token', {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            // Token inválido, fazer logout
+            fazerLogout();
+        }
+    } catch (error) {
+        console.error("Erro ao verificar token:", error);
+    }
 }
 
 // ===== INICIALIZAR QUANDO O DOCUMENTO CARREGAR =====
