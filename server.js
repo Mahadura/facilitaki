@@ -1,128 +1,119 @@
+// server.js - Código Completo para o Facilitaki
 const express = require('express');
+const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const path = require('path');
-const cors = require('cors');
+const jwt = require('jwt-simple');
+require('dotenv').config();
 
 const app = express();
+app.use(express.json());
+app.use(cors());
 
-// 1. Configurações de Middleware
-app.use(cors()); // Permite que o browser aceda à API sem bloqueios de segurança
-app.use(express.json()); // Permite receber dados em formato JSON
-app.use(express.static(path.join(__dirname))); // Serve os ficheiros HTML/JS/CSS da pasta atual
+// Chave para segurança do Token
+const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_segredo_123';
 
-// 2. Configuração do Banco de Dados (PostgreSQL)
+// Configuração da Base de Dados (PostgreSQL)
+// Se não houver DATABASE_URL no Render, o servidor avisará no log
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false // Obrigatório para bancos de dados geridos no Render
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+// Testar ligação à base de dados
+pool.connect((err) => {
+    if (err) {
+        console.error('AVISO: Base de dados não detetada. O sistema funcionará apenas em memória temporária.');
+    } else {
+        console.log('SUCESSO: Ligado ao PostgreSQL no Render.');
     }
 });
 
-const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_seguranca_2025';
-
-// 3. Inicialização do Banco de Dados (Criação da Tabela)
-async function inicializarBanco() {
-    try {
-        console.log("⏳ Verificando/Criando tabela de clientes...");
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS clientes (
-                id SERIAL PRIMARY KEY,
-                nome VARCHAR(255) NOT NULL,
-                telefone VARCHAR(50) UNIQUE NOT NULL,
-                senha VARCHAR(255) NOT NULL,
-                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        console.log("✅ Banco de dados pronto para uso.");
-    } catch (err) {
-        console.error("❌ Erro ao configurar banco:", err.message);
-    }
-}
-inicializarBanco();
-
-// --- ROTAS DA API ---
-
-// ROTA DE CADASTRO
+// ===== ROTA DE CADASTRO =====
 app.post('/api/cadastrar', async (req, res) => {
-    const { nome, telefone, senha } = req.body;
-
-    // Validação de segurança
-    if (!nome || !telefone || !senha) {
-        return res.status(400).json({ erro: "Preencha todos os campos corretamente." });
-    }
-
     try {
-        // Encriptação da senha
+        const { nome, telefone, senha } = req.body;
         const senhaHash = await bcrypt.hash(senha, 10);
         
-        // Limpeza de espaços no telefone (para evitar erros de login)
-        const telefoneLimpo = telefone.replace(/\s/g, '');
-
-        const query = 'INSERT INTO clientes (nome, telefone, senha) VALUES ($1, $2, $3) RETURNING id';
-        const values = [nome, telefoneLimpo, senhaHash];
-        
-        const result = await pool.query(query, values);
-        
-        console.log(`👤 Novo usuário cadastrado: ${telefoneLimpo}`);
-        res.status(201).json({ mensagem: "Cadastro realizado com sucesso!", id: result.rows[0].id });
-
+        const result = await pool.query(
+            "INSERT INTO usuarios (nome, telefone, senha) VALUES ($1, $2, $3) RETURNING id, nome, telefone",
+            [nome, telefone, senhaHash]
+        );
+        res.status(201).json({ success: true, usuario: result.rows[0] });
     } catch (err) {
-        console.error("❌ ERRO NO CADASTRO:", err.message);
-        
-        if (err.code === '23505') {
-            return res.status(400).json({ erro: "Este número de WhatsApp já está cadastrado." });
-        }
-        
-        res.status(500).json({ erro: "Erro interno no servidor ao cadastrar.", detalhe: err.message });
+        console.error(err);
+        res.status(500).json({ erro: "Erro ao cadastrar. O número pode já existir." });
     }
 });
 
-// ROTA DE LOGIN
+// ===== ROTA DE LOGIN =====
 app.post('/api/login', async (req, res) => {
-    const { telefone, senha } = req.body;
-    const telefoneLimpo = telefone.replace(/\s/g, '');
-
     try {
-        const result = await pool.query('SELECT * FROM clientes WHERE telefone = $1', [telefoneLimpo]);
+        const { telefone, senha } = req.body;
+        const result = await pool.query("SELECT * FROM usuarios WHERE telefone = $1", [telefone]);
+
+        if (result.rows.length === 0) return res.status(401).json({ erro: "Utilizador não encontrado" });
+
         const usuario = result.rows[0];
-
-        if (!usuario) {
-            return res.status(401).json({ erro: "Usuário não encontrado." });
-        }
-
-        // Verifica se a senha coincide com o Hash no banco
         const senhaValida = await bcrypt.compare(senha, usuario.senha);
-        if (!senhaValida) {
-            return res.status(401).json({ erro: "Senha incorreta." });
-        }
 
-        // Gera o Token JWT para manter o usuário logado
-        const token = jwt.sign({ id: usuario.id }, SECRET_KEY, { expiresIn: '24h' });
+        if (!senhaValida) return res.status(401).json({ erro: "Senha incorreta" });
 
-        res.json({
-            mensagem: "Login bem-sucedido!",
-            token,
-            usuario: { 
-                nome: usuario.nome, 
-                telefone: usuario.telefone 
-            }
-        });
-
+        const token = jwt.encode({ id: usuario.id, nome: usuario.nome }, SECRET_KEY);
+        res.json({ token, usuario: { nome: usuario.nome, telefone: usuario.telefone } });
     } catch (err) {
-        console.error("❌ ERRO NO LOGIN:", err.message);
-        res.status(500).json({ erro: "Erro interno no servidor ao fazer login." });
+        res.status(500).json({ erro: "Erro ao processar login" });
     }
 });
 
-// ROTA PARA SERVIR O FRONTEND (Sempre por último)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// ===== ROTA DE CRIAR PEDIDO (O QUE DAVA ERRO) =====
+app.post('/api/pedidos', async (req, res) => {
+    try {
+        const { 
+            cliente, telefone, instituicao, curso, cadeira, 
+            tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento 
+        } = req.body;
+
+        // Comando para inserir na tabela 'pedidos'
+        const query = `
+            INSERT INTO pedidos 
+            (cliente, telefone, instituicao, curso, cadeira, tema, descricao, prazo, plano, nome_plano, preco, metodo_pagamento, status) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pendente') 
+            RETURNING *`;
+
+        const values = [
+            cliente, telefone, instituicao, curso, cadeira, 
+            tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
+        ];
+
+        const novoPedido = await pool.query(query, values);
+        
+        console.log("Novo pedido registado para:", cliente);
+        res.status(201).json({ success: true, pedido: novoPedido.rows[0] });
+    } catch (err) {
+        console.error("ERRO NO PEDIDO:", err.message);
+        res.status(500).json({ erro: "Erro ao guardar pedido. Verifique se a tabela 'pedidos' existe no SQL." });
+    }
 });
 
-// INICIAR SERVIDOR
+// ===== ROTA DE MEUS PEDIDOS (DASHBOARD) =====
+app.get('/api/meus-pedidos', async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) return res.status(403).json({ erro: "Token ausente" });
+
+        const decoded = jwt.decode(token, SECRET_KEY);
+        // Busca os pedidos associados ao nome ou telefone do utilizador
+        const result = await pool.query("SELECT * FROM pedidos WHERE cliente = $1 OR telefone = (SELECT telefone FROM usuarios WHERE id = $2) ORDER BY data_pedido DESC", [decoded.nome, decoded.id]);
+        
+        res.json({ success: true, pedidos: result.rows });
+    } catch (err) {
+        res.status(500).json({ erro: "Erro ao carregar dashboard" });
+    }
+});
+
+// Iniciar Servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor Facilitaki online na porta ${PORT}`);
+    console.log(`Servidor Facilitaki ativo na porta ${PORT}`);
 });
