@@ -3,119 +3,117 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
-const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki-secret-key-2024-production';
 
-// Configuração da conexão com o PostgreSQL do Render
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
-});
-
+// Configurações de Segurança e JSON
+app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// Função para inicializar e alinhar a estrutura do banco
-async function inicializarBanco() {
-    try {
-        console.log("🔄 Alinhando estrutura do banco de dados...");
-        
-        // Remove tabelas antigas para evitar erros de colunas inexistentes
-        // NOTA: Isso apagará os dados de teste atuais para criar a estrutura correta
-        await pool.query('DROP TABLE IF EXISTS pedidos, trabalhos, clientes CASCADE');
+// 1. Chave Secreta para o Token JWT
+const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_sucesso_2025';
 
-        // Criação da Tabela Clientes (exatamente o que o seu script.js envia)
+// 2. Configuração do Banco de Dados com SSL Obrigatório para o Render
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false // Essencial para funcionar no Render
+    }
+});
+
+// 3. Inicialização Automática do Banco de Dados
+async function setupDatabase() {
+    try {
+        console.log("⏳ Verificando estrutura do banco...");
         await pool.query(`
-            CREATE TABLE clientes (
+            CREATE TABLE IF NOT EXISTS clientes (
                 id SERIAL PRIMARY KEY,
                 nome TEXT NOT NULL,
                 telefone TEXT UNIQUE NOT NULL,
                 senha TEXT NOT NULL,
                 data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+            );
         `);
-
-        // Criação da Tabela Pedidos
-        await pool.query(`
-            CREATE TABLE pedidos (
-                id SERIAL PRIMARY KEY,
-                cliente_id INTEGER REFERENCES clientes(id),
-                plano TEXT,
-                preco DECIMAL(10,2),
-                metodo_pagamento TEXT,
-                status TEXT DEFAULT 'pendente',
-                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        console.log("✅ Banco de Dados RESETADO e tabelas criadas com sucesso!");
+        console.log("✅ Banco de dados pronto para uso.");
     } catch (err) {
-        console.error("❌ Erro ao inicializar banco de dados:", err);
+        console.error("❌ Erro ao configurar banco:", err.message);
     }
 }
-
-inicializarBanco();
+setupDatabase();
 
 // --- ROTAS DA API ---
 
-// Cadastro (Alinhado com o script.js)
+// ROTA DE CADASTRO
 app.post('/api/cadastrar', async (req, res) => {
     const { nome, telefone, senha } = req.body;
-    
+
+    // Validação básica
     if (!nome || !telefone || !senha) {
-        return res.status(400).json({ erro: "Campos obrigatórios faltando." });
+        return res.status(400).json({ erro: "Preencha todos os campos corretamente." });
     }
 
     try {
         const senhaHash = await bcrypt.hash(senha, 10);
-        const result = await pool.query(
-            'INSERT INTO clientes (nome, telefone, senha) VALUES ($1, $2, $3) RETURNING id, nome',
-            [nome, telefone, senhaHash]
-        );
-        res.status(201).json({ mensagem: "Cadastro realizado!", id: result.rows[0].id });
+        
+        const query = 'INSERT INTO clientes (nome, telefone, senha) VALUES ($1, $2, $3) RETURNING id';
+        const values = [nome, telefone, senhaHash];
+        
+        const result = await pool.query(query, values);
+        
+        console.log(`👤 Novo usuário cadastrado: ${telefone}`);
+        res.status(201).json({ mensagem: "Cadastro realizado com sucesso!", id: result.rows[0].id });
+
     } catch (err) {
-        console.error("Erro no cadastro:", err.message);
+        console.error("❌ ERRO NO CADASTRO:", err.message);
+        
         if (err.code === '23505') {
-            return res.status(400).json({ erro: "Este telefone já está cadastrado." });
+            return res.status(400).json({ erro: "Este número de WhatsApp já está cadastrado." });
         }
-        res.status(500).json({ erro: "Erro interno ao cadastrar usuário." });
+        
+        res.status(500).json({ erro: "Erro interno no servidor ao cadastrar.", detalhe: err.message });
     }
 });
 
-// Login
+// ROTA DE LOGIN
 app.post('/api/login', async (req, res) => {
     const { telefone, senha } = req.body;
+
     try {
         const result = await pool.query('SELECT * FROM clientes WHERE telefone = $1', [telefone]);
-        const user = result.rows[0];
+        const usuario = result.rows[0];
 
-        if (!user) return res.status(401).json({ erro: "Usuário não encontrado." });
+        if (!usuario) {
+            return res.status(401).json({ erro: "Usuário não encontrado." });
+        }
 
-        const senhaValida = await bcrypt.compare(senha, user.senha);
-        if (!senhaValida) return res.status(401).json({ erro: "Senha incorreta." });
+        const senhaValida = await bcrypt.compare(senha, usuario.senha);
+        if (!senhaValida) {
+            return res.status(401).json({ erro: "Senha incorreta." });
+        }
 
-        const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' });
-        
-        // Remove a senha antes de enviar para o cliente
-        delete user.senha;
-        res.json({ mensagem: "Login realizado!", token, usuario: user });
+        // Gera o Token de Acesso
+        const token = jwt.sign({ id: usuario.id }, SECRET_KEY, { expiresIn: '24h' });
+
+        res.json({
+            mensagem: "Login bem-sucedido!",
+            token,
+            usuario: { nome: usuario.nome, telefone: usuario.telefone }
+        });
+
     } catch (err) {
-        console.error("Erro no login:", err.message);
-        res.status(500).json({ erro: "Erro no servidor." });
+        console.error("❌ ERRO NO LOGIN:", err.message);
+        res.status(500).json({ erro: "Erro interno no servidor ao fazer login." });
     }
 });
 
-// Health Check
-app.get('/health', (req, res) => res.status(200).send('OK'));
-
-// Servir o index.html
+// ROTA PARA SERVIR O FRONTEND (Sempre por último)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// INICIAR SERVIDOR
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
