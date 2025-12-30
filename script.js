@@ -1,4 +1,4 @@
-// script.js - Backend Integrado com PostgreSQL no Render
+// script.js - INTEGRADO: Funcionalidades Comerciais + Banco de Dados Render
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = null;
@@ -28,24 +28,60 @@ function navegarPara(sectionId) {
         
         if (sectionId === 'dashboard' && usuarioLogado) {
             atualizarDashboard();
-        } else if (sectionId === 'pagamento-sucesso' && carrinho.plano) {
-            mostrarInstrucoesPagamento();
         }
     }
     window.scrollTo(0, 0);
 }
 
-// ===== GERENCIAMENTO DE USUÁRIOS (VIA API POSTGRESQL) =====
+// ===== FUNCIONALIDADES COMERCIAIS (PLANOS E PAGAMENTOS) =====
+
+function selecionarPlano(nome, preco) {
+    carrinho.plano = nome;
+    carrinho.preco = preco;
+    
+    const resumo = document.getElementById('resumoPedido');
+    if (resumo) {
+        resumo.innerHTML = `
+            <div style="background: #f1f5f9; padding: 1.5rem; border-radius: 12px; border-left: 5px solid #1e40af;">
+                <h4 style="color: #1e40af; margin-bottom: 0.5rem;">Resumo do Pedido</h4>
+                <p><strong>Serviço:</strong> ${nome}</p>
+                <p><strong>Valor:</strong> ${preco} MT</p>
+            </div>
+        `;
+    }
+    navegarPara('pagamento');
+}
+
+function selecionarMetodo(metodo) {
+    carrinho.metodoPagamento = metodo;
+    
+    // Visual feedback para os cartões de método
+    document.querySelectorAll('.metodo-card').forEach(card => {
+        card.style.borderColor = '#e2e8f0';
+        card.style.background = 'white';
+    });
+    
+    const cardSelecionado = event.currentTarget;
+    cardSelecionado.style.borderColor = '#1e40af';
+    cardSelecionado.style.background = '#eff6ff';
+    
+    document.getElementById('btnFinalizarPagamento').disabled = false;
+}
+
+function finalizarPagamento() {
+    if (!usuarioLogado) {
+        alert("Por favor, faça login ou cadastre-se para finalizar o seu pedido.");
+        navegarPara('login');
+        return;
+    }
+    navegarPara('pagamento-sucesso');
+}
+
+// ===== GESTÃO DE USUÁRIO (API POSTGRESQL) =====
 
 async function fazerLogin() {
     const telefone = document.getElementById('loginTelefone').value.trim();
     const senha = document.getElementById('loginSenha').value;
-    const mensagem = document.getElementById('mensagemLogin');
-    
-    if (!telefone || !senha) {
-        mostrarMensagem(mensagem, 'Preencha todos os campos', 'error');
-        return;
-    }
     
     try {
         const response = await fetch('/api/login', {
@@ -58,22 +94,19 @@ async function fazerLogin() {
 
         if (response.ok) {
             usuarioLogado = data.usuario;
-            // Salva apenas o token e dados básicos para persistir a sessão localmente
             localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
             localStorage.setItem('token_facilitaki', data.token);
             
-            mostrarMensagem(mensagem, 'Login realizado com sucesso!', 'success');
-            
-            // Atualizar cabeçalho
+            // Atualizar UI do Header
             document.getElementById('btnLoginHeader').innerHTML = '<i class="fas fa-user"></i> Minha Conta';
             document.getElementById('btnLoginHeader').setAttribute('onclick', "navegarPara('dashboard')");
             
-            setTimeout(() => navegarPara('dashboard'), 1500);
+            navegarPara('dashboard');
         } else {
-            mostrarMensagem(mensagem, data.erro || 'Telefone ou senha incorretos', 'error');
+            alert(data.erro || 'Telefone ou senha incorretos');
         }
     } catch (error) {
-        mostrarMensagem(mensagem, 'Erro ao conectar com o servidor', 'error');
+        alert('Erro ao conectar com o servidor. Verifique sua conexão.');
     }
 }
 
@@ -82,15 +115,9 @@ async function fazerCadastro() {
     const telefone = document.getElementById('cadastroTelefone').value.trim();
     const senha = document.getElementById('cadastroSenha').value;
     const confirmarSenha = document.getElementById('cadastroSenhaConfirm').value;
-    const mensagem = document.getElementById('mensagemLogin');
-    
-    if (!nome || !telefone || !senha || !confirmarSenha) {
-        mostrarMensagem(mensagem, 'Preencha todos os campos', 'error');
-        return;
-    }
     
     if (senha !== confirmarSenha) {
-        mostrarMensagem(mensagem, 'As senhas não coincidem', 'error');
+        alert('As senhas não coincidem!');
         return;
     }
 
@@ -101,18 +128,19 @@ async function fazerCadastro() {
             body: JSON.stringify({ nome, telefone, senha })
         });
 
-        const data = await response.json();
-
         if (response.ok) {
-            mostrarMensagem(mensagem, 'Cadastro realizado! Faça login para entrar.', 'success');
-            setTimeout(() => mostrarLogin(), 2000);
+            alert('Cadastro realizado com sucesso! Agora você pode fazer login.');
+            mostrarLogin();
         } else {
-            mostrarMensagem(mensagem, data.erro || 'Erro ao cadastrar', 'error');
+            const data = await response.json();
+            alert(data.erro || 'Erro ao realizar cadastro.');
         }
     } catch (error) {
-        mostrarMensagem(mensagem, 'Erro ao conectar com o servidor', 'error');
+        alert('Erro ao conectar com o servidor.');
     }
 }
+
+// ===== AUXILIARES DE INTERFACE =====
 
 function mostrarCadastro() {
     document.getElementById('formLogin').style.display = 'none';
@@ -124,63 +152,10 @@ function mostrarLogin() {
     document.getElementById('formLogin').style.display = 'block';
 }
 
-function fazerLogout() {
-    usuarioLogado = null;
-    localStorage.removeItem('usuarioLogado_facilitaki');
-    localStorage.removeItem('token_facilitaki');
-    
-    document.getElementById('btnLoginHeader').innerHTML = '<i class="fas fa-user"></i> Área do Cliente';
-    document.getElementById('btnLoginHeader').setAttribute('onclick', "navegarPara('login')");
-    
-    navegarPara('home');
-}
-
-// ===== DASHBOARD E PEDIDOS =====
-
 function atualizarDashboard() {
     if (!usuarioLogado) return;
-    
-    const nomeDisplay = document.getElementById('nomeUsuarioDashboard');
-    if(nomeDisplay) nomeDisplay.textContent = usuarioLogado.nome;
-
-    // Nota: Em um sistema real, aqui você faria um fetch('/api/meus-pedidos')
-    // Por enquanto, mostraremos os pedidos que estão no objeto usuarioLogado
-    const listaPedidosDiv = document.getElementById('listaPedidos');
-    const pedidos = usuarioLogado.pedidos || [];
-    
-    if (pedidos.length === 0) {
-        listaPedidosDiv.innerHTML = '<p style="text-align: center; color: #6b7280;">Ainda não tens pedidos.</p>';
-    } else {
-        // Renderiza pedidos (lógica de cores mantida)
-        listaPedidosDiv.innerHTML = pedidos.map(p => `
-            <div style="background: #fff; padding: 1rem; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #1e40af;">
-                <strong>${p.nomePlano}</strong> - ${p.preco} MT<br>
-                <small>Status: ${p.status}</small>
-            </div>
-        `).join('');
-    }
+    document.getElementById('nomeUsuarioDashboard').textContent = usuarioLogado.nome;
 }
-
-// ===== MENSAGENS E AUXILIARES =====
-
-function mostrarMensagem(elemento, texto, tipo) {
-    if(!elemento) return;
-    elemento.textContent = texto;
-    elemento.className = `message ${tipo}`;
-    elemento.style.display = 'block';
-    setTimeout(() => { elemento.style.display = 'none'; }, 5000);
-}
-
-function mostrarMensagemGlobal(texto, tipo) {
-    const div = document.createElement('div');
-    div.className = `message ${tipo}`;
-    div.style.cssText = "position:fixed; top:20px; right:20px; z-index:9999; padding:15px; border-radius:5px; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,0.2);";
-    div.textContent = texto;
-    document.body.appendChild(div);
-    setTimeout(() => div.remove(), 4000);
-}
-
-// ===== INICIALIZAÇÃO =====
 
 function inicializarApp() {
     const usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
@@ -190,7 +165,7 @@ function inicializarApp() {
         document.getElementById('btnLoginHeader').setAttribute('onclick', "navegarPara('dashboard')");
     }
 
-    // Configura máscaras e eventos de formulário
+    // Prevenir recarregamento em todos os forms
     document.querySelectorAll('form').forEach(form => {
         form.addEventListener('submit', (e) => e.preventDefault());
     });
