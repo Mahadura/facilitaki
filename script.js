@@ -1,4 +1,4 @@
-// script.js - Versão Integrada e Funcional
+// script.js - Sistema Completo Facilitaki (Backend Render + Frontend Comercial)
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = JSON.parse(localStorage.getItem('usuarioLogado_facilitaki')) || null;
@@ -6,15 +6,12 @@ let carrinho = { plano: null, preco: 0, metodoPagamento: null };
 
 // ===== NAVEGAÇÃO =====
 function navegarPara(sectionId) {
-    // Remove a classe active de todas as seções e links
-    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
     
-    const target = document.getElementById(sectionId);
-    if (target) {
-        target.classList.add('active');
-        
-        // Atualiza o link na navegação
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.classList.add('active');
         const navLink = document.querySelector(`[onclick*="${sectionId}"]`);
         if (navLink) navLink.classList.add('active');
         
@@ -23,24 +20,45 @@ function navegarPara(sectionId) {
     window.scrollTo(0, 0);
 }
 
-// ===== FUNÇÕES DE SERVIÇO (BOTÕES DOS CARDS) =====
+// ===== FUNCIONALIDADES COMERCIAIS (PLANOS E SERVIÇOS) =====
 function selecionarPlano(nome, preco) {
-    console.log("Selecionado:", nome, preco);
     carrinho.plano = nome;
     carrinho.preco = preco;
     
     const resumo = document.getElementById('resumoPedido');
     if (resumo) {
         resumo.innerHTML = `
-            <div style="background:#f1f5f9; padding:1rem; border-radius:8px; border-left:4px solid #1e40af;">
-                <strong>Plano:</strong> ${nome}<br>
-                <strong>Preço:</strong> ${preco} MT
+            <div style="background: #eff6ff; padding: 1.5rem; border-radius: 12px; border-left: 5px solid #1e40af;">
+                <h4 style="color: #1e40af; margin-bottom: 0.5rem;">Resumo do Pedido</h4>
+                <p><strong>Serviço:</strong> ${nome}</p>
+                <p><strong>Valor:</strong> ${preco} MT</p>
             </div>`;
     }
     navegarPara('pagamento');
 }
 
-// ===== AUTENTICAÇÃO (API POSTGRESQL RENDER) =====
+function selecionarMetodo(metodo) {
+    carrinho.metodoPagamento = metodo;
+    document.querySelectorAll('.metodo-card').forEach(card => {
+        card.style.borderColor = '#e2e8f0';
+        card.style.background = 'white';
+    });
+    const selected = event.currentTarget;
+    selected.style.borderColor = '#1e40af';
+    selected.style.background = '#eff6ff';
+    document.getElementById('btnFinalizarPagamento').disabled = false;
+}
+
+function finalizarPagamento() {
+    if (!usuarioLogado) {
+        mostrarMensagemGlobal("Por favor, faça login para concluir o pedido.", "error");
+        navegarPara('login');
+        return;
+    }
+    navegarPara('pagamento-sucesso');
+}
+
+// ===== GESTÃO DE USUÁRIOS (LIGAÇÃO AO RENDER) =====
 async function fazerLogin() {
     const telefone = document.getElementById('loginTelefone').value.trim();
     const senha = document.getElementById('loginSenha').value;
@@ -51,31 +69,26 @@ async function fazerLogin() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ telefone, senha })
         });
-
         const data = await response.json();
 
         if (response.ok) {
             usuarioLogado = data.usuario;
             localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
             localStorage.setItem('token_facilitaki', data.token);
-            location.reload(); // Recarrega para atualizar o header
+            location.reload(); 
         } else {
-            alert(data.error || "Telefone ou senha incorretos");
+            alert(data.erro || "Credenciais inválidas");
         }
-    } catch (error) {
-        alert("Erro ao conectar com o servidor.");
-    }
+    } catch (e) { alert("Erro de conexão com o servidor Render."); }
 }
 
 async function fazerCadastro() {
     const nome = document.getElementById('cadastroNome').value.trim();
     const telefone = document.getElementById('cadastroTelefone').value.trim();
     const senha = document.getElementById('cadastroSenha').value;
-    
-    if (senha !== document.getElementById('cadastroSenhaConfirm').value) {
-        alert("As senhas não coincidem!");
-        return;
-    }
+    const confirm = document.getElementById('cadastroSenhaConfirm').value;
+
+    if (senha !== confirm) { alert("As senhas não coincidem!"); return; }
 
     try {
         const response = await fetch('/api/cadastrar', {
@@ -83,20 +96,17 @@ async function fazerCadastro() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nome, telefone, senha })
         });
-
         if (response.ok) {
-            alert("Cadastro realizado com sucesso! Faça login.");
+            alert("Cadastro realizado! Já pode fazer login.");
             mostrarLogin();
         } else {
             const data = await response.json();
-            alert(data.erro || "Erro ao cadastrar");
+            alert(data.erro);
         }
-    } catch (error) {
-        alert("Erro de conexão.");
-    }
+    } catch (e) { alert("Erro ao contactar o servidor."); }
 }
 
-// ===== AUXILIARES DE INTERFACE =====
+// ===== INTERFACE E MODAIS =====
 function mostrarCadastro() {
     document.getElementById('formLogin').style.display = 'none';
     document.getElementById('formCadastro').style.display = 'block';
@@ -107,24 +117,34 @@ function mostrarLogin() {
     document.getElementById('formLogin').style.display = 'block';
 }
 
+function fecharRecarga() { document.getElementById('modalRecarga').style.display = 'none'; }
+function abrirRecarga() { document.getElementById('modalRecarga').style.display = 'flex'; }
+
 function atualizarDashboard() {
     if (usuarioLogado) {
         document.getElementById('nomeUsuarioDashboard').textContent = usuarioLogado.nome;
+        document.getElementById('telefoneUsuarioDashboard').textContent = usuarioLogado.telefone;
     }
+}
+
+function mostrarMensagemGlobal(txt, tipo) {
+    alert(txt); // Pode substituir por um toast elegante depois
+}
+
+function fazerLogout() {
+    localStorage.clear();
+    location.reload();
 }
 
 // ===== INICIALIZAÇÃO =====
 document.addEventListener('DOMContentLoaded', () => {
     if (usuarioLogado) {
-        const btnHeader = document.getElementById('btnLoginHeader');
-        if (btnHeader) {
-            btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
-            btnHeader.onclick = () => navegarPara('dashboard');
+        const btn = document.getElementById('btnLoginHeader');
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+            btn.onclick = () => navegarPara('dashboard');
         }
     }
-
-    // Previne recarregamento de página em formulários
-    document.querySelectorAll('form').forEach(form => {
-        form.addEventListener('submit', e => e.preventDefault());
-    });
+    
+    document.querySelectorAll('form').forEach(f => f.addEventListener('submit', e => e.preventDefault()));
 });
