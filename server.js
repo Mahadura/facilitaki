@@ -9,385 +9,539 @@ const app = express();
 
 // Middlewares essenciais
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true
+}));
 
-// ===== SERVIR ARQUIVOS ESTÁTICOS DA RAIZ =====
+// Servir arquivos estáticos
 app.use(express.static(__dirname));
 
-// ===== ROTA PRINCIPAL - SERVE O INDEX.HTML =====
+// ===== ROTA PRINCIPAL =====
 app.get('/', (req, res) => {
-    console.log('📄 Tentando servir index.html da raiz...');
     res.sendFile(__dirname + '/index.html', (err) => {
         if (err) {
-            console.error('❌ Erro ao servir index.html:', err.message);
-            console.log('📂 Conteúdo da raiz:', require('fs').readdirSync(__dirname));
-            
-            // Página de fallback
             res.send(`
                 <!DOCTYPE html>
-                <html lang="pt">
+                <html>
                 <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Facilitaki - Erro</title>
+                    <title>Facilitaki - Serviços Acadêmicos</title>
                     <style>
-                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-                        h1 { color: #ef4444; }
-                        .error { color: #991b1b; background: #fee2e2; padding: 20px; border-radius: 10px; }
-                        code { background: #f3f4f6; padding: 5px; border-radius: 5px; }
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+                        .container { background: rgba(255,255,255,0.1); padding: 40px; border-radius: 20px; max-width: 800px; }
+                        h1 { font-size: 3rem; margin-bottom: 20px; }
+                        .status { color: #4ade80; font-weight: bold; font-size: 1.2rem; }
+                        .button { display: inline-block; padding: 12px 30px; margin: 10px; background: white; color: #667eea; border-radius: 8px; text-decoration: none; font-weight: bold; }
                     </style>
                 </head>
                 <body>
-                    <h1>❌ Erro: index.html não encontrado</h1>
-                    <div class="error">
-                        <p>O arquivo <code>index.html</code> não foi encontrado na raiz do projeto.</p>
-                        <p><strong>Diretório atual:</strong> ${__dirname}</p>
-                        <p><strong>Arquivos encontrados:</strong></p>
-                        <pre>${require('fs').readdirSync(__dirname).join('\n')}</pre>
+                    <div class="container">
+                        <h1>🚀 Facilitaki</h1>
+                        <p class="status">✅ Servidor está funcionando!</p>
+                        <p>Plataforma de serviços acadêmicos</p>
+                        <div>
+                            <a href="/status" class="button">📊 Status da API</a>
+                            <a href="/index.html" class="button">🌐 Acessar Site</a>
+                        </div>
                     </div>
-                    <p><a href="/status">Testar API</a> • <a href="https://github.com/seu-usuario/facilitaki">Ver repositório</a></p>
                 </body>
                 </html>
             `);
-        } else {
-            console.log('✅ index.html servido com sucesso!');
         }
     });
 });
 
-// ===== ROTA DE STATUS DA API =====
-app.get('/status', (req, res) => {
-    console.log('📊 Requisição para /status recebida');
-    res.json({ 
-        success: true,
-        mensagem: 'Servidor Facilitaki está online!',
-        timestamp: new Date().toISOString(),
-        status: 'operacional',
-        frontend: 'index.html na raiz',
-        endpoints: {
-            cadastro: 'POST /api/cadastrar',
-            login: 'POST /api/login',
-            pedidos: 'POST /api/pedidos',
-            meusPedidos: 'GET /api/meus-pedidos',
-            contato: 'POST /api/contato'
-        }
-    });
-});
-
-// Configuração do Banco de Dados PostgreSQL
+// ===== CONFIGURAÇÃO DO BANCO DE DADOS RENDER =====
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
 
-const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_segredo_2025';
+// Testar conexão com banco
+pool.on('connect', () => {
+    console.log('✅ Conexão com PostgreSQL estabelecida!');
+});
+
+pool.on('error', (err) => {
+    console.error('❌ Erro na pool do PostgreSQL:', err);
+});
+
+// Criar tabelas automaticamente
+async function inicializarBanco() {
+    try {
+        console.log('🔧 Inicializando banco de dados...');
+        
+        // Tabela de usuários
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                telefone VARCHAR(20) UNIQUE NOT NULL,
+                senha VARCHAR(255) NOT NULL,
+                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ativo BOOLEAN DEFAULT TRUE
+            )
+        `);
+        
+        // Tabela de pedidos
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS pedidos (
+                id SERIAL PRIMARY KEY,
+                usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                cliente VARCHAR(100) NOT NULL,
+                telefone VARCHAR(20) NOT NULL,
+                instituicao VARCHAR(100),
+                curso VARCHAR(100),
+                cadeira VARCHAR(100),
+                tema VARCHAR(200),
+                descricao TEXT,
+                prazo DATE,
+                plano VARCHAR(50) NOT NULL,
+                nome_plano VARCHAR(100) NOT NULL,
+                preco DECIMAL(10,2) NOT NULL,
+                metodo_pagamento VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'pendente',
+                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        // Tabela de contatos
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS contatos (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                telefone VARCHAR(20) NOT NULL,
+                email VARCHAR(100),
+                mensagem TEXT NOT NULL,
+                data_contato TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                respondido BOOLEAN DEFAULT FALSE
+            )
+        `);
+        
+        console.log('✅ Tabelas criadas/verificadas com sucesso!');
+        
+        // Verificar se existe algum usuário
+        const { rows } = await pool.query('SELECT COUNT(*) as total FROM usuarios');
+        console.log(`👥 Total de usuários no banco: ${rows[0].total}`);
+        
+    } catch (error) {
+        console.error('❌ Erro ao inicializar banco:', error.message);
+    }
+}
+
+// Executar inicialização
+inicializarBanco();
+
+const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_producao_2025_segredo';
+
+// ===== MIDDLEWARE DE AUTENTICAÇÃO =====
+function autenticarToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ 
+            success: false, 
+            erro: 'Token de acesso necessário' 
+        });
+    }
+    
+    jwt.verify(token, SECRET_KEY, (err, usuario) => {
+        if (err) {
+            return res.status(403).json({ 
+                success: false, 
+                erro: 'Token inválido ou expirado' 
+            });
+        }
+        req.usuario = usuario;
+        next();
+    });
+}
 
 // ===== ROTAS DA API =====
 
-// 1. Cadastro de Usuários
-app.post('/api/cadastrar', async (req, res) => {
-    console.log('📝 Cadastro solicitado:', req.body.telefone);
+// 1. Status
+app.get('/status', async (req, res) => {
     try {
-        const { nome, telefone, senha } = req.body;
+        const dbTest = await pool.query('SELECT NOW() as server_time');
         
-        if (!nome || !telefone || !senha) {
-            return res.status(400).json({ 
-                success: false, 
-                erro: "Nome, telefone e senha são obrigatórios" 
-            });
-        }
-        
-        const hash = await bcrypt.hash(senha, 10);
-        const result = await pool.query(
-            "INSERT INTO usuarios (nome, telefone, senha) VALUES ($1, $2, $3) RETURNING id, nome, telefone",
-            [nome, telefone, hash]
-        );
-        
-        console.log('✅ Usuário cadastrado:', result.rows[0].telefone);
-        res.status(201).json({ 
-            success: true, 
-            mensagem: "Usuário cadastrado com sucesso",
-            usuario: result.rows[0] 
+        res.json({
+            success: true,
+            mensagem: 'Facilitaki API Online',
+            timestamp: new Date().toISOString(),
+            ambiente: process.env.NODE_ENV || 'production',
+            banco: {
+                status: 'conectado',
+                hora_servidor: dbTest.rows[0].server_time
+            },
+            servidor: 'Render',
+            regiao: 'Oregon, USA',
+            versao: '2.0.0'
         });
-    } catch (err) {
-        console.error("❌ Erro no cadastro:", err.message);
-        
-        if (err.code === '23505') {
-            return res.status(400).json({ 
-                success: false, 
-                erro: "Este número de telefone já está cadastrado" 
-            });
-        }
-        
-        res.status(500).json({ 
+    } catch (error) {
+        res.status(500).json({
             success: false,
-            erro: "Erro interno ao cadastrar usuário" 
+            erro: 'Erro no servidor'
         });
     }
 });
 
-// 2. Login de Usuários
+// 2. Cadastro
+app.post('/api/cadastrar', async (req, res) => {
+    try {
+        const { nome, telefone, senha } = req.body;
+        
+        // Validação
+        if (!nome || !telefone || !senha) {
+            return res.status(400).json({ 
+                success: false, 
+                erro: 'Nome, telefone e senha são obrigatórios' 
+            });
+        }
+        
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        
+        // Verificar se já existe
+        const existe = await pool.query(
+            'SELECT id FROM usuarios WHERE telefone = $1',
+            [telefoneLimpo]
+        );
+        
+        if (existe.rows.length > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                erro: 'Este telefone já está cadastrado' 
+            });
+        }
+        
+        // Criptografar senha
+        const salt = await bcrypt.genSalt(10);
+        const senhaHash = await bcrypt.hash(senha, salt);
+        
+        // Inserir usuário
+        const novoUsuario = await pool.query(
+            `INSERT INTO usuarios (nome, telefone, senha) 
+             VALUES ($1, $2, $3) 
+             RETURNING id, nome, telefone, data_cadastro`,
+            [nome, telefoneLimpo, senhaHash]
+        );
+        
+        // Gerar token
+        const token = jwt.sign(
+            { 
+                id: novoUsuario.rows[0].id,
+                nome: nome,
+                telefone: telefoneLimpo
+            },
+            SECRET_KEY,
+            { expiresIn: '30d' }
+        );
+        
+        res.status(201).json({
+            success: true,
+            mensagem: 'Cadastro realizado com sucesso!',
+            token: token,
+            usuario: novoUsuario.rows[0]
+        });
+        
+    } catch (error) {
+        console.error('Erro no cadastro:', error);
+        res.status(500).json({ 
+            success: false,
+            erro: 'Erro interno no servidor' 
+        });
+    }
+});
+
+// 3. Login
 app.post('/api/login', async (req, res) => {
-    console.log('🔐 Login solicitado:', req.body.telefone);
     try {
         const { telefone, senha } = req.body;
         
         if (!telefone || !senha) {
             return res.status(400).json({ 
                 success: false,
-                erro: "Telefone e senha são obrigatórios" 
+                erro: 'Telefone e senha são obrigatórios' 
             });
         }
         
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        
+        // Buscar usuário
         const result = await pool.query(
-            "SELECT * FROM usuarios WHERE telefone = $1", 
-            [telefone]
+            'SELECT * FROM usuarios WHERE telefone = $1 AND ativo = true',
+            [telefoneLimpo]
         );
         
         if (result.rows.length === 0) {
-            console.log('❌ Usuário não encontrado:', telefone);
             return res.status(401).json({ 
                 success: false,
-                erro: "Usuário não encontrado" 
+                erro: 'Telefone ou senha incorretos' 
             });
         }
-
+        
         const usuario = result.rows[0];
-        const match = await bcrypt.compare(senha, usuario.senha);
         
-        if (!match) {
-            console.log('❌ Senha incorreta para:', telefone);
+        // Verificar senha
+        const senhaValida = await bcrypt.compare(senha, usuario.senha);
+        
+        if (!senhaValida) {
             return res.status(401).json({ 
                 success: false,
-                erro: "Senha incorreta" 
+                erro: 'Telefone ou senha incorretos' 
             });
         }
-
-        const token = jwt.sign({ 
-            id: usuario.id,
-            telefone: usuario.telefone,
-            nome: usuario.nome 
-        }, SECRET_KEY, { expiresIn: '7d' });
         
-        console.log('✅ Login bem-sucedido:', usuario.nome);
-        res.json({ 
-            success: true,
-            mensagem: "Login realizado com sucesso",
-            token, 
-            usuario: { 
+        // Gerar token
+        const token = jwt.sign(
+            { 
                 id: usuario.id,
-                nome: usuario.nome, 
-                telefone: usuario.telefone 
-            } 
+                nome: usuario.nome,
+                telefone: usuario.telefone
+            },
+            SECRET_KEY,
+            { expiresIn: '30d' }
+        );
+        
+        res.json({
+            success: true,
+            mensagem: 'Login realizado com sucesso!',
+            token: token,
+            usuario: {
+                id: usuario.id,
+                nome: usuario.nome,
+                telefone: usuario.telefone,
+                data_cadastro: usuario.data_cadastro
+            }
         });
-    } catch (err) {
-        console.error("❌ Erro no login:", err);
+        
+    } catch (error) {
+        console.error('Erro no login:', error);
         res.status(500).json({ 
             success: false,
-            erro: "Erro interno no servidor durante o login" 
+            erro: 'Erro interno no servidor' 
         });
     }
 });
 
-// 3. Criar Pedido
-app.post('/api/pedidos', async (req, res) => {
-    console.log('🛒 Novo pedido recebido');
+// 4. Criar pedido
+app.post('/api/pedidos', autenticarToken, async (req, res) => {
     try {
-        const { 
-            cliente, telefone, instituicao, curso, cadeira, 
-            tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento 
+        const {
+            cliente, telefone, instituicao, curso, cadeira,
+            tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
         } = req.body;
-
+        
         if (!cliente || !telefone || !plano || !preco) {
             return res.status(400).json({ 
                 success: false,
-                erro: "Cliente, telefone, plano e preço são obrigatórios" 
+                erro: 'Dados obrigatórios faltando' 
             });
         }
-
-        const query = `
-            INSERT INTO pedidos 
-            (cliente, telefone, instituicao, curso, cadeira, tema, descricao, prazo, plano, nome_plano, preco, metodo_pagamento, status, data_pedido) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pendente', NOW()) 
-            RETURNING *`;
-
-        const values = [
-            cliente, telefone, instituicao || null, curso || null, cadeira || null, 
-            tema || null, descricao || null, prazo || null, plano, nomePlano || plano, 
-            preco, metodoPagamento || 'mpesa'
-        ];
-
-        const novoPedido = await pool.query(query, values);
         
-        console.log('✅ Pedido criado ID:', novoPedido.rows[0].id);
-        res.status(201).json({ 
-            success: true, 
-            mensagem: "Pedido criado com sucesso",
-            pedido: novoPedido.rows[0] 
-        });
-    } catch (err) {
-        console.error("❌ Erro ao salvar pedido:", err);
-        res.status(500).json({ 
-            success: false,
-            erro: "Erro ao processar pedido no banco de dados" 
-        });
-    }
-});
-
-// 4. Listar Pedidos do Usuário
-app.get('/api/meus-pedidos', async (req, res) => {
-    console.log('📋 Buscando pedidos do usuário');
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            return res.status(401).json({ 
-                success: false,
-                erro: "Token de autorização não fornecido" 
-            });
-        }
-
-        const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, SECRET_KEY);
-
-        const result = await pool.query(
-            "SELECT * FROM pedidos WHERE telefone = (SELECT telefone FROM usuarios WHERE id = $1) ORDER BY data_pedido DESC", 
-            [decoded.id]
+        const novoPedido = await pool.query(
+            `INSERT INTO pedidos (
+                usuario_id, cliente, telefone, instituicao, curso, cadeira, 
+                tema, descricao, prazo, plano, nome_plano, preco, 
+                metodo_pagamento
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING *`,
+            [
+                req.usuario.id,
+                cliente,
+                telefone.replace(/\D/g, ''),
+                instituicao || null,
+                curso || null,
+                cadeira || null,
+                tema || null,
+                descricao || null,
+                prazo || null,
+                plano,
+                nomePlano || plano,
+                parseFloat(preco),
+                metodoPagamento || 'mpesa'
+            ]
         );
         
-        console.log('✅ Pedidos encontrados:', result.rows.length);
-        res.json({ 
-            success: true, 
-            pedidos: result.rows 
+        res.status(201).json({
+            success: true,
+            mensagem: 'Pedido criado com sucesso!',
+            pedido: novoPedido.rows[0]
         });
-    } catch (err) {
-        console.error("❌ Erro ao buscar pedidos:", err.message);
         
-        if (err.name === 'JsonWebTokenError') {
-            return res.status(401).json({ 
-                success: false,
-                erro: "Token inválido" 
-            });
-        }
-        
-        if (err.name === 'TokenExpiredError') {
-            return res.status(401).json({ 
-                success: false,
-                erro: "Sessão expirada. Faça login novamente." 
-            });
-        }
-        
+    } catch (error) {
+        console.error('Erro ao criar pedido:', error);
         res.status(500).json({ 
             success: false,
-            erro: "Erro interno ao buscar pedidos" 
+            erro: 'Erro ao criar pedido' 
         });
     }
 });
 
-// 5. Rota de Contato
+// 5. Meus pedidos
+app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
+    try {
+        const pedidos = await pool.query(
+            `SELECT * FROM pedidos 
+             WHERE usuario_id = $1 
+             ORDER BY data_pedido DESC`,
+            [req.usuario.id]
+        );
+        
+        res.json({
+            success: true,
+            pedidos: pedidos.rows
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar pedidos:', error);
+        res.status(500).json({ 
+            success: false,
+            erro: 'Erro ao buscar pedidos' 
+        });
+    }
+});
+
+// 6. Contato
 app.post('/api/contato', async (req, res) => {
-    console.log('📩 Mensagem de contato recebida');
     try {
         const { nome, telefone, email, mensagem } = req.body;
         
         if (!nome || !telefone || !mensagem) {
             return res.status(400).json({ 
                 success: false,
-                erro: "Nome, telefone e mensagem são obrigatórios" 
+                erro: 'Nome, telefone e mensagem são obrigatórios' 
             });
         }
         
-        console.log("📨 Contato:", { nome, telefone, email, mensagem: mensagem.substring(0, 50) + '...' });
+        await pool.query(
+            `INSERT INTO contatos (nome, telefone, email, mensagem)
+             VALUES ($1, $2, $3, $4)`,
+            [nome, telefone.replace(/\D/g, ''), email || null, mensagem]
+        );
         
-        res.json({ 
+        res.json({
             success: true,
-            mensagem: "Mensagem recebida com sucesso! Entraremos em contato em breve."
+            mensagem: 'Mensagem recebida com sucesso!'
         });
-    } catch (err) {
-        console.error("❌ Erro no contato:", err);
+        
+    } catch (error) {
+        console.error('Erro no contato:', error);
         res.status(500).json({ 
             success: false,
-            erro: "Erro ao processar mensagem de contato" 
+            erro: 'Erro ao processar mensagem' 
         });
     }
 });
 
-// 6. Verificar Token
-app.get('/api/verificar-token', async (req, res) => {
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            return res.status(401).json({ 
-                success: false,
-                valido: false,
-                erro: "Token não fornecido" 
-            });
-        }
-
-        const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, SECRET_KEY);
-        
-        res.json({ 
-            success: true,
-            valido: true,
-            usuario: decoded 
-        });
-    } catch (err) {
-        res.status(401).json({ 
-            success: false,
-            valido: false,
-            erro: "Token inválido ou expirado" 
-        });
-    }
-});
-
-// 7. Logout
-app.post('/api/logout', (req, res) => {
-    console.log('👋 Logout solicitado');
-    res.json({ 
+// 7. Verificar token
+app.get('/api/verificar-token', autenticarToken, (req, res) => {
+    res.json({
         success: true,
-        mensagem: "Logout realizado com sucesso"
+        valido: true,
+        usuario: req.usuario
     });
 });
 
-// ===== ROTAS PARA TESTE DOS ARQUIVOS =====
-app.get('/test-index', (req, res) => {
-    res.send(`<h1>Teste Index</h1><p>Se esta página carrega, o servidor está funcionando.</p>`);
+// 8. Usuário atual
+app.get('/api/usuario', autenticarToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, nome, telefone, data_cadastro FROM usuarios WHERE id = $1',
+            [req.usuario.id]
+        );
+        
+        res.json({
+            success: true,
+            usuario: result.rows[0]
+        });
+        
+    } catch (error) {
+        res.status(500).json({ 
+            success: false,
+            erro: 'Erro ao buscar usuário' 
+        });
+    }
+});
+
+// 9. Logout
+app.post('/api/logout', (req, res) => {
+    res.json({
+        success: true,
+        mensagem: 'Logout realizado com sucesso'
+    });
+});
+
+// 10. Saúde do sistema
+app.get('/api/saude', async (req, res) => {
+    try {
+        const db = await pool.query('SELECT NOW() as time, version() as version');
+        const usuarios = await pool.query('SELECT COUNT(*) FROM usuarios');
+        const pedidos = await pool.query('SELECT COUNT(*) FROM pedidos');
+        
+        res.json({
+            success: true,
+            sistema: {
+                status: 'operacional',
+                timestamp: new Date().toISOString(),
+                banco: {
+                    hora: db.rows[0].time,
+                    versao: db.rows[0].version.split(' ').slice(0, 3).join(' ')
+                },
+                estatisticas: {
+                    total_usuarios: parseInt(usuarios.rows[0].count),
+                    total_pedidos: parseInt(pedidos.rows[0].count)
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            erro: 'Erro na verificação de saúde'
+        });
+    }
+});
+
+// ===== ROTAS PARA ARQUIVOS =====
+app.get('/index.html', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
+});
+
+app.get('/style.css', (req, res) => {
+    res.sendFile(__dirname + '/style.css');
+});
+
+app.get('/script.js', (req, res) => {
+    res.sendFile(__dirname + '/script.js');
 });
 
 // ===== ROTA 404 =====
 app.use('*', (req, res) => {
-    console.log('❌ Rota não encontrada:', req.originalUrl);
-    res.status(404).json({ 
+    res.status(404).json({
         success: false,
-        erro: "Rota não encontrada",
-        rota: req.originalUrl,
-        timestamp: new Date().toISOString()
+        erro: 'Rota não encontrada'
     });
 });
 
 // ===== INICIAR SERVIDOR =====
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log('='.repeat(50));
-    console.log(`🚀 SERVIDOR FACILITAKI INICIADO`);
-    console.log('='.repeat(50));
-    console.log(`🌐 URL: https://facilitaki.onrender.com`);
-    console.log(`📡 API: https://facilitaki.onrender.com/status`);
+    console.log('='.repeat(60));
+    console.log('🚀 FACILITAKI SERVER - PRODUÇÃO');
+    console.log('='.repeat(60));
+    console.log(`📍 URL: https://facilitaki.onrender.com`);
     console.log(`🔧 Porta: ${PORT}`);
-    console.log(`📁 Diretório: ${__dirname}`);
-    console.log(`⚡ Ambiente: ${process.env.NODE_ENV || 'production'}`);
-    console.log('='.repeat(50));
-    
-    // Tentar listar arquivos da raiz
-    try {
-        const fs = require('fs');
-        const files = fs.readdirSync(__dirname);
-        console.log('📂 Arquivos na raiz:');
-        files.forEach(file => {
-            console.log(`   📄 ${file}`);
-        });
-        console.log('='.repeat(50));
-    } catch (err) {
-        console.log('⚠️ Não foi possível listar arquivos da raiz');
-    }
+    console.log(`💾 Banco: PostgreSQL (Render)`);
+    console.log(`🌎 Acesso: Global`);
+    console.log(`📊 Dados: Permanentes`);
+    console.log('='.repeat(60));
+    console.log('✅ Sistema pronto para uso mundial!');
+    console.log('✅ Dados armazenados em PostgreSQL na nuvem');
+    console.log('✅ Usuários podem acessar de qualquer lugar');
+    console.log('='.repeat(60));
 });
