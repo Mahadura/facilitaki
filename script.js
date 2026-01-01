@@ -530,7 +530,7 @@ function mostrarInstrucoesMetodo(metodo) {
                 2. Selecione "Transferir Dinheiro"<br>
                 3. Digite o número: <strong>86 728 6665</strong><br>
                 4. Valor: <strong>${carrinho.preco} MT</strong><br>
-                5. Nome: Aguinaldo Anli<br>
+                5. Nome: Aguinaldo Anli Mahadura<br>
                 6. Confirme a transação
             `;
             break;
@@ -538,11 +538,11 @@ function mostrarInstrucoesMetodo(metodo) {
             instrucoes = `
                 <strong>Instruções Depósito Bancário:</strong><br>
                 Banco: BCI<br>
-                Conta: 1234567890<br>
-                Nome: Facilitaki Lda<br>
+                NIB: 00080000790534651019<br>
+                Nome: Aguinaldo Anli Mahadura<br>
                 Valor: <strong>${carrinho.preco} MT</strong><br>
                 <br>
-                Envie o comprovativo para: 84 123 4567
+                Envie o comprovativo para: 86 728 6665 ou 84 728 6665
             `;
             break;
         default:
@@ -1475,3 +1475,4 @@ console.log('🛠️  Comandos disponíveis no console:');
 console.log('   • debugAPI() - Testar todos os endpoints');
 console.log('   • testarCriarPedido() - Testar criação de pedido');
 console.log('   • testarConexaoAPI() - Testar conexão com servidor');
+
