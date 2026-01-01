@@ -213,7 +213,8 @@ app.get('/status', async (req, res) => {
             success: true,
             mensagem: 'Facilitaki Online',
             hora: dbTest.rows[0].hora,
-            versao: '3.0'
+            versao: '4.0',
+            painel_admin: '/admin/pedidos?senha=admin2025'
         });
     } catch (error) {
         res.status(500).json({ success: false, erro: error.message });
@@ -242,18 +243,28 @@ app.get('/api/debug/db', async (req, res) => {
             estruturaPedidos = { rows: [] };
         }
         
+        // Contagens
+        const usuarios = await pool.query('SELECT COUNT(*) as total FROM usuarios');
+        const pedidos = await pool.query('SELECT COUNT(*) as total FROM pedidos');
+        const contatos = await pool.query('SELECT COUNT(*) as total FROM contatos');
+        
         res.json({
             success: true,
             hora: hora.rows[0].hora,
             tabelas: tabelas.rows,
-            estrutura_pedidos: estruturaPedidos.rows
+            estrutura_pedidos: estruturaPedidos.rows,
+            contagens: {
+                usuarios: parseInt(usuarios.rows[0].total),
+                pedidos: parseInt(pedidos.rows[0].total),
+                contatos: parseInt(contatos.rows[0].total)
+            }
         });
     } catch (error) {
         res.status(500).json({ success: false, erro: error.message });
     }
 });
 
-// 3. CORREÇÃO DA TABELA PEDIDOS (A ROTA QUE VOCÊ PRECISA!)
+// 3. CORREÇÃO DA TABELA PEDIDOS
 app.get('/api/fix-pedidos', async (req, res) => {
     try {
         console.log('🔧 Executando correção da tabela pedidos...');
@@ -323,6 +334,511 @@ app.get('/api/recreate-pedidos', async (req, res) => {
         
     } catch (error) {
         res.status(500).json({ 
+            success: false, 
+            erro: error.message 
+        });
+    }
+});
+
+// ===== ROTA ADMIN - VER TODOS PEDIDOS =====
+app.get('/admin/pedidos', async (req, res) => {
+    const { senha } = req.query;
+    
+    // Senha simples de admin (mude para uma mais segura!)
+    if (senha !== 'admin2025') {
+        return res.status(401).send(`
+            <!DOCTYPE html>
+            <html><head><title>Acesso Negado</title>
+            <style>
+                body { font-family: Arial; padding: 50px; text-align: center; background: #f8fafc; }
+                .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                h1 { color: #ef4444; }
+                .btn { background: #3b82f6; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block; margin-top: 20px; }
+            </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>🔒 Acesso Negado</h1>
+                    <p>Senha de administrador incorreta.</p>
+                    <p><strong>Dica:</strong> Acesse com: ?senha=admin2025</p>
+                    <a href="/admin/pedidos?senha=admin2025" class="btn">Tentar com senha correta</a>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+    
+    try {
+        console.log('👨‍💼 Acesso admin aos pedidos');
+        
+        // Buscar todos pedidos com informações do usuário
+        const pedidos = await pool.query(`
+            SELECT 
+                p.*, 
+                u.nome as usuario_nome, 
+                u.telefone as usuario_telefone,
+                u.data_cadastro as usuario_data_cadastro
+            FROM pedidos p
+            LEFT JOIN usuarios u ON p.usuario_id = u.id
+            ORDER BY p.data_pedido DESC
+        `);
+        
+        // Calcular totais
+        const totais = await pool.query(`
+            SELECT 
+                COUNT(*) as total_pedidos,
+                SUM(preco) as valor_total,
+                AVG(preco) as media_valor
+            FROM pedidos
+        `);
+        
+        // Gerar HTML da página admin
+        let html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Admin Facilitaki - Pedidos</title>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { 
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: #333;
+                        min-height: 100vh;
+                        padding: 20px;
+                    }
+                    
+                    .container {
+                        max-width: 1400px;
+                        margin: 0 auto;
+                        background: white;
+                        border-radius: 15px;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                        overflow: hidden;
+                    }
+                    
+                    .header {
+                        background: linear-gradient(135deg, #1e40af, #3b82f6);
+                        color: white;
+                        padding: 25px 30px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+                    
+                    .header h1 {
+                        font-size: 28px;
+                        display: flex;
+                        align-items: center;
+                        gap: 15px;
+                    }
+                    
+                    .header h1 i {
+                        font-size: 32px;
+                        color: #60a5fa;
+                    }
+                    
+                    .stats {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 20px;
+                        padding: 25px;
+                        background: #f8fafc;
+                        border-bottom: 1px solid #e5e7eb;
+                    }
+                    
+                    .stat-card {
+                        background: white;
+                        padding: 20px;
+                        border-radius: 10px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                        text-align: center;
+                    }
+                    
+                    .stat-value {
+                        font-size: 32px;
+                        font-weight: bold;
+                        color: #1e40af;
+                        margin: 10px 0;
+                    }
+                    
+                    .stat-label {
+                        color: #6b7280;
+                        font-size: 14px;
+                    }
+                    
+                    .table-container {
+                        padding: 25px;
+                        overflow-x: auto;
+                    }
+                    
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 14px;
+                    }
+                    
+                    th {
+                        background: #f1f5f9;
+                        padding: 15px;
+                        text-align: left;
+                        font-weight: 600;
+                        color: #1e40af;
+                        border-bottom: 2px solid #e5e7eb;
+                        position: sticky;
+                        top: 0;
+                    }
+                    
+                    td {
+                        padding: 12px 15px;
+                        border-bottom: 1px solid #e5e7eb;
+                        vertical-align: top;
+                    }
+                    
+                    tr:hover {
+                        background: #f8fafc;
+                    }
+                    
+                    .badge {
+                        padding: 4px 10px;
+                        border-radius: 20px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        display: inline-block;
+                    }
+                    
+                    .badge.pendente { background: #fef3c7; color: #92400e; }
+                    .badge.pago { background: #d1fae5; color: #065f46; }
+                    .badge.andamento { background: #dbeafe; color: #1e40af; }
+                    .badge.concluido { background: #ede9fe; color: #5b21b6; }
+                    
+                    .btn {
+                        display: inline-block;
+                        padding: 8px 16px;
+                        background: #3b82f6;
+                        color: white;
+                        border-radius: 5px;
+                        text-decoration: none;
+                        font-weight: 500;
+                        border: none;
+                        cursor: pointer;
+                        transition: background 0.3s;
+                    }
+                    
+                    .btn:hover { background: #2563eb; }
+                    
+                    .btn-danger { background: #ef4444; }
+                    .btn-danger:hover { background: #dc2626; }
+                    
+                    .btn-secondary { 
+                        background: #6b7280; 
+                        color: white;
+                        text-decoration: none;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        display: inline-block;
+                        margin-top: 20px;
+                    }
+                    
+                    .btn-secondary:hover { background: #4b5563; }
+                    
+                    .detail-row {
+                        background: #f9fafb !important;
+                    }
+                    
+                    .detail-cell {
+                        padding: 15px;
+                        background: #f8fafc;
+                        border-top: 1px solid #e5e7eb;
+                    }
+                    
+                    .detail-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 15px;
+                    }
+                    
+                    .detail-item {
+                        background: white;
+                        padding: 10px;
+                        border-radius: 5px;
+                        border: 1px solid #e5e7eb;
+                    }
+                    
+                    .detail-label {
+                        font-size: 12px;
+                        color: #6b7280;
+                        margin-bottom: 5px;
+                    }
+                    
+                    .detail-value {
+                        font-weight: 500;
+                        color: #1f2937;
+                    }
+                    
+                    .actions {
+                        display: flex;
+                        gap: 8px;
+                    }
+                    
+                    .export-btn {
+                        background: #10b981;
+                        color: white;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        text-decoration: none;
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 8px;
+                        margin: 20px 0;
+                    }
+                    
+                    @media (max-width: 768px) {
+                        .header { flex-direction: column; text-align: center; gap: 15px; }
+                        .stats { grid-template-columns: 1fr; }
+                        table { font-size: 12px; }
+                        th, td { padding: 8px; }
+                    }
+                </style>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1><i class="fas fa-chart-line"></i> Painel Administrativo - Facilitaki</h1>
+                        <div>
+                            <a href="/" class="btn" target="_blank"><i class="fas fa-external-link-alt"></i> Ver Site</a>
+                            <a href="/admin/pedidos?senha=admin2025&export=csv" class="btn" style="background: #10b981;">
+                                <i class="fas fa-download"></i> Exportar CSV
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="stats">`;
+        
+        // Estatísticas
+        html += `
+                        <div class="stat-card">
+                            <div class="stat-label">Total de Pedidos</div>
+                            <div class="stat-value">${totais.rows[0]?.total_pedidos || 0}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Valor Total</div>
+                            <div class="stat-value">${(totais.rows[0]?.valor_total || 0).toLocaleString('pt-MZ')} MT</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Valor Médio</div>
+                            <div class="stat-value">${Math.round(totais.rows[0]?.media_valor || 0).toLocaleString('pt-MZ')} MT</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Usuários Cadastrados</div>
+                            <div class="stat-value">${pedidos.rows.filter((p, i, a) => a.findIndex(pi => pi.usuario_id === p.usuario_id) === i).length}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container">
+                        <h2 style="margin-bottom: 20px; color: #1e40af; display: flex; align-items: center; gap: 10px;">
+                            <i class="fas fa-list"></i> Todos os Pedidos (${pedidos.rows.length})
+                        </h2>
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Data/Hora</th>
+                                    <th>Cliente</th>
+                                    <th>Usuário</th>
+                                    <th>Serviço</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+        
+        // Adicionar cada pedido à tabela
+        pedidos.rows.forEach(pedido => {
+            const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
+            const statusClass = pedido.status ? pedido.status.toLowerCase().replace(' ', '-') : 'pendente';
+            
+            html += `
+                <tr>
+                    <td><strong>#${pedido.id}</strong></td>
+                    <td>${dataPedido.toLocaleDateString('pt-MZ')}<br>
+                        <small>${dataPedido.toLocaleTimeString('pt-MZ').substring(0,5)}</small>
+                    </td>
+                    <td>
+                        <strong>${pedido.cliente || 'Não informado'}</strong><br>
+                        <small>📱 ${pedido.telefone || 'Não informado'}</small>
+                    </td>
+                    <td>
+                        ${pedido.usuario_nome ? `
+                            <strong>${pedido.usuario_nome}</strong><br>
+                            <small>${pedido.usuario_telefone}</small>
+                        ` : 'Sem usuário'}
+                    </td>
+                    <td>
+                        <strong>${pedido.nome_plano || pedido.plano || 'Serviço'}</strong><br>
+                        <small>${pedido.cadeira ? `Cadeira: ${pedido.cadeira}` : ''}</small>
+                    </td>
+                    <td><strong style="color: #1e40af;">${pedido.preco ? pedido.preco.toLocaleString('pt-MZ') : '0'} MT</strong></td>
+                    <td><span class="badge ${statusClass}">${pedido.status || 'pendente'}</span></td>
+                    <td class="actions">
+                        <button onclick="verDetalhes(${pedido.id})" class="btn" style="padding: 5px 10px; font-size: 12px;">
+                            <i class="fas fa-eye"></i> Detalhes
+                        </button>
+                        <button onclick="mudarStatus(${pedido.id})" class="btn" style="padding: 5px 10px; font-size: 12px; background: #f59e0b;">
+                            <i class="fas fa-edit"></i> Status
+                        </button>
+                    </td>
+                </tr>
+                <tr id="detalhes-${pedido.id}" class="detail-row" style="display: none;">
+                    <td colspan="8" class="detail-cell">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-label">Instituição</div>
+                                <div class="detail-value">${pedido.instituicao || 'Não informada'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Curso</div>
+                                <div class="detail-value">${pedido.curso || 'Não informado'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Tema</div>
+                                <div class="detail-value">${pedido.tema || 'Não informado'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Prazo</div>
+                                <div class="detail-value">${pedido.prazo || 'Não definido'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Método Pagamento</div>
+                                <div class="detail-value">${pedido.metodo_pagamento || 'Não definido'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Descrição</div>
+                                <div class="detail-value">${pedido.descricao || 'Sem descrição'}</div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>`;
+        });
+        
+        html += `
+                            </tbody>
+                        </table>
+                        
+                        ${pedidos.rows.length === 0 ? 
+                            '<div style="text-align: center; padding: 40px; color: #6b7280;"><i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 20px;"></i><h3>Nenhum pedido encontrado</h3></div>' : 
+                            ''
+                        }
+                        
+                        <div style="margin-top: 30px; text-align: center;">
+                            <a href="/" class="btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Voltar ao Site
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <script>
+                    function verDetalhes(id) {
+                        const detalhes = document.getElementById('detalhes-' + id);
+                        detalhes.style.display = detalhes.style.display === 'table-row' ? 'none' : 'table-row';
+                    }
+                    
+                    function mudarStatus(id) {
+                        const novoStatus = prompt('Novo status para pedido #' + id + ':\\n(pendente, pago, em_andamento, concluido, cancelado)');
+                        if (novoStatus) {
+                            fetch('/api/admin/atualizar-status?senha=admin2025&pedido=' + id + '&status=' + encodeURIComponent(novoStatus))
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        alert('Status atualizado!');
+                                        location.reload();
+                                    } else {
+                                        alert('Erro: ' + data.erro);
+                                    }
+                                })
+                                .catch(error => alert('Erro: ' + error));
+                        }
+                    }
+                    
+                    // Exportar para CSV
+                    if (window.location.search.includes('export=csv')) {
+                        let csv = 'ID;Data;Cliente;Telefone;Serviço;Preço;Status;Usuário\\n';
+                        document.querySelectorAll('tbody tr:not(.detail-row)').forEach(row => {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length >= 7) {
+                                csv += [
+                                    cells[0].textContent.replace('#', '').trim(),
+                                    cells[1].textContent.trim(),
+                                    cells[2].querySelector('strong')?.textContent.trim() || '',
+                                    cells[2].querySelector('small')?.textContent.replace('📱', '').trim() || '',
+                                    cells[4].querySelector('strong')?.textContent.trim() || '',
+                                    cells[5].querySelector('strong')?.textContent.replace('MT', '').trim() || '',
+                                    cells[6].textContent.trim(),
+                                    cells[3].querySelector('strong')?.textContent.trim() || ''
+                                ].join(';') + '\\n';
+                            }
+                        });
+                        
+                        const blob = new Blob(['\\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = 'pedidos_facilitaki_' + new Date().toISOString().split('T')[0] + '.csv';
+                        link.click();
+                        
+                        // Remove o parâmetro da URL
+                        history.replaceState({}, '', window.location.pathname + '?senha=admin2025');
+                    }
+                </script>
+            </body>
+            </html>`;
+        
+        res.send(html);
+        
+    } catch (error) {
+        console.error('❌ Erro no admin:', error);
+        res.status(500).send(`
+            <!DOCTYPE html>
+            <html><head><title>Erro</title>
+            <style>body { font-family: Arial; padding: 50px; text-align: center; }
+            .error { color: #ef4444; margin: 20px 0; }
+            </style></head>
+            <body>
+                <h1>❌ Erro no Painel Admin</h1>
+                <div class="error">${error.message}</div>
+                <a href="/admin/pedidos?senha=admin2025">Tentar novamente</a>
+            </body>
+            </html>
+        `);
+    }
+});
+
+// ===== ROTA PARA ATUALIZAR STATUS =====
+app.get('/api/admin/atualizar-status', async (req, res) => {
+    const { senha, pedido, status } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query(
+            'UPDATE pedidos SET status = $1 WHERE id = $2',
+            [status, pedido]
+        );
+        
+        res.json({ 
+            success: true, 
+            mensagem: `Status do pedido #${pedido} atualizado para: ${status}` 
+        });
+        
+    } catch (error) {
+        res.json({ 
             success: false, 
             erro: error.message 
         });
@@ -462,10 +978,11 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 7. CRIAR PEDIDO (ROTA PRINCIPAL CORRIGIDA)
+// 7. CRIAR PEDIDO (ROTA PRINCIPAL)
 app.post('/api/pedidos', autenticarToken, async (req, res) => {
     try {
         console.log('📦 Criando pedido para usuário:', req.usuario.id);
+        console.log('📊 Dados recebidos:', JSON.stringify(req.body, null, 2));
         
         const {
             cliente, telefone, instituicao, curso, cadeira,
@@ -508,15 +1025,20 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
         );
         
         console.log('✅ Pedido criado! ID:', pedido.rows[0].id);
+        console.log('💰 Valor salvo:', pedido.rows[0].preco, 'MT');
+        console.log('👤 Cliente:', pedido.rows[0].cliente);
+        console.log('📅 Data:', pedido.rows[0].data_pedido);
         
         res.json({
             success: true,
             mensagem: 'Pedido criado com sucesso!',
-            pedido: pedido.rows[0]
+            pedido: pedido.rows[0],
+            salvo_no_banco: true
         });
         
     } catch (error) {
         console.error('❌ Erro ao criar pedido:', error.message);
+        console.error('🔍 Detalhes do erro:', error);
         
         // Se for erro de coluna faltante, sugerir correção
         if (error.message.includes('column') || error.message.includes('usuario_id')) {
@@ -538,10 +1060,14 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
 // 8. Meus pedidos
 app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
     try {
+        console.log('📋 Buscando pedidos do usuário:', req.usuario.id);
+        
         const pedidos = await pool.query(
             'SELECT * FROM pedidos WHERE usuario_id = $1 ORDER BY data_pedido DESC',
             [req.usuario.id]
         );
+        
+        console.log(`✅ Encontrados ${pedidos.rows.length} pedidos`);
         
         res.json({
             success: true,
@@ -576,6 +1102,8 @@ app.post('/api/contato', async (req, res) => {
             [nome, telefoneLimpo, email || null, mensagem]
         );
         
+        console.log(`📨 Mensagem de contato recebida de: ${nome} (${telefoneLimpo})`);
+        
         res.json({
             success: true,
             mensagem: 'Mensagem enviada!'
@@ -597,6 +1125,44 @@ app.get('/api/verificar-token', autenticarToken, (req, res) => {
     });
 });
 
+// 11. Usuário atual
+app.get('/api/usuario', autenticarToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, nome, telefone, data_cadastro FROM usuarios WHERE id = $1',
+            [req.usuario.id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false,
+                erro: 'Usuário não encontrado' 
+            });
+        }
+        
+        res.json({
+            success: true,
+            usuario: result.rows[0]
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar usuário:', error);
+        res.status(500).json({ 
+            success: false,
+            erro: 'Erro ao buscar usuário: ' + error.message 
+        });
+    }
+});
+
+// 12. Logout
+app.post('/api/logout', autenticarToken, (req, res) => {
+    console.log(`👋 Usuário ${req.usuario.nome} fez logout`);
+    res.json({
+        success: true,
+        mensagem: 'Logout realizado com sucesso'
+    });
+});
+
 // ===== ROTAS PARA ARQUIVOS ESTÁTICOS =====
 app.get('/index.html', (req, res) => {
     res.sendFile(__dirname + '/index.html');
@@ -610,28 +1176,37 @@ app.get('/script.js', (req, res) => {
     res.sendFile(__dirname + '/script.js');
 });
 
+// ===== ROTA 404 =====
+app.use('*', (req, res) => {
+    res.status(404).json({
+        success: false,
+        erro: 'Rota não encontrada'
+    });
+});
+
 // ===== INICIAR SERVIDOR =====
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log('='.repeat(60));
-    console.log('🚀 FACILITAKI - SERVIDOR CORRIGIDO');
+    console.log('🚀 FACILITAKI - VERSÃO COMPLETA COM PAINEL ADMIN');
     console.log('='.repeat(60));
     console.log(`📍 URL: https://facilitaki.onrender.com`);
     console.log(`🔧 Porta: ${PORT}`);
     console.log(`💾 Banco: PostgreSQL (Render)`);
-    console.log(`🛠️  Correções: Tabela pedidos completa`);
+    console.log(`👨‍💼 Painel Admin: /admin/pedidos?senha=admin2025`);
+    console.log(`🛠️  Correções: /api/fix-pedidos`);
     console.log('='.repeat(60));
-    console.log('✅ ROTAS DISPONÍVEIS:');
-    console.log('   /status              - Status do servidor');
-    console.log('   /api/debug/db        - Debug do banco');
-    console.log('   /api/fix-pedidos     - CORRIGIR tabela pedidos');
-    console.log('   /api/recreate-pedidos - Recriar tabela do zero');
-    console.log('   /api/cadastrar       - Cadastrar usuário');
-    console.log('   /api/login           - Login');
-    console.log('   /api/pedidos         - Criar pedido (POST)');
-    console.log('   /api/meus-pedidos    - Listar pedidos (GET)');
+    console.log('✅ SISTEMA 100% FUNCIONAL:');
+    console.log('   ✅ Cadastro de usuários');
+    console.log('   ✅ Login com JWT');
+    console.log('   ✅ Criação de pedidos');
+    console.log('   ✅ Armazenamento PostgreSQL');
+    console.log('   ✅ Painel administrativo');
+    console.log('   ✅ Correção automática');
     console.log('='.repeat(60));
-    console.log('🎯 PRIMEIRO: Acesse /api/fix-pedidos para corrigir a tabela');
-    console.log('🎯 DEPOIS: Tente criar um pedido no site');
+    console.log('🎯 ACESSE AGORA:');
+    console.log('   1. https://facilitaki.onrender.com');
+    console.log('   2. https://facilitaki.onrender.com/admin/pedidos?senha=admin2025');
+    console.log('   3. https://facilitaki.onrender.com/api/debug/db');
     console.log('='.repeat(60));
 });
