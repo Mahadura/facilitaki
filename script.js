@@ -40,6 +40,7 @@ async function testarConexaoAPI() {
 // ===== NAVEGAÇÃO =====
 function navegarPara(sectionId) {
     console.log('📍 Navegando para:', sectionId);
+    
     // Esconder todas as seções
     document.querySelectorAll('.section').forEach(section => {
         section.classList.remove('active');
@@ -334,13 +335,26 @@ function mostrarLogin() {
 
 // ===== FUNÇÕES PARA GESTÃO DE PEDIDOS =====
 async function criarPedido(pedidoData) {
+    console.log('🛒 Tentando criar pedido:', pedidoData);
+    
     try {
         const token = localStorage.getItem('token_facilitaki');
         if (!token) {
+            console.error('❌ Token não encontrado');
             return { success: false, error: 'Usuário não autenticado. Faça login novamente.' };
         }
         
-        console.log('🛒 Criando pedido:', pedidoData);
+        console.log('🔑 Token encontrado, enviando para API...');
+        
+        // Limpar telefone no pedidoData
+        if (pedidoData.telefone) {
+            pedidoData.telefone = pedidoData.telefone.replace(/\D/g, '');
+        }
+        
+        // Converter preço para número
+        if (pedidoData.preco) {
+            pedidoData.preco = parseFloat(pedidoData.preco);
+        }
         
         const response = await fetch(`${API_URL}/api/pedidos`, {
             method: 'POST',
@@ -353,23 +367,48 @@ async function criarPedido(pedidoData) {
             mode: 'cors'
         });
         
-        console.log('📤 Resposta do pedido:', response.status);
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success) {
-                console.log('✅ Pedido criado com sucesso:', data.pedido);
-                return { success: true, pedido: data.pedido };
-            } else {
-                return { success: false, error: data.erro || 'Erro ao criar pedido' };
+        console.log('📤 Resposta do servidor:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            // Tentar ler o erro do servidor
+            let errorMessage = 'Erro ao criar pedido';
+            try {
+                const errorData = await response.json();
+                console.error('❌ Erro do servidor:', errorData);
+                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
+            } catch (e) {
+                console.error('❌ Não foi possível ler resposta de erro:', e);
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
             }
-        } else {
-            const error = await response.json();
-            return { success: false, error: error.erro || 'Erro na requisição' };
+            return { success: false, error: errorMessage };
         }
+        
+        const data = await response.json();
+        console.log('✅ Resposta do servidor:', data);
+        
+        if (data.success) {
+            console.log('🎉 Pedido criado com sucesso! ID:', data.pedido?.id);
+            return { success: true, pedido: data.pedido };
+        } else {
+            console.error('❌ Servidor retornou success: false:', data);
+            return { success: false, error: data.erro || 'Erro ao criar pedido' };
+        }
+        
     } catch (error) {
-        console.error("❌ Erro ao criar pedido:", error);
-        return { success: false, error: 'Erro de conexão com o servidor' };
+        console.error("🔥 Erro fatal ao criar pedido:", error);
+        console.error("Stack trace:", error.stack);
+        
+        // Mensagens mais amigáveis baseadas no tipo de erro
+        let errorMsg = 'Erro de conexão com o servidor';
+        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+            errorMsg = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
+        } else if (error.name === 'SyntaxError') {
+            errorMsg = 'Resposta inválida do servidor.';
+        } else if (error.message.includes('NetworkError')) {
+            errorMsg = 'Erro de rede. Verifique sua conexão.';
+        }
+        
+        return { success: false, error: errorMsg };
     }
 }
 
@@ -537,7 +576,7 @@ function atualizarResumoPedido() {
 }
 
 async function finalizarCompra() {
-    console.log('💰 Finalizando compra...');
+    console.log('💰 Iniciando finalização de compra...');
     
     const nomeCliente = document.getElementById('nomeCliente')?.value.trim() || usuarioLogado?.nome || '';
     const telefoneCliente = document.getElementById('telefoneCliente')?.value.trim() || usuarioLogado?.telefone || '';
@@ -545,6 +584,15 @@ async function finalizarCompra() {
     const curso = document.getElementById('curso')?.value.trim() || '';
     const cadeira = document.getElementById('cadeira')?.value.trim() || '';
     const descricao = document.getElementById('descricao')?.value.trim() || '';
+    
+    console.log('📋 Dados coletados:', {
+        nomeCliente, 
+        telefoneCliente: telefoneCliente.substring(0, 3) + '...',
+        instituicao,
+        curso,
+        cadeira,
+        descricaoLength: descricao.length
+    });
     
     // Validações
     if (!nomeCliente || !telefoneCliente) {
@@ -585,6 +633,8 @@ async function finalizarCompra() {
         status: 'pendente'
     };
     
+    console.log('📤 Enviando dados do pedido:', pedidoData);
+    
     // Enviar para o servidor
     const resultado = await criarPedido(pedidoData);
     
@@ -595,27 +645,29 @@ async function finalizarCompra() {
     }
     
     if (resultado.success) {
-        // Mostrar mensagem de sucesso
+        console.log('✅ Pedido criado com sucesso!');
         mostrarMensagem(document.getElementById('mensagemCheckout'), 'Pedido registrado com sucesso! Redirecionando...', 'success');
         
         // Limpar formulário se existir
-        if (document.getElementById('nomeCliente')) document.getElementById('nomeCliente').value = '';
-        if (document.getElementById('telefoneCliente')) document.getElementById('telefoneCliente').value = '';
-        if (document.getElementById('instituicao')) document.getElementById('instituicao').value = '';
-        if (document.getElementById('curso')) document.getElementById('curso').value = '';
-        if (document.getElementById('cadeira')) document.getElementById('cadeira').value = '';
-        if (document.getElementById('descricao')) document.getElementById('descricao').value = '';
+        const campos = ['nomeCliente', 'telefoneCliente', 'instituicao', 'curso', 'cadeira', 'descricao'];
+        campos.forEach(campo => {
+            const el = document.getElementById(campo);
+            if (el) el.value = '';
+        });
         
         // Atualizar pedidos locais
-        pedidos.push(resultado.pedido);
-        localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
+        if (resultado.pedido) {
+            pedidos.push(resultado.pedido);
+            localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
+        }
         
         // Mostrar instruções de pagamento
         setTimeout(() => {
             navegarPara('pagamento-sucesso');
         }, 2000);
     } else {
-        mostrarMensagem(document.getElementById('mensagemCheckout'), resultado.error, 'error');
+        console.error('❌ Erro ao criar pedido:', resultado.error);
+        mostrarMensagem(document.getElementById('mensagemCheckout'), `Erro: ${resultado.error}`, 'error');
     }
 }
 
@@ -1305,6 +1357,39 @@ function debugAPI() {
     return 'Debug iniciado! Verifique o console.';
 }
 
+async function testarCriarPedido() {
+    console.log('🧪 Testando criação de pedido...');
+    
+    // Dados de teste
+    const pedidoTeste = {
+        cliente: "João Silva",
+        telefone: "841234567",
+        instituicao: "Universidade Teste",
+        curso: "Engenharia",
+        cadeira: "Matemática",
+        descricao: "Pedido de teste",
+        plano: "basico",
+        nomePlano: "Serviços Avulsos",
+        preco: 100,
+        metodoPagamento: "mpesa",
+        status: "pendente"
+    };
+    
+    console.log('📤 Enviando pedido de teste:', pedidoTeste);
+    
+    const resultado = await criarPedido(pedidoTeste);
+    
+    if (resultado.success) {
+        console.log('✅ Teste PASSADO! Pedido criado com ID:', resultado.pedido?.id);
+        mostrarMensagemGlobal('Teste: Pedido criado com sucesso!', 'success');
+    } else {
+        console.error('❌ Teste FALHOU:', resultado.error);
+        mostrarMensagemGlobal(`Teste falhou: ${resultado.error}`, 'error');
+    }
+    
+    return resultado;
+}
+
 // ===== INICIALIZAR QUANDO O DOCUMENTO CARREGAR =====
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM carregado, inicializando app...');
@@ -1321,6 +1406,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Log para debug
     console.log('✅ Tudo pronto! Digite debugAPI() no console para testar.');
+    console.log('✅ Para testar pedidos: testarCriarPedido()');
 });
 
 // ===== FUNÇÕES ADICIONAIS PARA MODAIS =====
@@ -1382,5 +1468,10 @@ window.fecharRecarga = fecharRecarga;
 window.processarRecarga = processarRecarga;
 window.debugAPI = debugAPI;
 window.testarConexaoAPI = testarConexaoAPI;
+window.testarCriarPedido = testarCriarPedido;
 
 console.log('🎯 Facilitaki carregado! API_URL:', API_URL);
+console.log('🛠️  Comandos disponíveis no console:');
+console.log('   • debugAPI() - Testar todos os endpoints');
+console.log('   • testarCriarPedido() - Testar criação de pedido');
+console.log('   • testarConexaoAPI() - Testar conexão com servidor');
