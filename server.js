@@ -10,64 +10,42 @@ const app = express();
 // Middlewares essenciais
 app.use(express.json());
 app.use(cors({
-    origin: '*',
+    origin: ['https://facilitaki.onrender.com', 'http://localhost:10000', 'http://localhost:5500'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-    credentials: true
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
+    credentials: true,
+    optionsSuccessStatus: 200
 }));
 
 // Servir arquivos estáticos
 app.use(express.static(__dirname));
 
-// ===== ROTA PRINCIPAL =====
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html', (err) => {
-        if (err) {
-            res.send(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Facilitaki - Serviços Acadêmicos</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-                        .container { background: rgba(255,255,255,0.1); padding: 40px; border-radius: 20px; max-width: 800px; }
-                        h1 { font-size: 3rem; margin-bottom: 20px; }
-                        .status { color: #4ade80; font-weight: bold; font-size: 1.2rem; }
-                        .button { display: inline-block; padding: 12px 30px; margin: 10px; background: white; color: #667eea; border-radius: 8px; text-decoration: none; font-weight: bold; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h1>🚀 Facilitaki</h1>
-                        <p class="status">✅ Servidor está funcionando!</p>
-                        <p>Plataforma de serviços acadêmicos</p>
-                        <div>
-                            <a href="/status" class="button">📊 Status da API</a>
-                            <a href="/index.html" class="button">🌐 Acessar Site</a>
-                        </div>
-                    </div>
-                </body>
-                </html>
-            `);
-        }
-    });
-});
-
 // ===== CONFIGURAÇÃO DO BANCO DE DADOS RENDER =====
+
+// URL DIRETA do seu PostgreSQL no Render (CRÍTICO!)
+const DATABASE_URL = 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db';
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    // Configurações otimizadas para Render
+    max: 10,
+    min: 2,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000
 });
 
 // Testar conexão com banco
 pool.on('connect', () => {
     console.log('✅ Conexão com PostgreSQL estabelecida!');
+    console.log('📡 Banco: facilitaki_db (Render PostgreSQL)');
 });
 
 pool.on('error', (err) => {
-    console.error('❌ Erro na pool do PostgreSQL:', err);
+    console.error('❌ Erro fatal na conexão PostgreSQL:', err.message);
+    console.error('💡 Verifique a URL do banco no Render');
 });
 
 // Criar tabelas automaticamente
@@ -127,17 +105,34 @@ async function inicializarBanco() {
         
         // Verificar se existe algum usuário
         const { rows } = await pool.query('SELECT COUNT(*) as total FROM usuarios');
-        console.log(`👥 Total de usuários no banco: ${rows[0].total}`);
+        console.log(`👥 Total de usuários: ${rows[0].total}`);
+        
+        // Se não houver usuários, criar um de teste
+        if (parseInt(rows[0].total) === 0) {
+            console.log('👤 Criando usuário de teste...');
+            const senhaHash = await bcrypt.hash('teste123', 10);
+            await pool.query(`
+                INSERT INTO usuarios (nome, telefone, senha) 
+                VALUES ('Usuário Teste', '841234567', $1)
+                ON CONFLICT (telefone) DO NOTHING
+            `, [senhaHash]);
+            console.log('✅ Usuário de teste criado (senha: teste123)');
+        }
+        
+        // Verificar total de pedidos
+        const pedidosResult = await pool.query('SELECT COUNT(*) as total FROM pedidos');
+        console.log(`📦 Total de pedidos: ${pedidosResult.rows[0].total}`);
         
     } catch (error) {
         console.error('❌ Erro ao inicializar banco:', error.message);
+        console.error('🔍 Detalhes do erro:', error);
     }
 }
 
 // Executar inicialização
 inicializarBanco();
 
-const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_producao_2025_segredo';
+const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_producao_2025_segredo_muito_forte';
 
 // ===== MIDDLEWARE DE AUTENTICAÇÃO =====
 function autenticarToken(req, res, next) {
@@ -163,6 +158,41 @@ function autenticarToken(req, res, next) {
     });
 }
 
+// ===== ROTA PRINCIPAL =====
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html', (err) => {
+        if (err) {
+            res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Facilitaki - Serviços Acadêmicos</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+                        .container { background: rgba(255,255,255,0.1); padding: 40px; border-radius: 20px; max-width: 800px; }
+                        h1 { font-size: 3rem; margin-bottom: 20px; }
+                        .status { color: #4ade80; font-weight: bold; font-size: 1.2rem; }
+                        .button { display: inline-block; padding: 12px 30px; margin: 10px; background: white; color: #667eea; border-radius: 8px; text-decoration: none; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>🚀 Facilitaki</h1>
+                        <p class="status">✅ Servidor está funcionando!</p>
+                        <p>Plataforma de serviços acadêmicos</p>
+                        <div>
+                            <a href="/status" class="button">📊 Status da API</a>
+                            <a href="/api/debug/db" class="button">🐘 Testar Banco</a>
+                            <a href="/index.html" class="button">🌐 Acessar Site</a>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+    });
+});
+
 // ===== ROTAS DA API =====
 
 // 1. Status
@@ -181,17 +211,71 @@ app.get('/status', async (req, res) => {
             },
             servidor: 'Render',
             regiao: 'Oregon, USA',
-            versao: '2.0.0'
+            versao: '2.0.0',
+            conexao_ativa: true
         });
     } catch (error) {
         res.status(500).json({
             success: false,
-            erro: 'Erro no servidor'
+            erro: 'Erro no servidor: ' + error.message
         });
     }
 });
 
-// 2. Cadastro
+// 2. Debug do Banco
+app.get('/api/debug/db', async (req, res) => {
+    try {
+        console.log('🔍 Debug: Testando conexão com banco...');
+        
+        // Teste 1: Conexão básica
+        const test1 = await pool.query('SELECT NOW() as hora, version() as versao');
+        
+        // Teste 2: Verificar tabelas
+        const test2 = await pool.query(`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+            ORDER BY table_name
+        `);
+        
+        // Teste 3: Contar registros
+        const usuarios = await pool.query('SELECT COUNT(*) as total FROM usuarios');
+        const pedidos = await pool.query('SELECT COUNT(*) as total FROM pedidos');
+        const contatos = await pool.query('SELECT COUNT(*) as total FROM contatos');
+        
+        res.json({
+            success: true,
+            conexao: 'OK',
+            hora_servidor: test1.rows[0].hora,
+            versao_postgres: test1.rows[0].versao,
+            tabelas: test2.rows,
+            contagens: {
+                usuarios: parseInt(usuarios.rows[0].total),
+                pedidos: parseInt(pedidos.rows[0].total),
+                contatos: parseInt(contatos.rows[0].total)
+            },
+            env: {
+                database_url: process.env.DATABASE_URL ? 'CONFIGURADA' : 'NÃO CONFIGURADA',
+                node_env: process.env.NODE_ENV || 'NÃO DEFINIDO',
+                usando_url_fixa: true
+            },
+            url_conexao: 'postgresql://facilitaki_user:****@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db'
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro no debug:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            env: {
+                database_url: process.env.DATABASE_URL ? 'CONFIGURADA' : 'NÃO CONFIGURADA',
+                usando_url_fixa: true
+            }
+        });
+    }
+});
+
+// 3. Cadastro
 app.post('/api/cadastrar', async (req, res) => {
     try {
         const { nome, telefone, senha } = req.body;
@@ -242,6 +326,8 @@ app.post('/api/cadastrar', async (req, res) => {
             { expiresIn: '30d' }
         );
         
+        console.log(`✅ Usuário cadastrado: ${nome} (${telefoneLimpo})`);
+        
         res.status(201).json({
             success: true,
             mensagem: 'Cadastro realizado com sucesso!',
@@ -250,15 +336,15 @@ app.post('/api/cadastrar', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Erro no cadastro:', error);
+        console.error('❌ Erro no cadastro:', error);
         res.status(500).json({ 
             success: false,
-            erro: 'Erro interno no servidor' 
+            erro: 'Erro interno no servidor: ' + error.message 
         });
     }
 });
 
-// 3. Login
+// 4. Login
 app.post('/api/login', async (req, res) => {
     try {
         const { telefone, senha } = req.body;
@@ -308,6 +394,8 @@ app.post('/api/login', async (req, res) => {
             { expiresIn: '30d' }
         );
         
+        console.log(`✅ Login realizado: ${usuario.nome} (${usuario.telefone})`);
+        
         res.json({
             success: true,
             mensagem: 'Login realizado com sucesso!',
@@ -321,28 +409,45 @@ app.post('/api/login', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Erro no login:', error);
+        console.error('❌ Erro no login:', error);
         res.status(500).json({ 
             success: false,
-            erro: 'Erro interno no servidor' 
+            erro: 'Erro interno no servidor: ' + error.message 
         });
     }
 });
 
-// 4. Criar pedido
+// 5. Criar pedido (CRÍTICO - CORRIGIDO)
 app.post('/api/pedidos', autenticarToken, async (req, res) => {
     try {
+        console.log('🛒 Recebendo pedido do usuário:', req.usuario.id);
+        console.log('📦 Dados do pedido:', req.body);
+        
         const {
             cliente, telefone, instituicao, curso, cadeira,
             tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
         } = req.body;
         
+        // Validação básica
         if (!cliente || !telefone || !plano || !preco) {
             return res.status(400).json({ 
                 success: false,
-                erro: 'Dados obrigatórios faltando' 
+                erro: 'Dados obrigatórios faltando: cliente, telefone, plano e preço' 
             });
         }
+        
+        // Preparar dados
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        const precoNumerico = parseFloat(preco);
+        
+        if (isNaN(precoNumerico)) {
+            return res.status(400).json({ 
+                success: false,
+                erro: 'Preço inválido' 
+            });
+        }
+        
+        console.log('📝 Inserindo pedido no banco...');
         
         const novoPedido = await pool.query(
             `INSERT INTO pedidos (
@@ -350,11 +455,11 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
                 tema, descricao, prazo, plano, nome_plano, preco, 
                 metodo_pagamento
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING *`,
+            RETURNING id, cliente, plano, preco, status, data_pedido`,
             [
                 req.usuario.id,
                 cliente,
-                telefone.replace(/\D/g, ''),
+                telefoneLimpo,
                 instituicao || null,
                 curso || null,
                 cadeira || null,
@@ -363,10 +468,12 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
                 prazo || null,
                 plano,
                 nomePlano || plano,
-                parseFloat(preco),
+                precoNumerico,
                 metodoPagamento || 'mpesa'
             ]
         );
+        
+        console.log('✅ Pedido criado com ID:', novoPedido.rows[0].id);
         
         res.status(201).json({
             success: true,
@@ -375,17 +482,21 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Erro ao criar pedido:', error);
+        console.error('❌ Erro ao criar pedido:', error.message);
+        console.error('🔍 Detalhes:', error);
+        
         res.status(500).json({ 
             success: false,
-            erro: 'Erro ao criar pedido' 
+            erro: 'Erro ao criar pedido: ' + error.message 
         });
     }
 });
 
-// 5. Meus pedidos
+// 6. Meus pedidos
 app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
     try {
+        console.log('📋 Buscando pedidos do usuário:', req.usuario.id);
+        
         const pedidos = await pool.query(
             `SELECT * FROM pedidos 
              WHERE usuario_id = $1 
@@ -393,21 +504,23 @@ app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
             [req.usuario.id]
         );
         
+        console.log(`✅ Encontrados ${pedidos.rows.length} pedidos`);
+        
         res.json({
             success: true,
             pedidos: pedidos.rows
         });
         
     } catch (error) {
-        console.error('Erro ao buscar pedidos:', error);
+        console.error('❌ Erro ao buscar pedidos:', error);
         res.status(500).json({ 
             success: false,
-            erro: 'Erro ao buscar pedidos' 
+            erro: 'Erro ao buscar pedidos: ' + error.message 
         });
     }
 });
 
-// 6. Contato
+// 7. Contato
 app.post('/api/contato', async (req, res) => {
     try {
         const { nome, telefone, email, mensagem } = req.body;
@@ -419,27 +532,31 @@ app.post('/api/contato', async (req, res) => {
             });
         }
         
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        
         await pool.query(
             `INSERT INTO contatos (nome, telefone, email, mensagem)
              VALUES ($1, $2, $3, $4)`,
-            [nome, telefone.replace(/\D/g, ''), email || null, mensagem]
+            [nome, telefoneLimpo, email || null, mensagem]
         );
+        
+        console.log(`📨 Mensagem de contato recebida de: ${nome} (${telefoneLimpo})`);
         
         res.json({
             success: true,
-            mensagem: 'Mensagem recebida com sucesso!'
+            mensagem: 'Mensagem recebida com sucesso! Entraremos em contacto em breve.'
         });
         
     } catch (error) {
-        console.error('Erro no contato:', error);
+        console.error('❌ Erro no contato:', error);
         res.status(500).json({ 
             success: false,
-            erro: 'Erro ao processar mensagem' 
+            erro: 'Erro ao processar mensagem: ' + error.message 
         });
     }
 });
 
-// 7. Verificar token
+// 8. Verificar token
 app.get('/api/verificar-token', autenticarToken, (req, res) => {
     res.json({
         success: true,
@@ -448,7 +565,7 @@ app.get('/api/verificar-token', autenticarToken, (req, res) => {
     });
 });
 
-// 8. Usuário atual
+// 9. Usuário atual
 app.get('/api/usuario', autenticarToken, async (req, res) => {
     try {
         const result = await pool.query(
@@ -456,33 +573,43 @@ app.get('/api/usuario', autenticarToken, async (req, res) => {
             [req.usuario.id]
         );
         
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false,
+                erro: 'Usuário não encontrado' 
+            });
+        }
+        
         res.json({
             success: true,
             usuario: result.rows[0]
         });
         
     } catch (error) {
+        console.error('❌ Erro ao buscar usuário:', error);
         res.status(500).json({ 
             success: false,
-            erro: 'Erro ao buscar usuário' 
+            erro: 'Erro ao buscar usuário: ' + error.message 
         });
     }
 });
 
-// 9. Logout
-app.post('/api/logout', (req, res) => {
+// 10. Logout
+app.post('/api/logout', autenticarToken, (req, res) => {
+    console.log(`👋 Usuário ${req.usuario.nome} fez logout`);
     res.json({
         success: true,
         mensagem: 'Logout realizado com sucesso'
     });
 });
 
-// 10. Saúde do sistema
+// 11. Saúde do sistema
 app.get('/api/saude', async (req, res) => {
     try {
         const db = await pool.query('SELECT NOW() as time, version() as version');
         const usuarios = await pool.query('SELECT COUNT(*) FROM usuarios');
         const pedidos = await pool.query('SELECT COUNT(*) FROM pedidos');
+        const contatos = await pool.query('SELECT COUNT(*) FROM contatos');
         
         res.json({
             success: true,
@@ -495,14 +622,34 @@ app.get('/api/saude', async (req, res) => {
                 },
                 estatisticas: {
                     total_usuarios: parseInt(usuarios.rows[0].count),
-                    total_pedidos: parseInt(pedidos.rows[0].count)
-                }
+                    total_pedidos: parseInt(pedidos.rows[0].count),
+                    total_contatos: parseInt(contatos.rows[0].count)
+                },
+                memoria: process.memoryUsage(),
+                uptime: process.uptime()
             }
+        });
+    } catch (error) {
+        console.error('❌ Erro na verificação de saúde:', error);
+        res.status(500).json({
+            success: false,
+            erro: 'Erro na verificação de saúde: ' + error.message
+        });
+    }
+});
+
+// 12. Criar tabelas manualmente (para emergências)
+app.post('/api/criar-tabelas', async (req, res) => {
+    try {
+        await inicializarBanco();
+        res.json({
+            success: true,
+            mensagem: 'Tabelas criadas/verificadas com sucesso!'
         });
     } catch (error) {
         res.status(500).json({
             success: false,
-            erro: 'Erro na verificação de saúde'
+            erro: 'Erro ao criar tabelas: ' + error.message
         });
     }
 });
@@ -536,12 +683,14 @@ app.listen(PORT, () => {
     console.log('='.repeat(60));
     console.log(`📍 URL: https://facilitaki.onrender.com`);
     console.log(`🔧 Porta: ${PORT}`);
-    console.log(`💾 Banco: PostgreSQL (Render)`);
+    console.log(`💾 Banco: PostgreSQL (Render - Oregon)`);
+    console.log(`🔗 Conexão: ${DATABASE_URL.substring(0, 50)}...`);
     console.log(`🌎 Acesso: Global`);
-    console.log(`📊 Dados: Permanentes`);
+    console.log(`📊 Sistema: Pronto para armazenar dados`);
     console.log('='.repeat(60));
     console.log('✅ Sistema pronto para uso mundial!');
-    console.log('✅ Dados armazenados em PostgreSQL na nuvem');
+    console.log('✅ Dados serão armazenados em PostgreSQL na nuvem');
     console.log('✅ Usuários podem acessar de qualquer lugar');
+    console.log('✅ Teste em: https://facilitaki.onrender.com/api/debug/db');
     console.log('='.repeat(60));
 });
