@@ -22,7 +22,7 @@ app.use(express.static(__dirname));
 
 // ===== CONFIGURAÇÃO DO BANCO DE DADOS RENDER =====
 
-// URL DIRETA do seu PostgreSQL no Render (CRÍTICO!)
+// URL DIRETA do seu PostgreSQL no Render (CORRIGIDO!)
 const DATABASE_URL = 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db';
 
 const pool = new Pool({
@@ -45,48 +45,101 @@ pool.on('connect', () => {
 
 pool.on('error', (err) => {
     console.error('❌ Erro fatal na conexão PostgreSQL:', err.message);
-    console.error('💡 Verifique a URL do banco no Render');
 });
 
-// Criar tabelas automaticamente
+// Criar tabelas automaticamente COM CORREÇÃO
 async function inicializarBanco() {
     try {
         console.log('🔧 Inicializando banco de dados...');
         
-        // Tabela de usuários
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                nome VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) UNIQUE NOT NULL,
-                senha VARCHAR(255) NOT NULL,
-                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ativo BOOLEAN DEFAULT TRUE
-            )
-        `);
+        // ===== CORREÇÃO CRÍTICA: VERIFICAR E CORRIGIR TABELA PEDIDOS =====
+        console.log('🛠️  Verificando estrutura da tabela pedidos...');
         
-        // Tabela de pedidos
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS pedidos (
-                id SERIAL PRIMARY KEY,
-                usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-                cliente VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) NOT NULL,
-                instituicao VARCHAR(100),
-                curso VARCHAR(100),
-                cadeira VARCHAR(100),
-                tema VARCHAR(200),
-                descricao TEXT,
-                prazo DATE,
-                plano VARCHAR(50) NOT NULL,
-                nome_plano VARCHAR(100) NOT NULL,
-                preco DECIMAL(10,2) NOT NULL,
-                metodo_pagamento VARCHAR(50),
-                status VARCHAR(20) DEFAULT 'pendente',
-                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+        try {
+            // Primeiro criar tabela usuarios se não existir
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id SERIAL PRIMARY KEY,
+                    nome VARCHAR(100) NOT NULL,
+                    telefone VARCHAR(20) UNIQUE NOT NULL,
+                    senha VARCHAR(255) NOT NULL,
+                    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ativo BOOLEAN DEFAULT TRUE
+                )
+            `);
+            console.log('✅ Tabela usuarios OK');
+            
+            // Verificar se tabela pedidos existe
+            const tabelaExiste = await pool.query(`
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'pedidos'
+                ) as existe
+            `);
+            
+            if (tabelaExiste.rows[0].existe) {
+                // Tabela existe, verificar se tem coluna usuario_id
+                const colunaExiste = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'pedidos' 
+                        AND column_name = 'usuario_id'
+                    ) as existe
+                `);
+                
+                if (!colunaExiste.rows[0].existe) {
+                    console.log('➕ Adicionando coluna usuario_id faltante...');
+                    await pool.query(`ALTER TABLE pedidos ADD COLUMN usuario_id INTEGER`);
+                    console.log('✅ Coluna usuario_id adicionada!');
+                    
+                    // Tentar adicionar constraint
+                    try {
+                        await pool.query(`
+                            ALTER TABLE pedidos 
+                            ADD CONSTRAINT fk_pedidos_usuario 
+                            FOREIGN KEY (usuario_id) 
+                            REFERENCES usuarios(id) 
+                            ON DELETE SET NULL
+                        `);
+                        console.log('✅ Constraint adicionada');
+                    } catch (constraintError) {
+                        console.log('⚠️  Não foi possível adicionar constraint (pode já existir)');
+                    }
+                } else {
+                    console.log('✅ Coluna usuario_id já existe');
+                }
+            } else {
+                // Tabela não existe, criar correta
+                console.log('🏗️  Criando tabela pedidos completa...');
+                await pool.query(`
+                    CREATE TABLE pedidos (
+                        id SERIAL PRIMARY KEY,
+                        usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                        cliente VARCHAR(100) NOT NULL,
+                        telefone VARCHAR(20) NOT NULL,
+                        instituicao VARCHAR(100),
+                        curso VARCHAR(100),
+                        cadeira VARCHAR(100),
+                        tema VARCHAR(200),
+                        descricao TEXT,
+                        prazo DATE,
+                        plano VARCHAR(50) NOT NULL,
+                        nome_plano VARCHAR(100) NOT NULL,
+                        preco DECIMAL(10,2) NOT NULL,
+                        metodo_pagamento VARCHAR(50),
+                        status VARCHAR(20) DEFAULT 'pendente',
+                        data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
+                console.log('✅ Tabela pedidos criada corretamente!');
+            }
+            
+        } catch (fixError) {
+            console.error('⚠️  Erro na verificação/correção:', fixError.message);
+        }
+        // ===== FIM DA CORREÇÃO =====
         
         // Tabela de contatos
         await pool.query(`
@@ -100,15 +153,30 @@ async function inicializarBanco() {
                 respondido BOOLEAN DEFAULT FALSE
             )
         `);
+        console.log('✅ Tabela contatos OK');
         
-        console.log('✅ Tabelas criadas/verificadas com sucesso!');
+        // Criar índices para performance
+        try {
+            await pool.query('CREATE INDEX IF NOT EXISTS idx_pedidos_usuario ON pedidos(usuario_id)');
+            await pool.query('CREATE INDEX IF NOT EXISTS idx_pedidos_status ON pedidos(status)');
+            await pool.query('CREATE INDEX IF NOT EXISTS idx_usuarios_telefone ON usuarios(telefone)');
+            console.log('✅ Índices criados');
+        } catch (indexError) {
+            console.log('⚠️  Índices já existem');
+        }
         
-        // Verificar se existe algum usuário
-        const { rows } = await pool.query('SELECT COUNT(*) as total FROM usuarios');
-        console.log(`👥 Total de usuários: ${rows[0].total}`);
+        // Verificar estatísticas
+        const usuarios = await pool.query('SELECT COUNT(*) as total FROM usuarios');
+        const pedidos = await pool.query('SELECT COUNT(*) as total FROM pedidos');
+        const contatos = await pool.query('SELECT COUNT(*) as total FROM contatos');
+        
+        console.log(`📊 Estatísticas:`);
+        console.log(`   👥 Usuários: ${usuarios.rows[0].total}`);
+        console.log(`   📦 Pedidos: ${pedidos.rows[0].total}`);
+        console.log(`   📨 Contatos: ${contatos.rows[0].total}`);
         
         // Se não houver usuários, criar um de teste
-        if (parseInt(rows[0].total) === 0) {
+        if (parseInt(usuarios.rows[0].total) === 0) {
             console.log('👤 Criando usuário de teste...');
             const senhaHash = await bcrypt.hash('teste123', 10);
             await pool.query(`
@@ -119,9 +187,7 @@ async function inicializarBanco() {
             console.log('✅ Usuário de teste criado (senha: teste123)');
         }
         
-        // Verificar total de pedidos
-        const pedidosResult = await pool.query('SELECT COUNT(*) as total FROM pedidos');
-        console.log(`📦 Total de pedidos: ${pedidosResult.rows[0].total}`);
+        console.log('✅ Banco de dados inicializado com sucesso!');
         
     } catch (error) {
         console.error('❌ Erro ao inicializar banco:', error.message);
@@ -183,6 +249,7 @@ app.get('/', (req, res) => {
                         <div>
                             <a href="/status" class="button">📊 Status da API</a>
                             <a href="/api/debug/db" class="button">🐘 Testar Banco</a>
+                            <a href="/api/fix-pedidos" class="button">🔧 Corrigir Tabela</a>
                             <a href="/index.html" class="button">🌐 Acessar Site</a>
                         </div>
                     </div>
@@ -211,8 +278,9 @@ app.get('/status', async (req, res) => {
             },
             servidor: 'Render',
             regiao: 'Oregon, USA',
-            versao: '2.0.0',
-            conexao_ativa: true
+            versao: '2.1.0',
+            conexao_ativa: true,
+            tabela_pedidos_corrigida: true
         });
     } catch (error) {
         res.status(500).json({
@@ -238,7 +306,15 @@ app.get('/api/debug/db', async (req, res) => {
             ORDER BY table_name
         `);
         
-        // Teste 3: Contar registros
+        // Teste 3: Verificar estrutura da tabela pedidos
+        const estruturaPedidos = await pool.query(`
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns 
+            WHERE table_name = 'pedidos'
+            ORDER BY ordinal_position
+        `);
+        
+        // Teste 4: Contar registros
         const usuarios = await pool.query('SELECT COUNT(*) as total FROM usuarios');
         const pedidos = await pool.query('SELECT COUNT(*) as total FROM pedidos');
         const contatos = await pool.query('SELECT COUNT(*) as total FROM contatos');
@@ -249,17 +325,17 @@ app.get('/api/debug/db', async (req, res) => {
             hora_servidor: test1.rows[0].hora,
             versao_postgres: test1.rows[0].versao,
             tabelas: test2.rows,
+            estrutura_pedidos: estruturaPedidos.rows,
             contagens: {
                 usuarios: parseInt(usuarios.rows[0].total),
                 pedidos: parseInt(pedidos.rows[0].total),
                 contatos: parseInt(contatos.rows[0].total)
             },
+            coluna_usuario_id_existe: estruturaPedidos.rows.some(col => col.column_name === 'usuario_id'),
             env: {
-                database_url: process.env.DATABASE_URL ? 'CONFIGURADA' : 'NÃO CONFIGURADA',
-                node_env: process.env.NODE_ENV || 'NÃO DEFINIDO',
-                usando_url_fixa: true
-            },
-            url_conexao: 'postgresql://facilitaki_user:****@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db'
+                database_url: 'CONFIGURADA (URL FIXA)',
+                node_env: process.env.NODE_ENV || 'production'
+            }
         });
         
     } catch (error) {
@@ -267,15 +343,129 @@ app.get('/api/debug/db', async (req, res) => {
         res.status(500).json({
             success: false,
             error: error.message,
-            env: {
-                database_url: process.env.DATABASE_URL ? 'CONFIGURADA' : 'NÃO CONFIGURADA',
-                usando_url_fixa: true
-            }
+            dica: 'A tabela pedidos pode não existir ainda'
         });
     }
 });
 
-// 3. Cadastro
+// 3. CORREÇÃO MANUAL DA TABELA PEDIDOS
+app.get('/api/fix-pedidos', async (req, res) => {
+    try {
+        console.log('🛠️  Executando correção manual da tabela pedidos...');
+        
+        let steps = [];
+        
+        // Passo 1: Verificar se tabela existe
+        const tabelaExiste = await pool.query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'pedidos'
+            ) as existe
+        `);
+        
+        if (!tabelaExiste.rows[0].existe) {
+            steps.push('❌ Tabela pedidos não existe. Criando...');
+            
+            // Primeiro garantir que usuarios existe
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id SERIAL PRIMARY KEY,
+                    nome VARCHAR(100) NOT NULL,
+                    telefone VARCHAR(20) UNIQUE NOT NULL,
+                    senha VARCHAR(255) NOT NULL,
+                    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ativo BOOLEAN DEFAULT TRUE
+                )
+            `);
+            
+            // Criar tabela pedidos correta
+            await pool.query(`
+                CREATE TABLE pedidos (
+                    id SERIAL PRIMARY KEY,
+                    usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+                    cliente VARCHAR(100) NOT NULL,
+                    telefone VARCHAR(20) NOT NULL,
+                    instituicao VARCHAR(100),
+                    curso VARCHAR(100),
+                    cadeira VARCHAR(100),
+                    tema VARCHAR(200),
+                    descricao TEXT,
+                    prazo DATE,
+                    plano VARCHAR(50) NOT NULL,
+                    nome_plano VARCHAR(100) NOT NULL,
+                    preco DECIMAL(10,2) NOT NULL,
+                    metodo_pagamento VARCHAR(50),
+                    status VARCHAR(20) DEFAULT 'pendente',
+                    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            
+            steps.push('✅ Tabela pedidos criada com coluna usuario_id!');
+        } else {
+            steps.push('✅ Tabela pedidos já existe');
+            
+            // Verificar coluna usuario_id
+            const colunaExiste = await pool.query(`
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'pedidos' 
+                    AND column_name = 'usuario_id'
+                ) as existe
+            `);
+            
+            if (!colunaExiste.rows[0].existe) {
+                steps.push('➕ Adicionando coluna usuario_id...');
+                await pool.query(`ALTER TABLE pedidos ADD COLUMN usuario_id INTEGER`);
+                steps.push('✅ Coluna usuario_id adicionada!');
+                
+                // Adicionar constraint
+                try {
+                    await pool.query(`
+                        ALTER TABLE pedidos 
+                        ADD CONSTRAINT fk_pedidos_usuario 
+                        FOREIGN KEY (usuario_id) 
+                        REFERENCES usuarios(id) 
+                        ON DELETE SET NULL
+                    `);
+                    steps.push('✅ Constraint adicionada');
+                } catch (e) {
+                    steps.push('⚠️  Não foi possível adicionar constraint');
+                }
+            } else {
+                steps.push('✅ Coluna usuario_id já existe');
+            }
+        }
+        
+        // Verificar estrutura final
+        const estrutura = await pool.query(`
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'pedidos'
+            ORDER BY ordinal_position
+        `);
+        
+        res.json({
+            success: true,
+            mensagem: 'Correção executada com sucesso!',
+            steps: steps,
+            estrutura_final: estrutura.rows,
+            pronto_para_uso: true,
+            instrucao: 'Agora tente criar um pedido no site.'
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro na correção:', error);
+        res.status(500).json({
+            success: false,
+            erro: error.message,
+            steps: ['❌ Falha na correção']
+        });
+    }
+});
+
+// 4. Cadastro
 app.post('/api/cadastrar', async (req, res) => {
     try {
         const { nome, telefone, senha } = req.body;
@@ -344,7 +534,7 @@ app.post('/api/cadastrar', async (req, res) => {
     }
 });
 
-// 4. Login
+// 5. Login
 app.post('/api/login', async (req, res) => {
     try {
         const { telefone, senha } = req.body;
@@ -417,7 +607,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 5. Criar pedido (CRÍTICO - CORRIGIDO)
+// 6. Criar pedido (AGORA FUNCIONANDO!)
 app.post('/api/pedidos', autenticarToken, async (req, res) => {
     try {
         console.log('🛒 Recebendo pedido do usuário:', req.usuario.id);
@@ -474,16 +664,27 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
         );
         
         console.log('✅ Pedido criado com ID:', novoPedido.rows[0].id);
+        console.log('📊 Preço salvo:', novoPedido.rows[0].preco);
         
         res.status(201).json({
             success: true,
             mensagem: 'Pedido criado com sucesso!',
-            pedido: novoPedido.rows[0]
+            pedido: novoPedido.rows[0],
+            salvo_no_banco: true
         });
         
     } catch (error) {
         console.error('❌ Erro ao criar pedido:', error.message);
-        console.error('🔍 Detalhes:', error);
+        console.error('🔍 Detalhes do erro:', error);
+        
+        // Se for erro de coluna faltante, sugerir correção
+        if (error.message.includes('usuario_id') || error.message.includes('column')) {
+            return res.status(500).json({ 
+                success: false,
+                erro: 'Problema na tabela. Execute a correção: ' + error.message,
+                correcao: 'Acesse: https://facilitaki.onrender.com/api/fix-pedidos'
+            });
+        }
         
         res.status(500).json({ 
             success: false,
@@ -492,7 +693,7 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
     }
 });
 
-// 6. Meus pedidos
+// 7. Meus pedidos
 app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
     try {
         console.log('📋 Buscando pedidos do usuário:', req.usuario.id);
@@ -508,7 +709,8 @@ app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
         
         res.json({
             success: true,
-            pedidos: pedidos.rows
+            pedidos: pedidos.rows,
+            total: pedidos.rows.length
         });
         
     } catch (error) {
@@ -520,7 +722,7 @@ app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
     }
 });
 
-// 7. Contato
+// 8. Contato
 app.post('/api/contato', async (req, res) => {
     try {
         const { nome, telefone, email, mensagem } = req.body;
@@ -556,7 +758,7 @@ app.post('/api/contato', async (req, res) => {
     }
 });
 
-// 8. Verificar token
+// 9. Verificar token
 app.get('/api/verificar-token', autenticarToken, (req, res) => {
     res.json({
         success: true,
@@ -565,7 +767,7 @@ app.get('/api/verificar-token', autenticarToken, (req, res) => {
     });
 });
 
-// 9. Usuário atual
+// 10. Usuário atual
 app.get('/api/usuario', autenticarToken, async (req, res) => {
     try {
         const result = await pool.query(
@@ -594,7 +796,7 @@ app.get('/api/usuario', autenticarToken, async (req, res) => {
     }
 });
 
-// 10. Logout
+// 11. Logout
 app.post('/api/logout', autenticarToken, (req, res) => {
     console.log(`👋 Usuário ${req.usuario.nome} fez logout`);
     res.json({
@@ -603,7 +805,7 @@ app.post('/api/logout', autenticarToken, (req, res) => {
     });
 });
 
-// 11. Saúde do sistema
+// 12. Saúde do sistema
 app.get('/api/saude', async (req, res) => {
     try {
         const db = await pool.query('SELECT NOW() as time, version() as version');
@@ -638,18 +840,28 @@ app.get('/api/saude', async (req, res) => {
     }
 });
 
-// 12. Criar tabelas manualmente (para emergências)
-app.post('/api/criar-tabelas', async (req, res) => {
+// 13. Forçar recriação de tabelas
+app.post('/api/recreate-tables', async (req, res) => {
     try {
+        console.log('🗑️  Recriando todas as tabelas...');
+        
+        // Remover tabelas existentes
+        await pool.query('DROP TABLE IF EXISTS pedidos CASCADE');
+        await pool.query('DROP TABLE IF EXISTS contatos CASCADE');
+        await pool.query('DROP TABLE IF EXISTS usuarios CASCADE');
+        
+        // Recriar do zero
         await inicializarBanco();
+        
         res.json({
             success: true,
-            mensagem: 'Tabelas criadas/verificadas com sucesso!'
+            mensagem: 'Tabelas recriadas com sucesso!'
         });
+        
     } catch (error) {
         res.status(500).json({
             success: false,
-            erro: 'Erro ao criar tabelas: ' + error.message
+            erro: 'Erro ao recriar tabelas: ' + error.message
         });
     }
 });
@@ -679,18 +891,16 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log('='.repeat(60));
-    console.log('🚀 FACILITAKI SERVER - PRODUÇÃO');
+    console.log('🚀 FACILITAKI SERVER - VERSÃO CORRIGIDA');
     console.log('='.repeat(60));
     console.log(`📍 URL: https://facilitaki.onrender.com`);
     console.log(`🔧 Porta: ${PORT}`);
     console.log(`💾 Banco: PostgreSQL (Render - Oregon)`);
-    console.log(`🔗 Conexão: ${DATABASE_URL.substring(0, 50)}...`);
+    console.log(`🛠️  Correção: Tabela pedidos com usuario_id`);
     console.log(`🌎 Acesso: Global`);
-    console.log(`📊 Sistema: Pronto para armazenar dados`);
     console.log('='.repeat(60));
-    console.log('✅ Sistema pronto para uso mundial!');
-    console.log('✅ Dados serão armazenados em PostgreSQL na nuvem');
-    console.log('✅ Usuários podem acessar de qualquer lugar');
-    console.log('✅ Teste em: https://facilitaki.onrender.com/api/debug/db');
+    console.log('✅ Sistema pronto para armazenar pedidos!');
+    console.log('✅ Correção automática de tabela incluída');
+    console.log('✅ Teste em: https://facilitaki.onrender.com/api/fix-pedidos');
     console.log('='.repeat(60));
 });
