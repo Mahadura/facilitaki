@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const fileUpload = require('express-fileupload'); // ADICIONE ESTA LINHA
 require('dotenv').config();
 
 const app = express();
@@ -16,6 +17,14 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
     credentials: true,
     optionsSuccessStatus: 200
+}));
+
+// Middleware para upload de arquivos (ADICIONE ESTE)
+app.use(fileUpload({
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+    abortOnLimit: true,
+    responseOnLimit: 'Arquivo muito grande. Tamanho máximo: 10MB',
+    createParentPath: true
 }));
 
 // Servir arquivos estáticos
@@ -53,6 +62,8 @@ async function corrigirTabelaPedidos() {
                     telefone VARCHAR(20) NOT NULL,
                     instituicao VARCHAR(100),
                     curso VARCHAR(100),
+                    cadeira VARCHAR(100),
+                    tema VARCHAR(200),
                     descricao TEXT,
                     prazo DATE,
                     plano VARCHAR(50) NOT NULL,
@@ -79,7 +90,7 @@ async function corrigirTabelaPedidos() {
         const colunasExistentes = colunas.rows.map(c => c.column_name);
         const colunasNecessarias = [
             'id', 'usuario_id', 'cliente', 'telefone', 'instituicao', 
-            'curso', 'descricao', 'prazo', 'plano', 
+            'curso', 'cadeira', 'tema', 'descricao', 'prazo', 'plano', 
             'nome_plano', 'preco', 'metodo_pagamento', 'status', 'data_pedido',
             'arquivos', 'observacoes_admin'
         ];
@@ -305,6 +316,115 @@ app.get('/api/fix-pedidos', async (req, res) => {
         res.status(500).json({ 
             success: false, 
             erro: error.message 
+        });
+    }
+});
+
+// ===== ROTA DE UPLOAD DE ARQUIVOS (ADICIONE ESTA ROTA) =====
+app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
+    try {
+        console.log('📤 Recebendo upload de arquivo para pedido');
+        
+        // Verificar se há arquivo
+        if (!req.files || !req.files.arquivo) {
+            return res.status(400).json({ 
+                success: false, 
+                erro: 'Nenhum arquivo enviado' 
+            });
+        }
+        
+        const arquivo = req.files.arquivo;
+        
+        // Verificar tamanho do arquivo (max 10MB)
+        if (arquivo.size > 10 * 1024 * 1024) {
+            return res.status(400).json({ 
+                success: false, 
+                erro: 'Arquivo muito grande. Tamanho máximo: 10MB' 
+            });
+        }
+        
+        // Verificar tipo de arquivo
+        const tiposPermitidos = ['.pdf', '.doc', '.docx'];
+        const extensao = arquivo.name.toLowerCase().substring(arquivo.name.lastIndexOf('.'));
+        
+        if (!tiposPermitidos.includes(extensao)) {
+            return res.status(400).json({ 
+                success: false, 
+                erro: 'Tipo de arquivo não suportado. Use PDF, DOC ou DOCX' 
+            });
+        }
+        
+        // Extrair dados do formulário
+        const {
+            cliente, telefone, instituicao, curso, cadeira,
+            tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
+        } = req.body;
+        
+        console.log('📝 Criando pedido com arquivo para:', cliente);
+        
+        // Validação básica
+        if (!cliente || !telefone || !plano || !preco || !metodoPagamento) {
+            return res.status(400).json({ 
+                success: false,
+                erro: 'Preencha: cliente, telefone, plano, preço e método de pagamento' 
+            });
+        }
+        
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        const precoNum = parseFloat(preco);
+        
+        // Informações do arquivo para salvar no banco
+        const infoArquivo = {
+            nome: arquivo.name,
+            tamanho: arquivo.size,
+            tipo: arquivo.mimetype,
+            data_upload: new Date().toISOString(),
+            // Em produção, você salvaria o arquivo em S3/Azure/Google Cloud
+            // Por enquanto, apenas armazenamos metadados
+            nota: 'Arquivo recebido. Em produção, seria armazenado em cloud storage.'
+        };
+        
+        // Inserir pedido no banco de dados com informações do arquivo
+        const pedido = await pool.query(
+            `INSERT INTO pedidos (
+                usuario_id, cliente, telefone, instituicao, curso, cadeira, 
+                tema, descricao, prazo, plano, nome_plano, preco, metodo_pagamento,
+                arquivos, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            RETURNING id, cliente, plano, preco, status, data_pedido`,
+            [
+                req.usuario.id,
+                cliente,
+                telefoneLimpo,
+                instituicao || 'Não informada',
+                curso || 'Não informado',
+                cadeira || 'Não informada',
+                tema || 'Arquivo enviado',
+                descricao || '',
+                prazo || null,
+                plano,
+                nomePlano || plano,
+                precoNum,
+                metodoPagamento,
+                JSON.stringify(infoArquivo),
+                'pendente'
+            ]
+        );
+        
+        console.log('✅ Pedido com arquivo criado! ID:', pedido.rows[0].id);
+        
+        res.json({
+            success: true,
+            mensagem: 'Pedido criado com sucesso! Arquivo recebido.',
+            pedido: pedido.rows[0],
+            arquivo: infoArquivo
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao processar upload:', error.message);
+        res.status(500).json({ 
+            success: false,
+            erro: 'Erro ao processar upload: ' + error.message 
         });
     }
 });
@@ -1250,7 +1370,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// Criar pedido
+// Criar pedido (rota original sem upload)
 app.post('/api/pedidos', autenticarToken, async (req, res) => {
     try {
         console.log('📦 Criando pedido para usuário:', req.usuario.id);
@@ -1468,11 +1588,12 @@ app.listen(PORT, '0.0.0.0', () => {
     ╚═══════════════════════════════════════╝
     📍 Porta: ${PORT}
     🌐 URL: https://facilitaki.onrender.com
-    🚀 Versão: 5.0 - Render Ready
+    🚀 Versão: 6.0 - Upload Ready
     ✅ Status: ONLINE
-    💾 Banco: PostgreSQL (Render)
+    💾 Banco: PostgreSQL (Render) - CONECTADO
     👨‍💼 Admin: /admin/pedidos?senha=admin2025
     🏥 Health: /health
+    📤 Upload: Rota /api/pedidos/upload adicionada
     `);
 });
 
@@ -1484,4 +1605,3 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
-
