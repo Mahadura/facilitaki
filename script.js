@@ -1,4 +1,4 @@
-// script.js - Facilitaki - Sistema Completo com Upload Real
+// script.js - Facilitaki - Sistema Completo com Upload Real (VERSÃO SEM TEMA/DISCIPLINA)
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = null;
@@ -892,7 +892,7 @@ function mostrarInstrucoesPagamento() {
     `;
 }
 
-// ===== MODAL DESCRIÇÃO TRABALHO =====
+// ===== MODAL DESCRIÇÃO TRABALHO (SEM TEMA/DISCIPLINA) =====
 function abrirDescricaoTrabalho() {
     const selectServico = document.getElementById('selectServicoDashboard');
     const servicoSelecionado = selectServico ? selectServico.value : null;
@@ -942,9 +942,10 @@ function abrirDescricaoTrabalho() {
         // Mostrar modal
         modal.style.display = 'flex';
         
-        // Focar no primeiro campo
+        // Focar no campo de arquivo
         setTimeout(() => {
-            if (temaTrabalho) temaTrabalho.focus();
+            const uploadArea = document.getElementById('uploadArea');
+            if (uploadArea) uploadArea.focus();
         }, 100);
     }
 }
@@ -960,14 +961,10 @@ function fecharModalDescricao() {
     removerArquivo();
     
     // Limpar outros campos
-    const temaTrabalho = document.getElementById('temaTrabalho');
-    const disciplinaTrabalho = document.getElementById('disciplinaTrabalho');
     const descricaoDetalhada = document.getElementById('descricaoDetalhada');
     const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
     const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
     
-    if (temaTrabalho) temaTrabalho.value = '';
-    if (disciplinaTrabalho) disciplinaTrabalho.value = '';
     if (descricaoDetalhada) descricaoDetalhada.value = '';
     if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
     if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
@@ -976,23 +973,21 @@ function fecharModalDescricao() {
 async function solicitarServicoComArquivo() {
     console.log('🚀 Solicitando serviço com arquivo...');
     
-    // Coletar dados do modal
-    const tema = document.getElementById('temaTrabalho')?.value.trim() || '';
-    const disciplina = document.getElementById('disciplinaTrabalho')?.value.trim() || '';
+    // Coletar dados do modal (SEM TEMA E SEM DISCIPLINA)
     const descricao = document.getElementById('descricaoDetalhada')?.value.trim() || '';
     const prazo = document.getElementById('prazoTrabalhoDetalhe')?.value || '';
     const metodoPagamentoSelect = document.getElementById('metodoPagamentoModal');
     const metodoPagamento = metodoPagamentoSelect ? metodoPagamentoSelect.value : '';
     const aceitarTermos = document.getElementById('aceitarTermos')?.checked || false;
     
-    // Validar campos obrigatórios
-    if (!tema || !disciplina || !metodoPagamento) {
-        mostrarMensagemGlobal('Preencha todos os campos obrigatórios', 'error');
+    // Validar campos obrigatórios (AGORA APENAS ARQUIVO, MÉTODO DE PAGAMENTO E TERMOS)
+    if (!arquivoSelecionado) {
+        mostrarMensagemGlobal('Selecione um arquivo do trabalho', 'error');
         return;
     }
     
-    if (!arquivoSelecionado) {
-        mostrarMensagemGlobal('Selecione um arquivo do trabalho', 'error');
+    if (!metodoPagamento) {
+        mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
         return;
     }
     
@@ -1019,13 +1014,13 @@ async function solicitarServicoComArquivo() {
         // Criar FormData para enviar arquivo
         const formData = new FormData();
         
-        // Adicionar dados do pedido
+        // Adicionar dados do pedido (SEM TEMA E SEM DISCIPLINA)
         formData.append('cliente', usuarioLogado ? usuarioLogado.nome : 'Cliente');
         formData.append('telefone', usuarioLogado ? usuarioLogado.telefone : '');
         formData.append('instituicao', 'Não informada');
         formData.append('curso', 'Não informado');
-        formData.append('cadeira', disciplina);
-        formData.append('tema', tema);
+        formData.append('cadeira', 'Não informada'); // Agora sempre "Não informada"
+        formData.append('tema', descricao || 'Arquivo enviado'); // Usa descrição ou texto padrão
         formData.append('descricao', descricao);
         formData.append('prazo', prazo);
         formData.append('plano', servicoTipo);
@@ -1581,4 +1576,3 @@ console.log('🎯 Facilitaki carregado! API_URL:', API_URL);
 console.log('🛠️  Comandos disponíveis no console:');
 console.log('   • debugAPI() - Testar endpoints');
 console.log('   • testarCriarPedido() - Testar criação de pedido');
-
