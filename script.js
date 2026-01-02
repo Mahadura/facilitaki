@@ -1,4 +1,4 @@
-// script.js - JavaScript completo para o Facilitaki
+// script.js - Facilitaki - Sistema Completo com Upload Real
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = null;
@@ -7,13 +7,12 @@ let carrinho = {
     preco: 0,
     metodoPagamento: null
 };
-let pedidos = JSON.parse(localStorage.getItem('pedidos_facilitaki')) || [];
-let usuarios = JSON.parse(localStorage.getItem('usuarios_facilitaki')) || [];
+let arquivoSelecionado = null;
 
 // ===== URL DO SERVIDOR =====
 const API_URL = 'https://facilitaki.onrender.com';
 
-// ===== FUNÇÃO PARA TESTAR CONEXÃO COM A API =====
+// ===== FUNÇÃO PARA TESTAR CONEXÃO =====
 async function testarConexaoAPI() {
     console.log('🔍 Testando conexão com a API...');
     try {
@@ -32,7 +31,7 @@ async function testarConexaoAPI() {
         }
     } catch (error) {
         console.error('❌ Falha na conexão com API:', error);
-        mostrarMensagemGlobal('Não foi possível conectar ao servidor. Verifique sua conexão.', 'error');
+        mostrarMensagemGlobal('Não foi possível conectar ao servidor', 'error');
         return false;
     }
 }
@@ -46,7 +45,7 @@ function navegarPara(sectionId) {
         section.classList.remove('active');
     });
     
-    // Remover classe active de todos os links de navegação
+    // Remover classe active de todos os links
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
     });
@@ -63,10 +62,27 @@ function navegarPara(sectionId) {
         }
         
         // Ações específicas para cada seção
-        if (sectionId === 'dashboard' && usuarioLogado) {
-            atualizarDashboard();
-        } else if (sectionId === 'pagamento-sucesso' && carrinho.plano) {
-            mostrarInstrucoesPagamento();
+        switch(sectionId) {
+            case 'dashboard':
+                if (usuarioLogado) {
+                    atualizarDashboard();
+                } else {
+                    navegarPara('login');
+                }
+                break;
+            case 'pagamento-sucesso':
+                if (carrinho.plano) {
+                    mostrarInstrucoesPagamento();
+                }
+                break;
+            case 'planos':
+                // Limpar seleção
+                sessionStorage.removeItem('servico_selecionado');
+                sessionStorage.removeItem('preco_selecionado');
+                break;
+            case 'checkout':
+                atualizarResumoPedido();
+                break;
         }
     }
     
@@ -76,8 +92,14 @@ function navegarPara(sectionId) {
 
 // ===== FUNÇÃO NOVA: Verificar e Logar =====
 function verificarELogar(tipo, preco) {
+    console.log('🔐 Verificando login para:', tipo, preco);
+    
     if (!usuarioLogado) {
-        mostrarMensagemGlobal('Faça login ou cadastre-se para solicitar serviços', 'info');
+        // Armazenar seleção para depois do login
+        sessionStorage.setItem('servico_selecionado', tipo);
+        sessionStorage.setItem('preco_selecionado', preco);
+        
+        mostrarMensagemGlobal('Faça login para continuar com a solicitação', 'info');
         navegarPara('login');
     } else {
         selecionarPlano(tipo, preco);
@@ -96,7 +118,7 @@ async function fazerLogin() {
     }
     
     // Mostrar loading
-    const btnLogin = document.querySelector('#formLogin button[type="submit"]');
+    const btnLogin = document.querySelector('#formLogin button');
     const originalText = btnLogin ? btnLogin.innerHTML : 'Entrar';
     if (btnLogin) {
         btnLogin.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
@@ -106,10 +128,10 @@ async function fazerLogin() {
     try {
         console.log('🔐 Tentando login para:', telefone);
         
-        // Primeiro testa a conexão
+        // Testa a conexão
         const conexaoOk = await testarConexaoAPI();
         if (!conexaoOk) {
-            mostrarMensagem(mensagem, 'Servidor não disponível. Tente novamente em alguns instantes.', 'error');
+            mostrarMensagem(mensagem, 'Servidor não disponível', 'error');
             return;
         }
         
@@ -124,7 +146,7 @@ async function fazerLogin() {
             mode: 'cors'
         });
         
-        console.log('📤 Resposta do login:', response.status, response.statusText);
+        console.log('📤 Resposta do login:', response.status);
         
         if (!response.ok) {
             // Tenta ler a resposta de erro
@@ -145,7 +167,7 @@ async function fazerLogin() {
         console.log('✅ Login bem-sucedido:', data);
         
         if (data.success) {
-            // Se o servidor aceitar, guardamos a sessão
+            // Guardar a sessão
             usuarioLogado = data.usuario;
             localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
             localStorage.setItem('token_facilitaki', data.token);
@@ -159,23 +181,27 @@ async function fazerLogin() {
                 btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
             }
             
-            setTimeout(() => navegarPara('dashboard'), 1500);
+            // Verificar se há serviço selecionado
+            const servicoSelecionado = sessionStorage.getItem('servico_selecionado');
+            const precoSelecionado = sessionStorage.getItem('preco_selecionado');
+            
+            if (servicoSelecionado && precoSelecionado) {
+                // Redirecionar para checkout com o serviço selecionado
+                setTimeout(() => {
+                    selecionarPlano(servicoSelecionado, parseFloat(precoSelecionado));
+                    sessionStorage.removeItem('servico_selecionado');
+                    sessionStorage.removeItem('preco_selecionado');
+                }, 1500);
+            } else {
+                setTimeout(() => navegarPara('dashboard'), 1500);
+            }
         } else {
             mostrarMensagem(mensagem, data.erro || 'Credenciais inválidas', 'error');
         }
         
     } catch (error) {
         console.error("❌ Erro na requisição de login:", error);
-        
-        // Mensagens específicas baseadas no tipo de erro
-        let errorMsg = 'O servidor não respondeu. Tente novamente.';
-        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-            errorMsg = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
-        } else if (error.name === 'SyntaxError') {
-            errorMsg = 'Resposta inválida do servidor.';
-        }
-        
-        mostrarMensagem(mensagem, errorMsg, 'error');
+        mostrarMensagem(mensagem, 'Erro de conexão com o servidor', 'error');
         
     } finally {
         // Restaurar botão
@@ -203,8 +229,13 @@ async function fazerCadastro() {
         return;
     }
 
+    if (senha.length < 6) {
+        mostrarMensagem(mensagem, 'A senha deve ter pelo menos 6 caracteres', 'error');
+        return;
+    }
+
     // Mostrar loading
-    const btnCadastro = document.querySelector('#formCadastro button[type="submit"]');
+    const btnCadastro = document.querySelector('#formCadastro button');
     const originalText = btnCadastro ? btnCadastro.innerHTML : 'Cadastrar';
     if (btnCadastro) {
         btnCadastro.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cadastrando...';
@@ -217,7 +248,7 @@ async function fazerCadastro() {
         // Testa conexão primeiro
         const conexaoOk = await testarConexaoAPI();
         if (!conexaoOk) {
-            mostrarMensagem(mensagem, 'Servidor não disponível. Tente novamente em alguns instantes.', 'error');
+            mostrarMensagem(mensagem, 'Servidor não disponível', 'error');
             return;
         }
         
@@ -239,47 +270,30 @@ async function fazerCadastro() {
         if (response.ok && data.success) {
             mostrarMensagem(mensagem, data.mensagem || 'Cadastro realizado com sucesso!', 'success');
             
-            // Tentar login automático
-            const loginResponse = await fetch(`${API_URL}/api/login`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({ telefone, senha }),
-                mode: 'cors'
-            });
-
-            const loginData = await loginResponse.json();
-
-            if (loginResponse.ok && loginData.success) {
-                usuarioLogado = loginData.usuario;
-                localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(loginData.usuario));
-                localStorage.setItem('token_facilitaki', loginData.token);
-                
-                console.log('✅ Login automático bem-sucedido');
-                
-                // Atualiza a interface
-                const btnHeader = document.getElementById('btnLoginHeader');
-                if(btnHeader) {
-                    btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
-                    btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
-                }
-                
-                setTimeout(() => {
-                    mostrarLogin();
-                    navegarPara('dashboard');
-                }, 2000);
-            } else {
-                mostrarMensagem(mensagem, 'Cadastro realizado! Faça login manualmente.', 'success');
-                mostrarLogin();
+            // Login automático
+            usuarioLogado = data.usuario;
+            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
+            localStorage.setItem('token_facilitaki', data.token);
+            
+            console.log('✅ Cadastro e login automático bem-sucedido');
+            
+            // Atualiza a interface
+            const btnHeader = document.getElementById('btnLoginHeader');
+            if(btnHeader) {
+                btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+                btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
             }
+            
+            setTimeout(() => {
+                mostrarLogin();
+                navegarPara('dashboard');
+            }, 2000);
         } else {
             mostrarMensagem(mensagem, data.erro || 'Erro ao cadastrar', 'error');
         }
     } catch (error) {
         console.error("❌ Erro no cadastro:", error);
-        mostrarMensagem(mensagem, 'Erro de conexão com o servidor.', 'error');
+        mostrarMensagem(mensagem, 'Erro de conexão com o servidor', 'error');
     } finally {
         // Restaurar botão
         if (btnCadastro) {
@@ -320,17 +334,24 @@ async function fazerLogout() {
         btnHeader.setAttribute('onclick', 'navegarPara(\'login\')');
     }
     
+    // Limpar carrinho e sessões
+    carrinho = { plano: null, preco: 0, metodoPagamento: null };
+    arquivoSelecionado = null;
+    sessionStorage.clear();
+    
     navegarPara('home');
 }
 
 function mostrarCadastro() {
     document.getElementById('formLogin').style.display = 'none';
     document.getElementById('formCadastro').style.display = 'block';
+    document.getElementById('mensagemLogin').innerHTML = '';
 }
 
 function mostrarLogin() {
     document.getElementById('formCadastro').style.display = 'none';
     document.getElementById('formLogin').style.display = 'block';
+    document.getElementById('mensagemLogin').innerHTML = '';
 }
 
 // ===== FUNÇÕES PARA GESTÃO DE PEDIDOS =====
@@ -396,16 +417,12 @@ async function criarPedido(pedidoData) {
         
     } catch (error) {
         console.error("🔥 Erro fatal ao criar pedido:", error);
-        console.error("Stack trace:", error.stack);
         
-        // Mensagens mais amigáveis baseadas no tipo de erro
         let errorMsg = 'Erro de conexão com o servidor';
         if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
             errorMsg = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
         } else if (error.name === 'SyntaxError') {
             errorMsg = 'Resposta inválida do servidor.';
-        } else if (error.message.includes('NetworkError')) {
-            errorMsg = 'Erro de rede. Verifique sua conexão.';
         }
         
         return { success: false, error: errorMsg };
@@ -416,7 +433,7 @@ async function buscarPedidosUsuario() {
     try {
         const token = localStorage.getItem('token_facilitaki');
         if (!token) {
-            return { success: false, error: 'Usuário não autenticado. Faça login novamente.' };
+            return { success: false, error: 'Usuário não autenticado' };
         }
         
         console.log('📋 Buscando pedidos do usuário...');
@@ -442,8 +459,14 @@ async function buscarPedidosUsuario() {
                 return { success: false, error: data.erro || 'Erro ao buscar pedidos' };
             }
         } else {
-            const error = await response.json();
-            return { success: false, error: error.erro || 'Erro na requisição' };
+            let errorMessage = 'Erro na requisição';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.erro || errorMessage;
+            } catch (e) {
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
+            }
+            return { success: false, error: errorMessage };
         }
     } catch (error) {
         console.error("❌ Erro ao buscar pedidos:", error);
@@ -451,16 +474,115 @@ async function buscarPedidosUsuario() {
     }
 }
 
+// ===== UPLOAD DE ARQUIVOS =====
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Validar tamanho (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('Arquivo muito grande. O tamanho máximo é 10MB.');
+        return;
+    }
+    
+    // Validar tipo
+    const validTypes = ['.pdf', '.doc', '.docx'];
+    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+    if (!validTypes.includes(fileExt)) {
+        alert('Formato de arquivo não suportado. Use PDF, DOC ou DOCX.');
+        return;
+    }
+    
+    arquivoSelecionado = file;
+    
+    // Mostrar preview
+    const filePreview = document.getElementById('filePreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    
+    if (filePreview && fileName && fileSize) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        filePreview.style.display = 'block';
+    }
+    
+    // Ativar botão de submeter
+    const btnSolicitar = document.getElementById('btnSolicitarServico');
+    if (btnSolicitar) {
+        btnSolicitar.disabled = false;
+    }
+}
+
+function removerArquivo() {
+    arquivoSelecionado = null;
+    const fileInput = document.getElementById('fileInput');
+    const filePreview = document.getElementById('filePreview');
+    
+    if (fileInput) fileInput.value = '';
+    if (filePreview) filePreview.style.display = 'none';
+    
+    const btnSolicitar = document.getElementById('btnSolicitarServico');
+    if (btnSolicitar) {
+        btnSolicitar.disabled = true;
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+async function criarPedidoComArquivo(formData) {
+    console.log('📤 Enviando pedido com arquivo...');
+    
+    try {
+        const token = localStorage.getItem('token_facilitaki');
+        if (!token) {
+            return { success: false, error: 'Usuário não autenticado' };
+        }
+        
+        // Enviar para endpoint de upload
+        const response = await fetch(`${API_URL}/api/pedidos/upload`, {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        
+        console.log('📤 Resposta do servidor (upload):', response.status);
+        
+        if (!response.ok) {
+            let errorMessage = 'Erro ao enviar arquivo';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
+            } catch (e) {
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
+            }
+            return { success: false, error: errorMessage };
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            return { success: true, pedido: data.pedido };
+        } else {
+            return { success: false, error: data.erro || 'Erro ao criar pedido' };
+        }
+        
+    } catch (error) {
+        console.error("🔥 Erro ao enviar arquivo:", error);
+        return { success: false, error: 'Erro de conexão com o servidor' };
+    }
+}
+
 // ===== PLANOS E CHECKOUT =====
 function selecionarPlano(tipo, preco) {
     console.log('📦 Selecionando plano:', tipo, preco);
-    
-    // Verificar se usuário está logado
-    if (!usuarioLogado) {
-        mostrarMensagemGlobal('Faça login ou cadastre-se para continuar', 'info');
-        navegarPara('login');
-        return;
-    }
     
     // Mapear nomes dos planos
     const nomesPlanos = {
@@ -473,14 +595,13 @@ function selecionarPlano(tipo, preco) {
     carrinho = {
         plano: tipo,
         nomePlano: nomesPlanos[tipo] || tipo,
-        preco: preco,
+        preco: parseFloat(preco),
         metodoPagamento: null
     };
     
-    // Atualizar resumo no checkout
-    atualizarResumoPedido();
+    console.log('🛒 Carrinho atualizado:', carrinho);
     
-    // Ir para checkout
+    // Navegar para checkout
     navegarPara('checkout');
 }
 
@@ -501,77 +622,58 @@ function selecionarMetodo(metodo) {
     // Atualizar carrinho
     carrinho.metodoPagamento = metodo;
     
-    // Mostrar instruções de pagamento
-    mostrarInstrucoesMetodo(metodo);
-}
-
-function mostrarInstrucoesMetodo(metodo) {
-    const instrucoesDiv = document.getElementById('instrucoesPagamento');
-    const textoInstrucoes = document.getElementById('textoInstrucoes');
-    
-    let instrucoes = '';
-    
-    switch(metodo) {
-        case 'mpesa':
-            instrucoes = `
-                <strong>Instruções M-Pesa:</strong><br>
-                1. Acesse M-Pesa no seu celular<br>
-                2. Selecione "Transferir Dinheiro"<br>
-                3. Digite o número: <strong>84 718 6665</strong><br>
-                4. Valor: <strong>${carrinho.preco} MT</strong><br>
-                5. Nome: Aguinaldo Anli<br>
-                6. Confirme a transação
-            `;
-            break;
-        case 'emola':
-            instrucoes = `
-                <strong>Instruções e-Mola:</strong><br>
-                1. Acesse e-Mola no seu celular<br>
-                2. Selecione "Transferir Dinheiro"<br>
-                3. Digite o número: <strong>86 728 6665</strong><br>
-                4. Valor: <strong>${carrinho.preco} MT</strong><br>
-                5. Nome: Aguinaldo Anli Mahadura<br>
-                6. Confirme a transação
-            `;
-            break;
-        case 'deposito':
-            instrucoes = `
-                <strong>Instruções Depósito Bancário:</strong><br>
-                Banco: BCI<br>
-                NIB: 00080000790534651019<br>
-                Nome: Aguinaldo Anli Mahadura<br>
-                Valor: <strong>${carrinho.preco} MT</strong><br>
-                <br>
-                Envie o comprovativo para: 86 728 6665 ou 84 728 6665
-            `;
-            break;
-        default:
-            instrucoes = `<strong>Método:</strong> ${metodo}<br>Complete o pagamento conforme instruções.`;
+    // Habilitar botão de finalizar
+    const btnFinalizar = document.querySelector('#checkout button[onclick="finalizarCompra()"]');
+    if (btnFinalizar) {
+        btnFinalizar.disabled = false;
+        btnFinalizar.innerHTML = '<i class="fas fa-check"></i> Finalizar Compra';
     }
-    
-    if (textoInstrucoes) textoInstrucoes.innerHTML = instrucoes;
-    if (instrucoesDiv) instrucoesDiv.style.display = 'block';
 }
 
 function atualizarResumoPedido() {
     const resumoDiv = document.getElementById('resumoPedido');
-    
-    if (!resumoDiv) return;
+    const nomeCliente = document.getElementById('nomeCliente');
+    const telefoneCliente = document.getElementById('telefoneCliente');
     
     if (carrinho.plano) {
-        resumoDiv.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <strong>${carrinho.nomePlano}</strong><br>
-                    <small>Serviço selecionado</small>
+        // Preencher dados do usuário se estiver logado
+        if (usuarioLogado) {
+            if (nomeCliente) nomeCliente.value = usuarioLogado.nome || '';
+            if (telefoneCliente) telefoneCliente.value = usuarioLogado.telefone || '';
+        }
+        
+        if (resumoDiv) {
+            resumoDiv.innerHTML = `
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div>
+                            <h4 style="margin: 0; color: #1e40af;">${carrinho.nomePlano}</h4>
+                            <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.9rem;">Serviço selecionado</p>
+                        </div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #1e40af;">
+                            ${carrinho.preco.toLocaleString('pt-MZ')} MT
+                        </div>
+                    </div>
+                    <div style="padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.9rem; color: #6b7280;">
+                        <p style="margin: 0.5rem 0;">
+                            <i class="fas fa-info-circle"></i> O trabalho será iniciado após confirmação do pagamento.
+                        </p>
+                    </div>
                 </div>
-                <div style="font-size: 1.2rem; font-weight: bold; color: #1e40af;">
-                    ${carrinho.preco.toLocaleString('pt-MZ')} MT
-                </div>
-            </div>
-        `;
+            `;
+        }
     } else {
-        resumoDiv.innerHTML = '<p>Selecione um serviço primeiro</p>';
+        if (resumoDiv) {
+            resumoDiv.innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                    <i class="fas fa-shopping-cart" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                    <p>Nenhum serviço selecionado</p>
+                    <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem;">
+                        Escolher Serviço
+                    </button>
+                </div>
+            `;
+        }
     }
 }
 
@@ -584,34 +686,26 @@ async function finalizarCompra() {
     const curso = document.getElementById('curso')?.value.trim() || '';
     const cadeira = document.getElementById('cadeira')?.value.trim() || '';
     const descricao = document.getElementById('descricao')?.value.trim() || '';
-    
-    console.log('📋 Dados coletados:', {
-        nomeCliente, 
-        telefoneCliente: telefoneCliente.substring(0, 3) + '...',
-        instituicao,
-        curso,
-        cadeira,
-        descricaoLength: descricao.length
-    });
+    const mensagemDiv = document.getElementById('mensagemCheckout');
     
     // Validações
     if (!nomeCliente || !telefoneCliente) {
-        mostrarMensagem(document.getElementById('mensagemCheckout'), 'Nome e telefone são obrigatórios', 'error');
+        mostrarMensagem(mensagemDiv, 'Nome e telefone são obrigatórios', 'error');
         return;
     }
     
     if (!carrinho.plano) {
-        mostrarMensagem(document.getElementById('mensagemCheckout'), 'Selecione um serviço primeiro', 'error');
+        mostrarMensagem(mensagemDiv, 'Selecione um serviço primeiro', 'error');
         return;
     }
     
     if (!carrinho.metodoPagamento) {
-        mostrarMensagem(document.getElementById('mensagemCheckout'), 'Selecione um método de pagamento', 'error');
+        mostrarMensagem(mensagemDiv, 'Selecione um método de pagamento', 'error');
         return;
     }
     
     // Mostrar loading
-    const btnFinalizar = document.querySelector('#checkout button[type="submit"]');
+    const btnFinalizar = document.querySelector('#checkout button[onclick="finalizarCompra()"]');
     const originalText = btnFinalizar ? btnFinalizar.innerHTML : 'Finalizar Compra';
     if (btnFinalizar) {
         btnFinalizar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
@@ -646,20 +740,14 @@ async function finalizarCompra() {
     
     if (resultado.success) {
         console.log('✅ Pedido criado com sucesso!');
-        mostrarMensagem(document.getElementById('mensagemCheckout'), 'Pedido registrado com sucesso! Redirecionando...', 'success');
+        mostrarMensagem(mensagemDiv, 'Pedido registrado com sucesso! Redirecionando...', 'success');
         
-        // Limpar formulário se existir
-        const campos = ['nomeCliente', 'telefoneCliente', 'instituicao', 'curso', 'cadeira', 'descricao'];
+        // Limpar formulário
+        const campos = ['instituicao', 'curso', 'cadeira', 'descricao'];
         campos.forEach(campo => {
             const el = document.getElementById(campo);
             if (el) el.value = '';
         });
-        
-        // Atualizar pedidos locais
-        if (resultado.pedido) {
-            pedidos.push(resultado.pedido);
-            localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
-        }
         
         // Mostrar instruções de pagamento
         setTimeout(() => {
@@ -667,7 +755,7 @@ async function finalizarCompra() {
         }, 2000);
     } else {
         console.error('❌ Erro ao criar pedido:', resultado.error);
-        mostrarMensagem(document.getElementById('mensagemCheckout'), `Erro: ${resultado.error}`, 'error');
+        mostrarMensagem(mensagemDiv, `Erro: ${resultado.error}`, 'error');
     }
 }
 
@@ -681,50 +769,79 @@ function mostrarInstrucoesPagamento() {
     
     // Instruções de pagamento
     let instrucoes = '';
+    const valorEntrada = Math.ceil(carrinho.preco * 0.5);
+    
     switch(carrinho.metodoPagamento) {
         case 'mpesa':
             instrucoes = `
-                <h4>Pagamento via M-Pesa</h4>
-                <ol>
-                    <li>Acesse M-Pesa no seu celular</li>
-                    <li>Selecione "Transferir Dinheiro"</li>
-                    <li>Digite o número: <strong>84 728 6665</strong></li>
-                    <li>Valor: <strong>${carrinho.preco.toLocaleString('pt-MZ')} MT</strong></li>
-                    <li>Nome: <strong>Aguinaldo Anli</strong></li>
-                    <li>Confirme a transação</li>
-                    <li>Guarde o comprovativo</li>
-                </ol>
-                <p style="margin-top: 1rem; padding: 0.5rem; background: white; border-radius: 5px;">
-                    <strong>Nota:</strong> Entraremos em contacto após confirmação do pagamento.
-                </p>
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                    <i class="fas fa-mobile-alt"></i> Pagamento via M-Pesa
+                </h4>
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                    <p><strong>Passo a passo:</strong></p>
+                    <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
+                        <li>Acesse M-Pesa no seu celular</li>
+                        <li>Selecione "Transferir Dinheiro"</li>
+                        <li>Digite o número: <strong>84 728 6665</strong></li>
+                        <li>Valor: <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong> (entrada de 50%)</li>
+                        <li>Nome: <strong>Aguinaldo Anli</strong></li>
+                        <li>Confirme a transação</li>
+                        <li>Guarde o comprovativo</li>
+                    </ol>
+                    <p style="color: #ef4444; font-weight: bold;">
+                        <i class="fas fa-exclamation-circle"></i> O trabalho só será iniciado após confirmação do pagamento.
+                    </p>
+                </div>
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
+                    <p style="margin: 0; color: #065f46;">
+                        <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665
+                    </p>
+                </div>
             `;
             break;
         case 'emola':
             instrucoes = `
-                <h4>Pagamento via e-Mola</h4>
-                <ol>
-                    <li>Acesse e-Mola no seu celular</li>
-                    <li>Selecione "Transferir Dinheiro"</li>
-                    <li>Digite o número: <strong>86 728 6665</strong></li>
-                    <li>Valor: <strong>${carrinho.preco.toLocaleString('pt-MZ')} MT</strong></li>
-                    <li>Nome: <strong>Aguinaldo Anli</strong></li>
-                    <li>Confirme a transação</li>
-                    <li>Guarde o comprovativo</li>
-                </ol>
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                    <i class="fas fa-wallet"></i> Pagamento via e-Mola
+                </h4>
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                    <p><strong>Passo a passo:</strong></p>
+                    <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
+                        <li>Acesse e-Mola no seu celular</li>
+                        <li>Selecione "Transferir Dinheiro"</li>
+                        <li>Digite o número: <strong>86 728 6665</strong></li>
+                        <li>Valor: <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong> (entrada de 50%)</li>
+                        <li>Nome: <strong>Aguinaldo Anli Mahadura</strong></li>
+                        <li>Confirme a transação</li>
+                        <li>Guarde o comprovativo</li>
+                    </ol>
+                </div>
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
+                    <p style="margin: 0; color: #065f46;">
+                        <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665
+                    </p>
+                </div>
             `;
             break;
         case 'deposito':
             instrucoes = `
-                <h4>Depósito Bancário</h4>
-                <div style="background: white; padding: 1rem; border-radius: 5px; margin-top: 1rem;">
-                    <p><strong>Banco:</strong> BCI</p>
-                    <p><strong>Conta:</strong> 1234567890</p>
-                    <p><strong>Nome:</strong> Facilitaki Lda</p>
-                    <p><strong>Valor:</strong> ${carrinho.preco.toLocaleString('pt-MZ')} MT</p>
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                    <i class="fas fa-university"></i> Depósito Bancário
+                </h4>
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                    <p><strong>Dados bancários:</strong></p>
+                    <div style="margin-bottom: 1rem;">
+                        <p><strong>Banco:</strong> BCI</p>
+                        <p><strong>Conta:</strong> 00080000790534651019</p>
+                        <p><strong>Nome:</strong> Aguinaldo Anli Mahadura</p>
+                        <p><strong>Valor:</strong> <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong> (entrada de 50%)</p>
+                    </div>
                 </div>
-                <p style="margin-top: 1rem;">
-                    <strong>Importante:</strong> Envie o comprovativo para WhatsApp: 84 123 4567
-                </p>
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
+                    <p style="margin: 0; color: #065f46;">
+                        <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665 ou 84 728 6665
+                    </p>
+                </div>
             `;
             break;
         default:
@@ -736,10 +853,42 @@ function mostrarInstrucoesPagamento() {
     
     // Relatório do pagamento
     resumoDiv.innerHTML = `
-        <p><strong>Serviço:</strong> ${carrinho.nomePlano}</p>
-        <p><strong>Valor:</strong> ${carrinho.preco.toLocaleString('pt-MZ')} MT</p>
-        <p><strong>Método de Pagamento:</strong> ${carrinho.metodoPagamento ? carrinho.metodoPagamento.toUpperCase() : 'Não selecionado'}</p>
-        <p><strong>Status:</strong> <span style="color: #f59e0b; font-weight: bold;">Aguardando Pagamento</span></p>
+        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <h5 style="margin-top: 0; color: #1e40af;">Resumo do Pedido</h5>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Serviço:</span>
+                <strong>${carrinho.nomePlano}</strong>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Valor Total:</span>
+                <strong>${carrinho.preco.toLocaleString('pt-MZ')} MT</strong>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Entrada (50%):</span>
+                <strong style="color: #10b981;">${valorEntrada.toLocaleString('pt-MZ')} MT</strong>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                <span>Saldo Restante:</span>
+                <strong>${(carrinho.preco - valorEntrada).toLocaleString('pt-MZ')} MT</strong>
+            </div>
+            
+            <hr style="border-color: #e5e7eb; margin: 1rem 0;">
+            
+            <div style="display: flex; justify-content: space-between;">
+                <span>Método de Pagamento:</span>
+                <strong>${carrinho.metodoPagamento ? carrinho.metodoPagamento.toUpperCase() : 'Não selecionado'}</strong>
+            </div>
+            
+            <div style="margin-top: 1rem; padding: 0.75rem; background: #fef3c7; border-radius: 5px; border: 1px solid #f59e0b;">
+                <p style="margin: 0; color: #92400e; font-size: 0.9rem;">
+                    <i class="fas fa-clock"></i> Prazo de entrega começa após confirmação do pagamento.
+                </p>
+            </div>
+        </div>
     `;
 }
 
@@ -771,7 +920,7 @@ function abrirDescricaoTrabalho() {
     if (nomeServicoModal) nomeServicoModal.textContent = servico.nome;
     if (valorServicoModal) valorServicoModal.textContent = servico.preco.toLocaleString('pt-MZ') + ' MT';
     
-    // Armazenar dados do serviço em atributos do modal
+    // Armazenar dados do serviço
     const modal = document.getElementById('modalDescricaoTrabalho');
     if (modal) {
         modal.dataset.servicoTipo = servicoSelecionado;
@@ -791,7 +940,10 @@ function abrirDescricaoTrabalho() {
         if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
         if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
         
-        // Mostrar modal com rolagem suave
+        // Limpar arquivo
+        removerArquivo();
+        
+        // Mostrar modal
         modal.style.display = 'flex';
         
         // Focar no primeiro campo
@@ -805,24 +957,28 @@ function fecharModalDescricao() {
     const modal = document.getElementById('modalDescricaoTrabalho');
     if (modal) {
         modal.style.display = 'none';
-        
-        // Limpar campos
-        const temaTrabalho = document.getElementById('temaTrabalho');
-        const disciplinaTrabalho = document.getElementById('disciplinaTrabalho');
-        const descricaoDetalhada = document.getElementById('descricaoDetalhada');
-        const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
-        const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
-        
-        if (temaTrabalho) temaTrabalho.value = '';
-        if (disciplinaTrabalho) disciplinaTrabalho.value = '';
-        if (descricaoDetalhada) descricaoDetalhada.value = '';
-        if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
-        if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
     }
+    
+    // Limpar arquivo selecionado
+    arquivoSelecionado = null;
+    removerArquivo();
+    
+    // Limpar outros campos
+    const temaTrabalho = document.getElementById('temaTrabalho');
+    const disciplinaTrabalho = document.getElementById('disciplinaTrabalho');
+    const descricaoDetalhada = document.getElementById('descricaoDetalhada');
+    const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
+    const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
+    
+    if (temaTrabalho) temaTrabalho.value = '';
+    if (disciplinaTrabalho) disciplinaTrabalho.value = '';
+    if (descricaoDetalhada) descricaoDetalhada.value = '';
+    if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
+    if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
 }
 
-async function solicitarServicoComDescricao() {
-    console.log('🚀 Solicitando serviço com descrição...');
+async function solicitarServicoComArquivo() {
+    console.log('🚀 Solicitando serviço com arquivo...');
     
     // Coletar dados do modal
     const tema = document.getElementById('temaTrabalho')?.value.trim() || '';
@@ -831,10 +987,21 @@ async function solicitarServicoComDescricao() {
     const prazo = document.getElementById('prazoTrabalhoDetalhe')?.value || '';
     const metodoPagamentoSelect = document.getElementById('metodoPagamentoModal');
     const metodoPagamento = metodoPagamentoSelect ? metodoPagamentoSelect.value : '';
+    const aceitarTermos = document.getElementById('aceitarTermos')?.checked || false;
     
     // Validar campos obrigatórios
     if (!tema || !disciplina || !metodoPagamento) {
         mostrarMensagemGlobal('Preencha todos os campos obrigatórios', 'error');
+        return;
+    }
+    
+    if (!arquivoSelecionado) {
+        mostrarMensagemGlobal('Selecione um arquivo do trabalho', 'error');
+        return;
+    }
+    
+    if (!aceitarTermos) {
+        mostrarMensagemGlobal('Você precisa aceitar os termos de serviço', 'error');
         return;
     }
     
@@ -844,63 +1011,68 @@ async function solicitarServicoComDescricao() {
     const servicoNome = modal ? modal.dataset.servicoNome : 'Serviço';
     const servicoPreco = modal ? parseInt(modal.dataset.servicoPreco) || 0 : 0;
     
-    // Criar pedido para enviar ao servidor
-    const pedidoData = {
-        cliente: usuarioLogado ? usuarioLogado.nome : 'Cliente',
-        telefone: usuarioLogado ? usuarioLogado.telefone : '',
-        instituicao: 'Não informada',
-        curso: 'Não informado',
-        cadeira: disciplina,
-        tema: tema,
-        descricao: descricao,
-        prazo: prazo,
-        plano: servicoTipo,
-        nomePlano: servicoNome,
-        preco: servicoPreco,
-        metodoPagamento: metodoPagamento,
-        status: 'pendente'
-    };
-    
     // Mostrar loading
-    const btnSolicitar = document.querySelector('#modalDescricaoTrabalho button[onclick="solicitarServicoComDescricao()"]');
+    const btnSolicitar = document.getElementById('btnSolicitarServico');
     const originalText = btnSolicitar ? btnSolicitar.innerHTML : 'Solicitar Serviço';
     if (btnSolicitar) {
-        btnSolicitar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        btnSolicitar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando arquivo...';
         btnSolicitar.disabled = true;
     }
     
-    // Enviar para o servidor
-    const resultado = await criarPedido(pedidoData);
-    
-    // Restaurar botão
-    if (btnSolicitar) {
-        btnSolicitar.innerHTML = originalText;
-        btnSolicitar.disabled = false;
-    }
-    
-    if (resultado.success) {
-        // Fechar modal
-        fecharModalDescricao();
+    try {
+        // Criar FormData para enviar arquivo
+        const formData = new FormData();
         
-        // Atualizar carrinho para mostrar instruções de pagamento
-        carrinho = {
-            plano: servicoTipo,
-            nomePlano: servicoNome,
-            preco: servicoPreco,
-            metodoPagamento: metodoPagamento
-        };
+        // Adicionar dados do pedido
+        formData.append('cliente', usuarioLogado ? usuarioLogado.nome : 'Cliente');
+        formData.append('telefone', usuarioLogado ? usuarioLogado.telefone : '');
+        formData.append('instituicao', 'Não informada');
+        formData.append('curso', 'Não informado');
+        formData.append('cadeira', disciplina);
+        formData.append('tema', tema);
+        formData.append('descricao', descricao);
+        formData.append('prazo', prazo);
+        formData.append('plano', servicoTipo);
+        formData.append('nomePlano', servicoNome);
+        formData.append('preco', servicoPreco.toString());
+        formData.append('metodoPagamento', metodoPagamento);
+        formData.append('status', 'pendente');
         
-        // Atualizar pedidos locais
-        pedidos.push(resultado.pedido);
-        localStorage.setItem('pedidos_facilitaki', JSON.stringify(pedidos));
+        // Adicionar arquivo
+        formData.append('arquivo', arquivoSelecionado);
         
-        // Mostrar mensagem de sucesso
-        mostrarMensagemGlobal('Serviço solicitado com sucesso!', 'success');
+        // Enviar para o servidor
+        const resultado = await criarPedidoComArquivo(formData);
         
-        // Ir para instruções de pagamento
-        setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
-    } else {
-        mostrarMensagemGlobal(resultado.error, 'error');
+        if (resultado.success) {
+            // Fechar modal
+            fecharModalDescricao();
+            
+            // Atualizar carrinho para mostrar instruções de pagamento
+            carrinho = {
+                plano: servicoTipo,
+                nomePlano: servicoNome,
+                preco: servicoPreco,
+                metodoPagamento: metodoPagamento
+            };
+            
+            // Mostrar mensagem de sucesso
+            mostrarMensagemGlobal('Serviço solicitado com sucesso! Arquivo enviado.', 'success');
+            
+            // Ir para instruções de pagamento
+            setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
+        } else {
+            mostrarMensagemGlobal(resultado.error, 'error');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao enviar arquivo:', error);
+        mostrarMensagemGlobal('Erro ao enviar arquivo. Tente novamente.', 'error');
+    } finally {
+        // Restaurar botão
+        if (btnSolicitar) {
+            btnSolicitar.innerHTML = originalText;
+            btnSolicitar.disabled = false;
+        }
     }
 }
 
@@ -914,31 +1086,15 @@ async function atualizarDashboard() {
         return;
     }
     
-    // Mostrar loading
-    const dashboardContent = document.getElementById('dashboard');
-    if (dashboardContent) {
-        const loadingDiv = document.createElement('div');
-        loadingDiv.id = 'dashboardLoading';
-        loadingDiv.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Carregando pedidos...</p>';
-        dashboardContent.appendChild(loadingDiv);
-    }
-    
     // Buscar pedidos do servidor
     const resultado = await buscarPedidosUsuario();
     
-    // Remover loading
-    const loadingDiv = document.getElementById('dashboardLoading');
-    if (loadingDiv) loadingDiv.remove();
-    
     if (resultado.success) {
-        usuarioLogado.pedidos = resultado.pedidos || [];
-        localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioLogado));
+        const pedidosUsuario = resultado.pedidos || [];
         
-        console.log('✅ Pedidos carregados:', usuarioLogado.pedidos.length);
-        
-        // Calcular valor total por pagar
-        const pedidosPendentes = (usuarioLogado.pedidos || []).filter(p => p.status === 'pendente');
-        const valorTotal = pedidosPendentes.reduce((total, pedido) => total + pedido.preco, 0);
+        // Calcular valor total por pagar (pedidos pendentes)
+        const pedidosPendentes = pedidosUsuario.filter(p => p.status === 'pendente');
+        const valorTotal = pedidosPendentes.reduce((total, pedido) => total + (parseFloat(pedido.preco) || 0), 0);
         
         // Atualizar valor total
         const valorTotalPagar = document.getElementById('valorTotalPagar');
@@ -948,35 +1104,49 @@ async function atualizarDashboard() {
         
         // Atualizar lista de pedidos
         const listaPedidosDiv = document.getElementById('listaPedidos');
-        const pedidosUsuario = usuarioLogado.pedidos || [];
-        
         if (listaPedidosDiv) {
             if (pedidosUsuario.length === 0) {
-                listaPedidosDiv.innerHTML = '<p style="text-align: center; color: #6b7280;">Nenhum pedido encontrado</p>';
-            } else {
-                listaPedidosDiv.innerHTML = pedidosUsuario.map(pedido => `
-                    <div style="background: #f9fafb; padding: 1rem; border-radius: 5px; margin-bottom: 1rem; border-left: 4px solid ${getStatusColor(pedido.status)};">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div>
-                                <strong>${pedido.nome_plano || pedido.nomePlano || 'Serviço'}</strong>
-                                <div style="font-size: 0.9rem; color: #6b7280;">
-                                    ${pedido.cadeira || pedido.tema || 'Serviço'}
-                                </div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-weight: bold; color: #1e40af;">
-                                    ${pedido.preco ? pedido.preco.toLocaleString('pt-MZ') : '0'} MT
-                                </div>
-                                <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${getStatusBackground(pedido.status)}; color: ${getStatusTextColor(pedido.status)};">
-                                    ${pedido.status || 'pendente'}
-                                </span>
-                            </div>
-                        </div>
-                        <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
-                            ${pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString('pt-MZ') : 'Data não disponível'}
-                        </div>
+                listaPedidosDiv.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                        <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                        <p>Nenhum pedido encontrado</p>
+                        <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem;">
+                            Solicitar Serviço
+                        </button>
                     </div>
-                `).join('');
+                `;
+            } else {
+                listaPedidosDiv.innerHTML = pedidosUsuario.map(pedido => {
+                    const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
+                    const statusColor = getStatusColor(pedido.status);
+                    const statusText = pedido.status ? pedido.status.replace('_', ' ') : 'pendente';
+                    
+                    return `
+                        <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${statusColor};">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div>
+                                    <strong style="color: #1e40af;">${pedido.nome_plano || pedido.nomePlano || 'Serviço'}</strong>
+                                    <div style="font-size: 0.9rem; color: #6b7280; margin-top: 0.25rem;">
+                                        ${pedido.cadeira || pedido.tema || 'Sem descrição'}
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-weight: bold; color: #1e40af; font-size: 1.1rem;">
+                                        ${(parseFloat(pedido.preco) || 0).toLocaleString('pt-MZ')} MT
+                                    </div>
+                                    <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${statusColor + '20'}; color: ${statusColor};">
+                                        ${statusText}
+                                    </span>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
+                                <i class="far fa-calendar"></i> ${dataPedido.toLocaleDateString('pt-MZ')}
+                                ${pedido.metodo_pagamento ? ` • <i class="fas fa-credit-card"></i> ${pedido.metodo_pagamento.toUpperCase()}` : ''}
+                                ${pedido.arquivo_nome ? ` • <i class="fas fa-file"></i> ${pedido.arquivo_nome.substring(0, 20)}...` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
             }
         }
     } else {
@@ -996,33 +1166,10 @@ function getStatusColor(status) {
     }
 }
 
-function getStatusBackground(status) {
-    switch(status) {
-        case 'pendente': return '#fef3c7';
-        case 'pago': return '#d1fae5';
-        case 'em_andamento': return '#dbeafe';
-        case 'concluido': return '#ede9fe';
-        case 'cancelado': return '#fee2e2';
-        default: return '#f3f4f6';
-    }
-}
-
-function getStatusTextColor(status) {
-    switch(status) {
-        case 'pendente': return '#92400e';
-        case 'pago': return '#065f46';
-        case 'em_andamento': return '#1e40af';
-        case 'concluido': return '#5b21b6';
-        case 'cancelado': return '#991b1b';
-        default: return '#4b5563';
-    }
-}
-
 // ===== CONTATO =====
 async function enviarContato() {
     const nome = document.getElementById('contatoNome')?.value.trim() || '';
     const telefone = document.getElementById('contatoTelefone')?.value.trim() || '';
-    const email = document.getElementById('contatoEmail')?.value.trim() || '';
     const mensagemTexto = document.getElementById('contatoMensagem')?.value.trim() || '';
     const mensagemDiv = document.getElementById('mensagemContato');
     
@@ -1032,7 +1179,7 @@ async function enviarContato() {
     }
     
     // Mostrar loading
-    const btnEnviar = document.querySelector('#contato button[type="submit"]');
+    const btnEnviar = document.querySelector('#contato button');
     const originalText = btnEnviar ? btnEnviar.innerHTML : 'Enviar Mensagem';
     if (btnEnviar) {
         btnEnviar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
@@ -1045,7 +1192,7 @@ async function enviarContato() {
         // Testar conexão primeiro
         const conexaoOk = await testarConexaoAPI();
         if (!conexaoOk) {
-            mostrarMensagem(mensagemDiv, 'Servidor não disponível. Tente novamente em alguns instantes.', 'error');
+            mostrarMensagem(mensagemDiv, 'Servidor não disponível', 'error');
             return;
         }
         
@@ -1056,7 +1203,7 @@ async function enviarContato() {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            body: JSON.stringify({ nome, telefone, email, mensagem: mensagemTexto }),
+            body: JSON.stringify({ nome, telefone, mensagem: mensagemTexto }),
             mode: 'cors'
         });
         
@@ -1065,19 +1212,18 @@ async function enviarContato() {
         const data = await response.json();
 
         if (response.ok && data.success) {
-            mostrarMensagem(mensagemDiv, data.mensagem || 'Mensagem enviada com sucesso! Entraremos em contacto em breve.', 'success');
+            mostrarMensagem(mensagemDiv, data.mensagem || 'Mensagem enviada com sucesso!', 'success');
             
             // Limpar formulário
             if (document.getElementById('contatoNome')) document.getElementById('contatoNome').value = '';
             if (document.getElementById('contatoTelefone')) document.getElementById('contatoTelefone').value = '';
-            if (document.getElementById('contatoEmail')) document.getElementById('contatoEmail').value = '';
             if (document.getElementById('contatoMensagem')) document.getElementById('contatoMensagem').value = '';
         } else {
-            mostrarMensagem(mensagemDiv, data.erro || 'Erro ao enviar mensagem. Tente novamente.', 'error');
+            mostrarMensagem(mensagemDiv, data.erro || 'Erro ao enviar mensagem', 'error');
         }
     } catch (error) {
         console.error("❌ Erro ao enviar contato:", error);
-        mostrarMensagem(mensagemDiv, 'Erro de conexão. Tente novamente.', 'error');
+        mostrarMensagem(mensagemDiv, 'Erro de conexão', 'error');
     } finally {
         // Restaurar botão
         if (btnEnviar) {
@@ -1115,8 +1261,6 @@ function mostrarMensagemGlobal(texto, tipo) {
         border-radius: 8px;
         animation: slideInRight 0.3s ease-out;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        font-family: Arial, sans-serif;
-        font-size: 14px;
     `;
     
     // Cores baseadas no tipo
@@ -1132,14 +1276,6 @@ function mostrarMensagemGlobal(texto, tipo) {
         mensagemDiv.style.background = '#3b82f6';
         mensagemDiv.style.color = 'white';
         mensagemDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${texto}`;
-    } else if (tipo === 'warning') {
-        mensagemDiv.style.background = '#f59e0b';
-        mensagemDiv.style.color = 'white';
-        mensagemDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${texto}`;
-    } else {
-        mensagemDiv.style.background = '#6b7280';
-        mensagemDiv.style.color = 'white';
-        mensagemDiv.textContent = texto;
     }
     
     document.body.appendChild(mensagemDiv);
@@ -1199,7 +1335,7 @@ function inicializarApp() {
                 btnHeader.setAttribute('onclick', 'navegarPara(\'dashboard\')');
             }
             
-            // Verificar se o token ainda é válido em segundo plano
+            // Verificar se o token ainda é válido
             setTimeout(async () => {
                 const tokenValido = await verificarToken();
                 if (!tokenValido) {
@@ -1208,28 +1344,9 @@ function inicializarApp() {
                 }
             }, 1000);
         } catch (e) {
-            console.error('❌ Erro ao parsear usuário do localStorage:', e);
+            console.error('❌ Erro ao parsear usuário:', e);
             localStorage.removeItem('usuarioLogado_facilitaki');
             localStorage.removeItem('token_facilitaki');
-        }
-    }
-    
-    // Carregar dados do localStorage (fallback)
-    const pedidosSalvos = localStorage.getItem('pedidos_facilitaki');
-    if (pedidosSalvos) {
-        try {
-            pedidos = JSON.parse(pedidosSalvos);
-        } catch (e) {
-            console.error('❌ Erro ao parsear pedidos do localStorage:', e);
-        }
-    }
-    
-    const usuariosSalvos = localStorage.getItem('usuarios_facilitaki');
-    if (usuariosSalvos) {
-        try {
-            usuarios = JSON.parse(usuariosSalvos);
-        } catch (e) {
-            console.error('❌ Erro ao parsear usuários do localStorage:', e);
         }
     }
     
@@ -1274,42 +1391,15 @@ function inicializarApp() {
             from { transform: translateX(0); opacity: 1; }
             to { transform: translateX(100%); opacity: 0; }
         }
-        .message {
-            display: none;
-            padding: 12px;
-            margin: 10px 0;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-        .message.success {
-            background-color: #d1fae5;
-            color: #065f46;
-            border: 1px solid #10b981;
-        }
-        .message.error {
-            background-color: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #ef4444;
-        }
-        .message.info {
-            background-color: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #3b82f6;
-        }
-        .message.warning {
-            background-color: #fef3c7;
-            color: #92400e;
-            border: 1px solid #f59e0b;
-        }
     `;
     document.head.appendChild(style);
     
-    // Testar conexão com API em segundo plano
+    // Testar conexão com API
     setTimeout(() => {
         testarConexaoAPI();
     }, 2000);
     
-    console.log('✅ Facilitaki inicializado com sucesso!');
+    console.log('✅ Facilitaki inicializado!');
 }
 
 // ===== FUNÇÕES DE DEBUG =====
@@ -1325,7 +1415,7 @@ async function testarEndpoint(endpoint, data = null) {
         }
         
         const response = await fetch(`${API_URL}${endpoint}`, options);
-        console.log(`🔗 ${endpoint}:`, response.status, response.statusText);
+        console.log(`🔗 ${endpoint}:`, response.status);
         
         if (response.ok) {
             const result = await response.json();
@@ -1351,8 +1441,6 @@ function debugAPI() {
     // Testa cada endpoint
     console.log('🧪 Testando endpoints...');
     testarEndpoint('/status');
-    testarEndpoint('/api/login', { telefone: 'teste', senha: 'teste' });
-    testarEndpoint('/api/contato', { nome: 'Teste', telefone: '841234567', mensagem: 'Teste' });
     
     return 'Debug iniciado! Verifique o console.';
 }
@@ -1404,18 +1492,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Log para debug
-    console.log('✅ Tudo pronto! Digite debugAPI() no console para testar.');
-    console.log('✅ Para testar pedidos: testarCriarPedido()');
+    // Adicionar eventos de drag & drop para upload
+    const uploadArea = document.getElementById('uploadArea');
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = '#e0f2fe';
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.background = '#f8fafc';
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = '#f8fafc';
+            
+            if (e.dataTransfer.files.length) {
+                document.getElementById('fileInput').files = e.dataTransfer.files;
+                handleFileSelect({ target: { files: e.dataTransfer.files } });
+            }
+        });
+    }
+    
+    console.log('✅ Tudo pronto!');
 });
 
 // ===== FUNÇÕES ADICIONAIS PARA MODAIS =====
 function mostrarTermos() {
-    alert('Termos de Serviço:\n\n1. O serviço só será iniciado após confirmação do pagamento.\n2. O prazo começa a contar após envio de todos os materiais necessários.\n3. Garantimos 99,9% de taxa de aprovação.\n4. Sua privacidade é respeitada conforme a lei.');
+    alert('TERMOS DE SERVIÇO\n\n1. O serviço será iniciado após confirmação do pagamento de 50%.\n2. O prazo começa a contar após pagamento e envio de materiais.\n3. Garantimos 99,9% de taxa de aprovação.\n4. Sua privacidade é respeitada conforme a lei.');
 }
 
 function mostrarPrivacidade() {
-    alert('Política de Privacidade:\n\n1. Seus dados são usados apenas para processar seu pedido.\n2. Não compartilhamos suas informações com terceiros.\n3. Você pode solicitar exclusão de seus dados a qualquer momento.\n4. Usamos criptografia para proteger suas informações.');
+    alert('POLÍTICA DE PRIVACIDADE\n\n1. Seus dados são usados apenas para processar seu pedido.\n2. Não compartilhamos suas informações com terceiros.\n3. Você pode solicitar exclusão de seus dados a qualquer momento.\n4. Usamos criptografia para proteger suas informações.');
 }
 
 function fecharRecarga() {
@@ -1459,7 +1568,7 @@ window.selecionarMetodo = selecionarMetodo;
 window.finalizarCompra = finalizarCompra;
 window.abrirDescricaoTrabalho = abrirDescricaoTrabalho;
 window.fecharModalDescricao = fecharModalDescricao;
-window.solicitarServicoComDescricao = solicitarServicoComDescricao;
+window.solicitarServicoComArquivo = solicitarServicoComArquivo;
 window.atualizarDashboard = atualizarDashboard;
 window.enviarContato = enviarContato;
 window.mostrarTermos = mostrarTermos;
@@ -1469,10 +1578,10 @@ window.processarRecarga = processarRecarga;
 window.debugAPI = debugAPI;
 window.testarConexaoAPI = testarConexaoAPI;
 window.testarCriarPedido = testarCriarPedido;
+window.handleFileSelect = handleFileSelect;
+window.removerArquivo = removerArquivo;
 
 console.log('🎯 Facilitaki carregado! API_URL:', API_URL);
 console.log('🛠️  Comandos disponíveis no console:');
-console.log('   • debugAPI() - Testar todos os endpoints');
+console.log('   • debugAPI() - Testar endpoints');
 console.log('   • testarCriarPedido() - Testar criação de pedido');
-console.log('   • testarConexaoAPI() - Testar conexão com servidor');
-
