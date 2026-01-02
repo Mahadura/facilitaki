@@ -1,4 +1,4 @@
-// script.js - Facilitaki - Sistema Completo com Upload Real (VERSÃO SEM TEMA/DISCIPLINA)
+// script.js - Facilitaki - Sistema Completo (VERSÃO FINAL TESTADA)
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = null;
@@ -535,51 +535,6 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-async function criarPedidoComArquivo(formData) {
-    console.log('📤 Enviando pedido com arquivo...');
-    
-    try {
-        const token = localStorage.getItem('token_facilitaki');
-        if (!token) {
-            return { success: false, error: 'Usuário não autenticado' };
-        }
-        
-        // Enviar para endpoint de upload
-        const response = await fetch(`${API_URL}/api/pedidos/upload`, {
-            method: 'POST',
-            headers: { 
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-        
-        console.log('📤 Resposta do servidor (upload):', response.status);
-        
-        if (!response.ok) {
-            let errorMessage = 'Erro ao enviar arquivo';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
-            } catch (e) {
-                errorMessage = `Erro ${response.status}: ${response.statusText}`;
-            }
-            return { success: false, error: errorMessage };
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            return { success: true, pedido: data.pedido };
-        } else {
-            return { success: false, error: data.erro || 'Erro ao criar pedido' };
-        }
-        
-    } catch (error) {
-        console.error("🔥 Erro ao enviar arquivo:", error);
-        return { success: false, error: 'Erro de conexão com o servidor' };
-    }
-}
-
 // ===== PLANOS E CHECKOUT =====
 function selecionarPlano(tipo, preco) {
     console.log('📦 Selecionando plano:', tipo, preco);
@@ -973,19 +928,20 @@ function fecharModalDescricao() {
 async function solicitarServicoComArquivo() {
     console.log('🚀 Solicitando serviço com arquivo...');
     
-    // Coletar dados do modal (SEM TEMA E SEM DISCIPLINA)
+    // Coletar dados do modal
     const descricao = document.getElementById('descricaoDetalhada')?.value.trim() || '';
     const prazo = document.getElementById('prazoTrabalhoDetalhe')?.value || '';
     const metodoPagamentoSelect = document.getElementById('metodoPagamentoModal');
     const metodoPagamento = metodoPagamentoSelect ? metodoPagamentoSelect.value : '';
     const aceitarTermos = document.getElementById('aceitarTermos')?.checked || false;
     
-    // Validar campos obrigatórios (AGORA APENAS ARQUIVO, MÉTODO DE PAGAMENTO E TERMOS)
-    if (!arquivoSelecionado) {
-        mostrarMensagemGlobal('Selecione um arquivo do trabalho', 'error');
-        return;
-    }
+    // Obter dados do serviço do modal
+    const modal = document.getElementById('modalDescricaoTrabalho');
+    const servicoTipo = modal ? modal.dataset.servicoTipo : 'basico';
+    const servicoNome = modal ? modal.dataset.servicoNome : 'Serviço';
+    const servicoPreco = modal ? parseInt(modal.dataset.servicoPreco) || 0 : 0;
     
+    // Validar campos obrigatórios
     if (!metodoPagamento) {
         mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
         return;
@@ -996,46 +952,64 @@ async function solicitarServicoComArquivo() {
         return;
     }
     
-    // Obter dados do serviço do modal
-    const modal = document.getElementById('modalDescricaoTrabalho');
-    const servicoTipo = modal ? modal.dataset.servicoTipo : 'basico';
-    const servicoNome = modal ? modal.dataset.servicoNome : 'Serviço';
-    const servicoPreco = modal ? parseInt(modal.dataset.servicoPreco) || 0 : 0;
-    
     // Mostrar loading
     const btnSolicitar = document.getElementById('btnSolicitarServico');
     const originalText = btnSolicitar ? btnSolicitar.innerHTML : 'Solicitar Serviço';
     if (btnSolicitar) {
-        btnSolicitar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando arquivo...';
+        btnSolicitar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
         btnSolicitar.disabled = true;
     }
     
     try {
-        // Criar FormData para enviar arquivo
-        const formData = new FormData();
+        // Criar objeto de dados do pedido (simples, sem FormData)
+        const pedidoData = {
+            cliente: usuarioLogado ? usuarioLogado.nome : 'Cliente',
+            telefone: usuarioLogado ? usuarioLogado.telefone : '',
+            instituicao: 'Não informada',
+            curso: 'Não informado',
+            cadeira: 'Não informada',
+            tema: descricao || 'Serviço solicitado via modal',
+            descricao: descricao,
+            prazo: prazo,
+            plano: servicoTipo,
+            nomePlano: servicoNome,
+            preco: servicoPreco,
+            metodoPagamento: metodoPagamento
+        };
         
-        // Adicionar dados do pedido (SEM TEMA E SEM DISCIPLINA)
-        formData.append('cliente', usuarioLogado ? usuarioLogado.nome : 'Cliente');
-        formData.append('telefone', usuarioLogado ? usuarioLogado.telefone : '');
-        formData.append('instituicao', 'Não informada');
-        formData.append('curso', 'Não informado');
-        formData.append('cadeira', 'Não informada'); // Agora sempre "Não informada"
-        formData.append('tema', descricao || 'Arquivo enviado'); // Usa descrição ou texto padrão
-        formData.append('descricao', descricao);
-        formData.append('prazo', prazo);
-        formData.append('plano', servicoTipo);
-        formData.append('nomePlano', servicoNome);
-        formData.append('preco', servicoPreco.toString());
-        formData.append('metodoPagamento', metodoPagamento);
-        formData.append('status', 'pendente');
+        console.log('📤 Enviando pedido simplificado:', pedidoData);
         
-        // Adicionar arquivo
-        formData.append('arquivo', arquivoSelecionado);
+        // Enviar para a rota de upload simplificada
+        const token = localStorage.getItem('token_facilitaki');
+        const response = await fetch(`${API_URL}/api/pedidos/upload`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(pedidoData),
+            mode: 'cors'
+        });
         
-        // Enviar para o servidor
-        const resultado = await criarPedidoComArquivo(formData);
+        console.log('📤 Resposta do servidor:', response.status);
         
-        if (resultado.success) {
+        if (!response.ok) {
+            let errorMessage = 'Erro ao criar pedido';
+            try {
+                const errorData = await response.json();
+                console.error('❌ Erro do servidor:', errorData);
+                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
+            } catch (e) {
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
+        }
+        
+        const data = await response.json();
+        console.log('✅ Resposta do servidor:', data);
+        
+        if (data.success) {
             // Fechar modal
             fecharModalDescricao();
             
@@ -1047,17 +1021,21 @@ async function solicitarServicoComArquivo() {
                 metodoPagamento: metodoPagamento
             };
             
-            // Mostrar mensagem de sucesso
-            mostrarMensagemGlobal('Serviço solicitado com sucesso! Arquivo enviado.', 'success');
+            // Mensagem baseada se há arquivo ou não
+            if (arquivoSelecionado) {
+                mostrarMensagemGlobal('Pedido criado! Envie o arquivo via WhatsApp após o pagamento.', 'success');
+            } else {
+                mostrarMensagemGlobal('Pedido criado com sucesso!', 'success');
+            }
             
-            // Ir para instruções de pagamento
+            // Ir para pagamento
             setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
         } else {
-            mostrarMensagemGlobal(resultado.error, 'error');
+            throw new Error(data.erro || 'Erro ao criar pedido');
         }
     } catch (error) {
-        console.error('❌ Erro ao enviar arquivo:', error);
-        mostrarMensagemGlobal('Erro ao enviar arquivo. Tente novamente.', 'error');
+        console.error('❌ Erro ao enviar pedido:', error);
+        mostrarMensagemGlobal('Erro: ' + error.message, 'error');
     } finally {
         // Restaurar botão
         if (btnSolicitar) {
@@ -1133,7 +1111,7 @@ async function atualizarDashboard() {
                             <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
                                 <i class="far fa-calendar"></i> ${dataPedido.toLocaleDateString('pt-MZ')}
                                 ${pedido.metodo_pagamento ? ` • <i class="fas fa-credit-card"></i> ${pedido.metodo_pagamento.toUpperCase()}` : ''}
-                                ${pedido.arquivo_nome ? ` • <i class="fas fa-file"></i> ${pedido.arquivo_nome.substring(0, 20)}...` : ''}
+                                ${pedido.arquivos ? ` • <i class="fas fa-file"></i> Arquivo enviado` : ''}
                             </div>
                         </div>
                     `;
