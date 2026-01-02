@@ -1,5 +1,3 @@
-[file name]: server.js
-[file content begin]
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -211,6 +209,15 @@ function autenticarToken(req, res, next) {
 // ===== ROTA PRINCIPAL =====
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
+});
+
+// ===== HEALTH CHECK =====
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        service: 'Facilitaki API'
+    });
 });
 
 // ===== ROTAS DE DIAGNÓSTICO =====
@@ -1443,22 +1450,39 @@ app.use('*', (req, res) => {
     });
 });
 
+// ===== MIDDLEWARE DE ERROS =====
+app.use((err, req, res, next) => {
+    console.error('❌ ERRO INTERNO:', err.message);
+    console.error(err.stack);
+    res.status(500).json({
+        success: false,
+        erro: 'Erro interno do servidor'
+    });
+});
+
 // ===== INICIAR SERVIDOR =====
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log('='.repeat(60));
-    console.log('🚀 FACILITAKI - VERSÃO SIMPLIFICADA');
-    console.log('='.repeat(60));
-    console.log(`📍 URL: https://facilitaki.onrender.com`);
-    console.log(`🔧 Porta: ${PORT}`);
-    console.log(`💾 Banco: PostgreSQL (Render)`);
-    console.log(`👨‍💼 Painel Admin: /admin/pedidos?senha=admin2025`);
-    console.log(`🛠️  Correções: /api/fix-pedidos`);
-    console.log('='.repeat(60));
-    console.log('✅ SISTEMA FUNCIONAL:');
-    console.log('   ✅ Cadastro e login');
-    console.log('   ✅ Criação de pedidos');
-    console.log('   ✅ Painel administrativo');
-    console.log('   ✅ Exclusão de pedidos e usuários');
-    console.log('='.repeat(60));
 
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`
+    ╔═══════════════════════════════════════╗
+    ║       FACILITAKI - RENDER DEPLOY      ║
+    ╚═══════════════════════════════════════╝
+    📍 Porta: ${PORT}
+    🌐 URL: https://facilitaki.onrender.com
+    🚀 Versão: 5.0 - Render Ready
+    ✅ Status: ONLINE
+    💾 Banco: PostgreSQL (Render)
+    👨‍💼 Admin: /admin/pedidos?senha=admin2025
+    🏥 Health: /health
+    `);
+});
+
+// Capturar erros não tratados
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
