@@ -278,7 +278,7 @@ app.get('/status', async (req, res) => {
             success: true,
             mensagem: 'Facilitaki Online',
             hora: dbTest.rows[0].hora,
-            versao: '6.1',
+            versao: '7.2',
             painel_admin: '/admin/pedidos?senha=admin2025'
         });
     } catch (error) {
@@ -524,7 +524,6 @@ app.get('/admin/pedidos', async (req, res) => {
         // Buscar todos usuários (com tipo_usuario se existir)
         let usuarios;
         try {
-            // Verificar se a coluna tipo_usuario existe
             const verificarColuna = await pool.query(`
                 SELECT column_name 
                 FROM information_schema.columns 
@@ -533,14 +532,12 @@ app.get('/admin/pedidos', async (req, res) => {
             `);
             
             if (verificarColuna.rows.length > 0) {
-                // Coluna existe, incluir na consulta
                 usuarios = await pool.query(`
                     SELECT id, nome, telefone, data_cadastro, ativo, tipo_usuario 
                     FROM usuarios 
                     ORDER BY data_cadastro DESC
                 `);
             } else {
-                // Coluna não existe, consulta sem ela
                 usuarios = await pool.query(`
                     SELECT id, nome, telefone, data_cadastro, ativo 
                     FROM usuarios 
@@ -548,7 +545,6 @@ app.get('/admin/pedidos', async (req, res) => {
                 `);
             }
         } catch (e) {
-            // Em caso de erro, usar consulta básica
             usuarios = await pool.query(`
                 SELECT id, nome, telefone, data_cadastro, ativo 
                 FROM usuarios 
@@ -568,6 +564,13 @@ app.get('/admin/pedidos', async (req, res) => {
                 SUM(preco) as valor_total,
                 AVG(preco) as media_valor
             FROM pedidos
+        `);
+        
+        // Contar pedidos com arquivos
+        const pedidosComArquivos = await pool.query(`
+            SELECT COUNT(*) as total 
+            FROM pedidos 
+            WHERE arquivos IS NOT NULL AND arquivos != 'null' AND arquivos != ''
         `);
         
         // Gerar HTML simples
@@ -712,6 +715,7 @@ app.get('/admin/pedidos', async (req, res) => {
                     .badge.andamento { background: #dbeafe; color: #1e40af; }
                     .badge.concluido { background: #ede9fe; color: #5b21b6; }
                     .badge.cancelado { background: #fee2e2; color: #991b1b; }
+                    .badge.arquivo { background: #dbeafe; color: #1e40af; }
                     
                     .btn {
                         display: inline-block;
@@ -733,6 +737,10 @@ app.get('/admin/pedidos', async (req, res) => {
                     .btn-warning:hover { background: #d97706; }
                     .btn-success { background: #10b981; }
                     .btn-success:hover { background: #059669; }
+                    .btn-info { background: #06b6d4; }
+                    .btn-info:hover { background: #0891b2; }
+                    .btn-file { background: #8b5cf6; }
+                    .btn-file:hover { background: #7c3aed; }
                     
                     .actions {
                         display: flex;
@@ -767,12 +775,53 @@ app.get('/admin/pedidos', async (req, res) => {
                         color: #1e40af;
                     }
                     
+                    /* Modal para visualizar arquivos */
+                    .modal-arquivo {
+                        display: none;
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.8);
+                        z-index: 3000;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    
+                    .modal-arquivo-content {
+                        background: white;
+                        border-radius: 10px;
+                        padding: 30px;
+                        max-width: 600px;
+                        width: 90%;
+                        max-height: 80vh;
+                        overflow-y: auto;
+                    }
+                    
+                    .arquivo-info {
+                        background: #f0f9ff;
+                        padding: 15px;
+                        border-radius: 8px;
+                        margin: 15px 0;
+                        border: 1px solid #bfdbfe;
+                    }
+                    
+                    .arquivo-detalhes h4 {
+                        color: #1e40af;
+                        margin-bottom: 10px;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+                    
                     @media (max-width: 768px) {
                         .header { padding: 15px; }
                         .header h1 { font-size: 20px; }
                         .tab { padding: 10px; flex: 1; text-align: center; }
                         table { font-size: 12px; }
                         th, td { padding: 8px; }
+                        .actions { flex-direction: column; }
                     }
                 </style>
                 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -797,8 +846,8 @@ app.get('/admin/pedidos', async (req, res) => {
                             <div class="stat-value">${Math.round(totais.rows[0]?.media_valor || 0).toLocaleString('pt-MZ')} MT</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">Usuários</div>
-                            <div class="stat-value">${usuarios.rows.length}</div>
+                            <div class="stat-label">Com Arquivos</div>
+                            <div class="stat-value">${pedidosComArquivos.rows[0]?.total || 0}</div>
                         </div>
                     </div>
                     
@@ -806,6 +855,7 @@ app.get('/admin/pedidos', async (req, res) => {
                         <div class="tab active" onclick="abrirTab('pedidos')"><i class="fas fa-shopping-cart"></i> Pedidos</div>
                         <div class="tab" onclick="abrirTab('usuarios')"><i class="fas fa-users"></i> Usuários</div>
                         <div class="tab" onclick="abrirTab('contatos')"><i class="fas fa-envelope"></i> Contatos</div>
+                        <div class="tab" onclick="abrirTab('arquivos')"><i class="fas fa-file"></i> Arquivos</div>
                     </div>
                     
                     <!-- TAB PEDIDOS -->
@@ -823,6 +873,7 @@ app.get('/admin/pedidos', async (req, res) => {
                                     <th>Serviço</th>
                                     <th>Valor</th>
                                     <th>Status</th>
+                                    <th>Arquivo</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
@@ -832,6 +883,18 @@ app.get('/admin/pedidos', async (req, res) => {
         pedidos.rows.forEach(pedido => {
             const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
             const statusClass = pedido.status ? pedido.status.toLowerCase().replace(' ', '-') : 'pendente';
+            
+            // Verificar se tem arquivo
+            const temArquivo = pedido.arquivos && pedido.arquivos !== 'null' && pedido.arquivos !== '';
+            let arquivoInfo = {};
+            
+            if (temArquivo) {
+                try {
+                    arquivoInfo = JSON.parse(pedido.arquivos);
+                } catch (e) {
+                    arquivoInfo = { nota: 'Arquivo anexado' };
+                }
+            }
             
             html += `
                 <tr>
@@ -844,12 +907,26 @@ app.get('/admin/pedidos', async (req, res) => {
                     <td>${pedido.nome_plano || pedido.plano || 'Serviço'}</td>
                     <td><strong>${pedido.preco ? pedido.preco.toLocaleString('pt-MZ') : '0'} MT</strong></td>
                     <td><span class="badge ${statusClass}">${pedido.status || 'pendente'}</span></td>
+                    <td>
+                        ${temArquivo ? 
+                            `<button onclick="visualizarArquivo(${pedido.id}, '${pedido.cliente || ''}', '${pedido.nome_plano || pedido.plano || ''}')" class="btn btn-file">
+                                <i class="fas fa-file"></i> Ver Arquivo
+                            </button>` 
+                            : '<span style="color: #9ca3af;">Nenhum</span>'
+                        }
+                    </td>
                     <td class="actions">
                         <button onclick="mudarStatus(${pedido.id})" class="btn btn-warning" title="Alterar status">
                             <i class="fas fa-edit"></i>
                         </button>
+                        ${temArquivo ? 
+                            `<button onclick="removerArquivoPedido(${pedido.id})" class="btn btn-danger" title="Remover arquivo">
+                                <i class="fas fa-trash"></i>
+                            </button>` 
+                            : ''
+                        }
                         <button onclick="excluirPedido(${pedido.id})" class="btn btn-danger" title="Excluir pedido">
-                            <i class="fas fa-trash"></i>
+                            <i class="fas fa-trash-alt"></i>
                         </button>
                     </td>
                 </tr>`;
@@ -976,6 +1053,93 @@ app.get('/admin/pedidos', async (req, res) => {
                             </tbody>
                         </table>
                     </div>
+                    
+                    <!-- TAB ARQUIVOS -->
+                    <div id="tab-arquivos" class="tab-content">
+                        <h3><i class="fas fa-file"></i> Arquivos Anexados</h3>
+                        <p style="color: #6b7280; margin-bottom: 20px;">Lista de todos os pedidos com arquivos anexados</p>
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID Pedido</th>
+                                    <th>Cliente</th>
+                                    <th>Serviço</th>
+                                    <th>Data</th>
+                                    <th>Status</th>
+                                    <th>Arquivo</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+        
+        // Filtrar pedidos com arquivos
+        const pedidosComArquivosLista = pedidos.rows.filter(pedido => {
+            return pedido.arquivos && pedido.arquivos !== 'null' && pedido.arquivos !== '';
+        });
+        
+        if (pedidosComArquivosLista.length === 0) {
+            html += `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 40px; color: #6b7280;">
+                        <i class="fas fa-file" style="font-size: 48px; margin-bottom: 20px;"></i>
+                        <h3>Nenhum arquivo encontrado</h3>
+                    </td>
+                </tr>`;
+        } else {
+            pedidosComArquivosLista.forEach(pedido => {
+                const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
+                const statusClass = pedido.status ? pedido.status.toLowerCase().replace(' ', '-') : 'pendente';
+                
+                html += `
+                    <tr>
+                        <td><strong>#${pedido.id}</strong></td>
+                        <td><strong>${pedido.cliente || 'Não informado'}</strong></td>
+                        <td>${pedido.nome_plano || pedido.plano || 'Serviço'}</td>
+                        <td>${dataPedido.toLocaleDateString('pt-MZ')}</td>
+                        <td><span class="badge ${statusClass}">${pedido.status || 'pendente'}</span></td>
+                        <td>
+                            <button onclick="visualizarArquivo(${pedido.id}, '${pedido.cliente || ''}', '${pedido.nome_plano || pedido.plano || ''}')" class="btn btn-file">
+                                <i class="fas fa-eye"></i> Ver Detalhes
+                            </button>
+                        </td>
+                    </tr>`;
+            });
+        }
+        
+        html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Modal para visualizar arquivos -->
+                <div id="modalArquivo" class="modal-arquivo">
+                    <div class="modal-arquivo-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="color: #1e40af; margin: 0;">
+                                <i class="fas fa-file-alt"></i> Informações do Arquivo
+                            </h3>
+                            <button onclick="fecharModalArquivo()" style="background: none; border: none; font-size: 24px; color: #6b7280; cursor: pointer;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="arquivo-info">
+                            <h4 id="modalArquivoTitulo"></h4>
+                            <div id="modalArquivoConteudo">
+                                <!-- O conteúdo será preenchido pelo JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button onclick="fecharModalArquivo()" class="btn btn-secondary" style="flex: 1;">
+                                <i class="fas fa-times"></i> Fechar
+                            </button>
+                            <button onclick="fecharModalArquivo()" class="btn btn-primary" style="flex: 1;">
+                                <i class="fas fa-check"></i> OK
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 
                 <script>
@@ -1005,6 +1169,85 @@ app.get('/admin/pedidos', async (req, res) => {
                                 linha.style.display = 'none';
                             }
                         });
+                    }
+                    
+                    function visualizarArquivo(pedidoId, cliente, servico) {
+                        // Buscar informações do arquivo via API
+                        fetch('/api/admin/obter-arquivo?senha=admin2025&pedido=' + pedidoId)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    const modal = document.getElementById('modalArquivo');
+                                    const titulo = document.getElementById('modalArquivoTitulo');
+                                    const conteudo = document.getElementById('modalArquivoConteudo');
+                                    
+                                    titulo.textContent = \`Pedido #\${pedidoId} - \${cliente}\`;
+                                    
+                                    let html = \`
+                                        <div style="margin-bottom: 15px;">
+                                            <p><strong>Serviço:</strong> \${servico}</p>
+                                            <p><strong>Cliente:</strong> \${cliente}</p>
+                                            <p><strong>ID Pedido:</strong> #\${pedidoId}</p>
+                                        </div>
+                                        <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                            <h5 style="color: #1e40af; margin-top: 0; margin-bottom: 10px;">
+                                                <i class="fas fa-info-circle"></i> Informações do Arquivo
+                                            </h5>
+                                    \`;
+                                    
+                                    if (data.arquivo) {
+                                        try {
+                                            const arquivoInfo = JSON.parse(data.arquivo);
+                                            html += \`
+                                                <p><strong>Status:</strong> \${arquivoInfo.status || 'Não informado'}</p>
+                                                <p><strong>Nota:</strong> \${arquivoInfo.nota || 'Arquivo será enviado por WhatsApp após pagamento'}</p>
+                                                <p><strong>Data Registro:</strong> \${arquivoInfo.data_registro ? new Date(arquivoInfo.data_registro).toLocaleString('pt-MZ') : 'Não informada'}</p>
+                                            \`;
+                                        } catch (e) {
+                                            html += \`<p><strong>Informações:</strong> \${data.arquivo}</p>\`;
+                                        }
+                                    } else {
+                                        html += \`<p style="color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Arquivo não encontrado no banco de dados</p>\`;
+                                    }
+                                    
+                                    html += \`
+                                        </div>
+                                        <div style="margin-top: 20px; padding: 10px; background: #f0f9ff; border-radius: 5px; border: 1px solid #bfdbfe;">
+                                            <p style="margin: 0; color: #1e40af;">
+                                                <i class="fas fa-info-circle"></i> O arquivo físico deve ser enviado via WhatsApp: 86 728 6665
+                                            </p>
+                                        </div>
+                                    \`;
+                                    
+                                    conteudo.innerHTML = html;
+                                    modal.style.display = 'flex';
+                                } else {
+                                    alert('Erro ao buscar arquivo: ' + (data.erro || 'Erro desconhecido'));
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erro:', error);
+                                alert('Erro ao buscar informações do arquivo');
+                            });
+                    }
+                    
+                    function fecharModalArquivo() {
+                        document.getElementById('modalArquivo').style.display = 'none';
+                    }
+                    
+                    function removerArquivoPedido(pedidoId) {
+                        if (confirm('Tem certeza que deseja remover o arquivo deste pedido?\\n\\nEsta ação não pode ser desfeita.')) {
+                            fetch('/api/admin/remover-arquivo?senha=admin2025&pedido=' + pedidoId)
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        alert('Arquivo removido com sucesso!');
+                                        location.reload();
+                                    } else {
+                                        alert('Erro: ' + data.erro);
+                                    }
+                                });
+                        }
                     }
                     
                     function mudarStatus(id) {
@@ -1122,10 +1365,11 @@ app.get('/admin/pedidos', async (req, res) => {
                     }
                     
                     function exportarCSV() {
-                        let csv = 'ID;Data;Cliente;Telefone;Serviço;Preço;Status\\n';
+                        let csv = 'ID;Data;Cliente;Telefone;Serviço;Preço;Status;Arquivo\\n';
                         document.querySelectorAll('#tabelaPedidos tbody tr').forEach(row => {
                             const cells = row.querySelectorAll('td');
-                            if (cells.length >= 6) {
+                            if (cells.length >= 7) {
+                                const temArquivo = cells[6].querySelector('button') ? 'Sim' : 'Não';
                                 csv += [
                                     cells[0].textContent.replace('#', '').trim(),
                                     cells[1].textContent.trim(),
@@ -1133,7 +1377,8 @@ app.get('/admin/pedidos', async (req, res) => {
                                     cells[2].querySelector('small')?.textContent.trim() || '',
                                     cells[3].textContent.trim(),
                                     cells[4].querySelector('strong')?.textContent.replace('MT', '').trim() || '',
-                                    cells[5].textContent.trim()
+                                    cells[5].textContent.trim(),
+                                    temArquivo
                                 ].join(';') + '\\n';
                             }
                         });
@@ -1144,6 +1389,13 @@ app.get('/admin/pedidos', async (req, res) => {
                         link.download = 'pedidos_facilitaki_' + new Date().toISOString().split('T')[0] + '.csv';
                         link.click();
                     }
+                    
+                    // Fechar modal ao clicar fora
+                    document.getElementById('modalArquivo').addEventListener('click', function(e) {
+                        if (e.target === this) {
+                            fecharModalArquivo();
+                        }
+                    });
                 </script>
             </body>
             </html>`;
@@ -1301,6 +1553,47 @@ app.get('/api/admin/atualizar-todos-status', async (req, res) => {
     try {
         await pool.query('UPDATE pedidos SET status = $1', [status]);
         res.json({ success: true, mensagem: 'Status atualizados' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+// ===== ROTAS ADMIN - ARQUIVOS =====
+
+app.get('/api/admin/obter-arquivo', async (req, res) => {
+    const { senha, pedido } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        const resultado = await pool.query('SELECT arquivos FROM pedidos WHERE id = $1', [pedido]);
+        
+        if (resultado.rows.length === 0) {
+            return res.json({ success: false, erro: 'Pedido não encontrado' });
+        }
+        
+        res.json({
+            success: true,
+            arquivo: resultado.rows[0].arquivos,
+            mensagem: 'Informações do arquivo obtidas'
+        });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+app.get('/api/admin/remover-arquivo', async (req, res) => {
+    const { senha, pedido } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('UPDATE pedidos SET arquivos = NULL WHERE id = $1', [pedido]);
+        res.json({ success: true, mensagem: 'Arquivo removido do pedido' });
     } catch (error) {
         res.json({ success: false, erro: error.message });
     }
@@ -1665,7 +1958,7 @@ app.listen(PORT, '0.0.0.0', () => {
     ╚═══════════════════════════════════════╝
     📍 Porta: ${PORT}
     🌐 URL: https://facilitaki.onrender.com
-    🚀 Versão: 7.1 - Com correção de tabelas
+    🚀 Versão: 7.2 - Com visualização de arquivos
     ✅ Status: ONLINE
     💾 Banco: PostgreSQL (Render) - CONECTADO
     👨‍💼 Admin: /admin/pedidos?senha=admin2025
@@ -1673,6 +1966,7 @@ app.listen(PORT, '0.0.0.0', () => {
     🛠️  Correções: 
         • /api/fix-usuarios
         • /api/fix-pedidos
+    📁 Arquivos: Nova aba no painel admin
     📤 Sistema: Pronto para uso!
     `);
 });
