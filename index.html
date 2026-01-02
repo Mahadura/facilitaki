@@ -1136,14 +1136,14 @@
     </footer>
 
     
-    <!-- Modal para Upload de Arquivos - VERSÃO SIMPLIFICADA -->
+   <!-- Modal para Upload de Arquivos - SEM TEMA/DISCIPLINA -->
 <div id="modalDescricaoTrabalho" class="modal">
     <div class="modal-content" style="max-width: 600px; padding: 2rem;">
         <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
             <i class="fas fa-file-upload"></i> Enviar Trabalho
         </h3>
         
-        <!-- Upload de Arquivo -->
+        <!-- Upload de Arquivo (OBRIGATÓRIO) -->
         <div class="form-group">
             <label for="arquivoTrabalho">Arquivo do Trabalho *</label>
             <div style="border: 2px dashed #3b82f6; border-radius: 10px; padding: 2rem; text-align: center; background: #f8fafc; cursor: pointer;"
@@ -1172,17 +1172,6 @@
                     </button>
                 </div>
             </div>
-            
-            <!-- Barra de progresso -->
-            <div id="uploadProgress" style="display: none; margin-top: 1rem;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <span style="color: #1e40af;">Upload em progresso...</span>
-                    <span id="progressPercent" style="color: #3b82f6;">0%</span>
-                </div>
-                <div style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
-                    <div id="progressBar" style="width: 0%; height: 100%; background: #3b82f6; border-radius: 4px; transition: width 0.3s;"></div>
-                </div>
-            </div>
         </div>
         
         <!-- Instruções adicionais (opcional) -->
@@ -1196,6 +1185,7 @@
             <input type="date" id="prazoTrabalhoDetalhe">
         </div>
         
+        <!-- Método de Pagamento (OBRIGATÓRIO) -->
         <div class="form-group">
             <label for="metodoPagamentoModal">Método de Pagamento *</label>
             <select id="metodoPagamentoModal" required>
@@ -1240,7 +1230,7 @@
             </button>
         </div>
     </div>
-    </div>
+</div>
 
     <!-- Modal de Recarga -->
     <div id="modalRecarga" class="modal">
@@ -1278,6 +1268,7 @@
 </body>
 
 </html>
+
 
 
 
