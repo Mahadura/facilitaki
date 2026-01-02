@@ -4,7 +4,6 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
-const fileUpload = require('express-fileupload'); // ADICIONE ESTA LINHA
 require('dotenv').config();
 
 const app = express();
@@ -17,14 +16,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
     credentials: true,
     optionsSuccessStatus: 200
-}));
-
-// Middleware para upload de arquivos (ADICIONE ESTE)
-app.use(fileUpload({
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-    abortOnLimit: true,
-    responseOnLimit: 'Arquivo muito grande. Tamanho máximo: 10MB',
-    createParentPath: true
 }));
 
 // Servir arquivos estáticos
@@ -320,47 +311,18 @@ app.get('/api/fix-pedidos', async (req, res) => {
     }
 });
 
-// ===== ROTA DE UPLOAD DE ARQUIVOS (ADICIONE ESTA ROTA) =====
+// ===== ROTA DE UPLOAD SIMPLIFICADA =====
 app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
     try {
-        console.log('📤 Recebendo upload de arquivo para pedido');
+        console.log('📤 Recebendo pedido...');
         
-        // Verificar se há arquivo
-        if (!req.files || !req.files.arquivo) {
-            return res.status(400).json({ 
-                success: false, 
-                erro: 'Nenhum arquivo enviado' 
-            });
-        }
-        
-        const arquivo = req.files.arquivo;
-        
-        // Verificar tamanho do arquivo (max 10MB)
-        if (arquivo.size > 10 * 1024 * 1024) {
-            return res.status(400).json({ 
-                success: false, 
-                erro: 'Arquivo muito grande. Tamanho máximo: 10MB' 
-            });
-        }
-        
-        // Verificar tipo de arquivo
-        const tiposPermitidos = ['.pdf', '.doc', '.docx'];
-        const extensao = arquivo.name.toLowerCase().substring(arquivo.name.lastIndexOf('.'));
-        
-        if (!tiposPermitidos.includes(extensao)) {
-            return res.status(400).json({ 
-                success: false, 
-                erro: 'Tipo de arquivo não suportado. Use PDF, DOC ou DOCX' 
-            });
-        }
-        
-        // Extrair dados do formulário
+        // Extrair dados do corpo
         const {
             cliente, telefone, instituicao, curso, cadeira,
             tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
         } = req.body;
         
-        console.log('📝 Criando pedido com arquivo para:', cliente);
+        console.log('📝 Criando pedido para:', cliente);
         
         // Validação básica
         if (!cliente || !telefone || !plano || !preco || !metodoPagamento) {
@@ -373,18 +335,13 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
         const telefoneLimpo = telefone.replace(/\D/g, '');
         const precoNum = parseFloat(preco);
         
-        // Informações do arquivo para salvar no banco
+        // Informações do arquivo (simulado)
         const infoArquivo = {
-            nome: arquivo.name,
-            tamanho: arquivo.size,
-            tipo: arquivo.mimetype,
-            data_upload: new Date().toISOString(),
-            // Em produção, você salvaria o arquivo em S3/Azure/Google Cloud
-            // Por enquanto, apenas armazenamos metadados
-            nota: 'Arquivo recebido. Em produção, seria armazenado em cloud storage.'
+            nota: 'Arquivo será enviado por WhatsApp após pagamento',
+            data_registro: new Date().toISOString()
         };
         
-        // Inserir pedido no banco de dados com informações do arquivo
+        // Inserir pedido no banco de dados
         const pedido = await pool.query(
             `INSERT INTO pedidos (
                 usuario_id, cliente, telefone, instituicao, curso, cadeira, 
@@ -399,7 +356,7 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
                 instituicao || 'Não informada',
                 curso || 'Não informado',
                 cadeira || 'Não informada',
-                tema || 'Arquivo enviado',
+                tema || 'Arquivo será enviado por WhatsApp',
                 descricao || '',
                 prazo || null,
                 plano,
@@ -411,20 +368,20 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
             ]
         );
         
-        console.log('✅ Pedido com arquivo criado! ID:', pedido.rows[0].id);
+        console.log('✅ Pedido criado! ID:', pedido.rows[0].id);
         
         res.json({
             success: true,
-            mensagem: 'Pedido criado com sucesso! Arquivo recebido.',
+            mensagem: 'Pedido criado com sucesso!',
             pedido: pedido.rows[0],
-            arquivo: infoArquivo
+            instrucao: 'Após pagamento, envie o arquivo para WhatsApp: 86 728 6665'
         });
         
     } catch (error) {
-        console.error('❌ Erro ao processar upload:', error.message);
+        console.error('❌ Erro ao criar pedido:', error.message);
         res.status(500).json({ 
             success: false,
-            erro: 'Erro ao processar upload: ' + error.message 
+            erro: 'Erro: ' + error.message 
         });
     }
 });
@@ -1588,12 +1545,12 @@ app.listen(PORT, '0.0.0.0', () => {
     ╚═══════════════════════════════════════╝
     📍 Porta: ${PORT}
     🌐 URL: https://facilitaki.onrender.com
-    🚀 Versão: 6.0 - Upload Ready
+    🚀 Versão: 6.0 - Funcional
     ✅ Status: ONLINE
     💾 Banco: PostgreSQL (Render) - CONECTADO
     👨‍💼 Admin: /admin/pedidos?senha=admin2025
     🏥 Health: /health
-    📤 Upload: Rota /api/pedidos/upload adicionada
+    📤 Sistema: Pronto para uso!
     `);
 });
 
