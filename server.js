@@ -1461,4 +1461,4 @@ app.listen(PORT, () => {
     console.log('   ✅ Painel administrativo');
     console.log('   ✅ Exclusão de pedidos e usuários');
     console.log('='.repeat(60));
-});
+
