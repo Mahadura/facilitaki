@@ -10,6 +10,7 @@ const app = express();
 
 // Middlewares essenciais
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors({
     origin: ['https://facilitaki.onrender.com', 'http://localhost:10000', 'http://localhost:5500'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -17,9 +18,6 @@ app.use(cors({
     credentials: true,
     optionsSuccessStatus: 200
 }));
-
-// Middleware para processar dados de formulários (application/x-www-form-urlencoded)
-app.use(express.urlencoded({ extended: true }));
 
 // Servir arquivos estáticos
 app.use(express.static(__dirname));
@@ -233,7 +231,7 @@ app.get('/status', async (req, res) => {
             success: true,
             mensagem: 'Facilitaki Online',
             hora: dbTest.rows[0].hora,
-            versao: '5.0',
+            versao: '6.1',
             painel_admin: '/admin/pedidos?senha=admin2025'
         });
     } catch (error) {
@@ -314,23 +312,24 @@ app.get('/api/fix-pedidos', async (req, res) => {
     }
 });
 
-// ===== ROTA DE UPLOAD SIMPLIFICADA (CORRIGIDA) =====
+// ===== ROTA SIMPLIFICADA PARA UPLOAD (SÓ REGISTRA PEDIDO) =====
 app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
     try {
-        console.log('📤 Recebendo pedido com upload...');
+        console.log('📤 Recebendo pedido simplificado...');
         
-        // DEBUG: Log dos dados recebidos
-        console.log('🔍 DEBUG: Body recebido:', req.body);
-        console.log('🔍 DEBUG: Headers:', req.headers);
-        
-        // Extrair dados do corpo
+        // Extrair dados do corpo JSON
         const {
             cliente, telefone, instituicao, curso, cadeira,
             tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
         } = req.body;
         
-        console.log('📝 Dados extraídos:', {
-            cliente, telefone, plano, preco, metodoPagamento
+        console.log('📝 Dados recebidos:', {
+            cliente: !!cliente,
+            telefone: !!telefone,
+            plano: !!plano,
+            preco: !!preco,
+            metodoPagamento: !!metodoPagamento,
+            todos: req.body
         });
         
         // Validação básica
@@ -338,13 +337,12 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
             return res.status(400).json({ 
                 success: false,
                 erro: 'Preencha: cliente, telefone, plano, preço e método de pagamento',
-                dados_recebidos: {
-                    cliente: !!cliente,
-                    telefone: !!telefone,
-                    plano: !!plano,
-                    preco: !!preco,
-                    metodoPagamento: !!metodoPagamento,
-                    todos_campos: req.body
+                debug: {
+                    cliente: cliente,
+                    telefone: telefone,
+                    plano: plano,
+                    preco: preco,
+                    metodoPagamento: metodoPagamento
                 }
             });
         }
@@ -352,11 +350,11 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
         const telefoneLimpo = telefone.replace(/\D/g, '');
         const precoNum = parseFloat(preco);
         
-        // Informações do arquivo
+        // Informações do arquivo (simulado)
         const infoArquivo = {
-            nota: 'Arquivo anexado no pedido',
+            nota: 'Arquivo será enviado por WhatsApp após pagamento',
             data_registro: new Date().toISOString(),
-            nome_arquivo: req.body.arquivoNome || 'arquivo_enviado'
+            status: 'pendente_upload'
         };
         
         // Inserir pedido no banco de dados
@@ -374,7 +372,7 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
                 instituicao || 'Não informada',
                 curso || 'Não informado',
                 cadeira || 'Não informada',
-                tema || 'Arquivo anexado',
+                tema || 'Serviço solicitado via modal',
                 descricao || '',
                 prazo || null,
                 plano,
@@ -386,7 +384,7 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
             ]
         );
         
-        console.log('✅ Pedido criado! ID:', pedido.rows[0].id);
+        console.log('✅ Pedido criado com sucesso! ID:', pedido.rows[0].id);
         
         res.json({
             success: true,
@@ -1563,7 +1561,7 @@ app.listen(PORT, '0.0.0.0', () => {
     ╚═══════════════════════════════════════╝
     📍 Porta: ${PORT}
     🌐 URL: https://facilitaki.onrender.com
-    🚀 Versão: 6.0 - Funcional
+    🚀 Versão: 7.0 - Testada e Funcional
     ✅ Status: ONLINE
     💾 Banco: PostgreSQL (Render) - CONECTADO
     👨‍💼 Admin: /admin/pedidos?senha=admin2025
