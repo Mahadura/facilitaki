@@ -53,8 +53,6 @@ async function corrigirTabelaPedidos() {
                     telefone VARCHAR(20) NOT NULL,
                     instituicao VARCHAR(100),
                     curso VARCHAR(100),
-                    cadeira VARCHAR(100),
-                    tema VARCHAR(200),
                     descricao TEXT,
                     prazo DATE,
                     plano VARCHAR(50) NOT NULL,
@@ -81,7 +79,7 @@ async function corrigirTabelaPedidos() {
         const colunasExistentes = colunas.rows.map(c => c.column_name);
         const colunasNecessarias = [
             'id', 'usuario_id', 'cliente', 'telefone', 'instituicao', 
-            'curso', 'cadeira', 'tema', 'descricao', 'prazo', 'plano', 
+            'curso', 'descricao', 'prazo', 'plano', 
             'nome_plano', 'preco', 'metodo_pagamento', 'status', 'data_pedido',
             'arquivos', 'observacoes_admin'
         ];
@@ -1486,3 +1484,4 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
+
