@@ -5,9 +5,7 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -25,48 +23,8 @@ app.use(cors({
 // Servir arquivos estáticos
 app.use(express.static(__dirname));
 
-// Configurar multer para upload de arquivos
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const uploadDir = path.join(__dirname, 'uploads');
-        // Criar diretório se não existir
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        // Gerar nome único para o arquivo
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-    fileFilter: function (req, file, cb) {
-        // Permitir apenas certos tipos de arquivo
-        const allowedTypes = [
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'text/plain',
-            'image/jpeg',
-            'image/png',
-            'image/gif'
-        ];
-        
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Tipo de arquivo não permitido. Apenas PDF, Word, texto e imagens são aceitos.'));
-        }
-    }
-});
-
 // ===== CONFIGURAÇÃO DO BANCO DE DADOS RENDER =====
-const DATABASE_URL = 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db';
 
 const pool = new Pool({
     connectionString: DATABASE_URL,
@@ -107,7 +65,7 @@ async function corrigirTabelaPedidos() {
                     metodo_pagamento VARCHAR(50),
                     status VARCHAR(20) DEFAULT 'pendente',
                     data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    arquivos TEXT[] DEFAULT '{}',
+                    arquivos TEXT,
                     observacoes_admin TEXT
                 )
             `);
@@ -149,7 +107,7 @@ async function corrigirTabelaPedidos() {
                 if (coluna === 'metodo_pagamento') tipo = 'VARCHAR(50)';
                 if (coluna === 'status') tipo = 'VARCHAR(20)';
                 if (coluna === 'data_pedido') tipo = 'TIMESTAMP';
-                if (coluna === 'arquivos') tipo = 'TEXT[]';
+                if (coluna === 'arquivos') tipo = 'TEXT';
                 if (coluna === 'observacoes_admin') tipo = 'TEXT';
                 
                 await pool.query(`ALTER TABLE pedidos ADD COLUMN ${coluna} ${tipo}`);
@@ -160,9 +118,6 @@ async function corrigirTabelaPedidos() {
                 }
                 if (coluna === 'data_pedido') {
                     await pool.query(`ALTER TABLE pedidos ALTER COLUMN data_pedido SET DEFAULT CURRENT_TIMESTAMP`);
-                }
-                if (coluna === 'arquivos') {
-                    await pool.query(`ALTER TABLE pedidos ALTER COLUMN arquivos SET DEFAULT '{}'`);
                 }
                 
                 corrigido = true;
@@ -258,7 +213,7 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-// ===== ROTAS DE DIAGNÓSTICO E CORREÇÃO =====
+// ===== ROTAS DE DIAGNÓSTICO =====
 
 // 1. Status geral
 app.get('/status', async (req, res) => {
@@ -269,8 +224,7 @@ app.get('/status', async (req, res) => {
             mensagem: 'Facilitaki Online',
             hora: dbTest.rows[0].hora,
             versao: '5.0',
-            painel_admin: '/admin/pedidos?senha=admin2025',
-            recursos: ['upload', 'exclusão', 'painel_admin']
+            painel_admin: '/admin/pedidos?senha=admin2025'
         });
     } catch (error) {
         res.status(500).json({ success: false, erro: error.message });
@@ -350,59 +304,10 @@ app.get('/api/fix-pedidos', async (req, res) => {
     }
 });
 
-// 4. RECRIAR TABELA DO ZERO (EMERGÊNCIA)
-app.get('/api/recreate-pedidos', async (req, res) => {
-    try {
-        console.log('🔄 Recriando tabela pedidos do zero...');
-        
-        // Remover tabela antiga
-        await pool.query('DROP TABLE IF EXISTS pedidos CASCADE');
-        
-        // Criar nova tabela
-        await pool.query(`
-            CREATE TABLE pedidos (
-                id SERIAL PRIMARY KEY,
-                usuario_id INTEGER,
-                cliente VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) NOT NULL,
-                instituicao VARCHAR(100),
-                curso VARCHAR(100),
-                cadeira VARCHAR(100),
-                tema VARCHAR(200),
-                descricao TEXT,
-                prazo DATE,
-                plano VARCHAR(50) NOT NULL,
-                nome_plano VARCHAR(100) NOT NULL,
-                preco DECIMAL(10,2) NOT NULL,
-                metodo_pagamento VARCHAR(50),
-                status VARCHAR(20) DEFAULT 'pendente',
-                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                arquivos TEXT[] DEFAULT '{}',
-                observacoes_admin TEXT
-            )
-        `);
-        
-        console.log('✅ Tabela pedidos recriada!');
-        
-        res.json({
-            success: true,
-            mensagem: 'Tabela pedidos recriada com sucesso!',
-            instrucao: 'Agora os pedidos vão funcionar!'
-        });
-        
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
 // ===== ROTA ADMIN - VER TODOS PEDIDOS =====
 app.get('/admin/pedidos', async (req, res) => {
     const { senha } = req.query;
     
-    // Senha simples de admin (mude para uma mais segura!)
     if (senha !== 'admin2025') {
         return res.status(401).send(`
             <!DOCTYPE html>
@@ -429,7 +334,7 @@ app.get('/admin/pedidos', async (req, res) => {
     try {
         console.log('👨‍💼 Acesso admin aos pedidos');
         
-        // Buscar todos pedidos com informações do usuário
+        // Buscar todos pedidos
         const pedidos = await pool.query(`
             SELECT 
                 p.*, 
@@ -442,7 +347,7 @@ app.get('/admin/pedidos', async (req, res) => {
             ORDER BY p.data_pedido DESC
         `);
         
-        // Buscar todos usuários para o gerenciamento
+        // Buscar todos usuários
         const usuarios = await pool.query(`
             SELECT id, nome, telefone, data_cadastro, ativo, tipo_usuario 
             FROM usuarios 
@@ -463,72 +368,64 @@ app.get('/admin/pedidos', async (req, res) => {
             FROM pedidos
         `);
         
-        // Gerar HTML da página admin
+        // Gerar HTML simples
         let html = `
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Admin Facilitaki - Painel Completo</title>
+                <title>Admin Facilitaki</title>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { 
-                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        font-family: Arial, sans-serif; 
+                        background: #f5f5f5;
                         color: #333;
-                        min-height: 100vh;
                         padding: 20px;
                     }
                     
                     .container {
-                        max-width: 1600px;
+                        max-width: 1200px;
                         margin: 0 auto;
                         background: white;
-                        border-radius: 15px;
-                        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                        border-radius: 10px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                         overflow: hidden;
                     }
                     
                     .header {
-                        background: linear-gradient(135deg, #1e40af, #3b82f6);
+                        background: #1e40af;
                         color: white;
-                        padding: 25px 30px;
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
+                        padding: 20px;
+                        text-align: center;
                     }
                     
                     .header h1 {
-                        font-size: 28px;
+                        font-size: 24px;
                         display: flex;
                         align-items: center;
-                        gap: 15px;
-                    }
-                    
-                    .header h1 i {
-                        font-size: 32px;
-                        color: #60a5fa;
+                        justify-content: center;
+                        gap: 10px;
                     }
                     
                     .tabs {
                         display: flex;
                         background: #f1f5f9;
                         border-bottom: 1px solid #e5e7eb;
+                        flex-wrap: wrap;
                     }
                     
                     .tab {
-                        padding: 15px 30px;
+                        padding: 12px 20px;
                         cursor: pointer;
                         font-weight: 500;
                         color: #6b7280;
-                        transition: all 0.3s;
                         border-bottom: 3px solid transparent;
                     }
                     
                     .tab:hover {
                         background: #e5e7eb;
-                        color: #1f2937;
                     }
                     
                     .tab.active {
@@ -539,7 +436,7 @@ app.get('/admin/pedidos', async (req, res) => {
                     
                     .tab-content {
                         display: none;
-                        padding: 25px;
+                        padding: 20px;
                     }
                     
                     .tab-content.active {
@@ -548,58 +445,52 @@ app.get('/admin/pedidos', async (req, res) => {
                     
                     .stats {
                         display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                        gap: 20px;
-                        padding: 25px;
+                        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                        gap: 15px;
+                        padding: 20px;
                         background: #f8fafc;
+                        margin-bottom: 20px;
                     }
                     
                     .stat-card {
                         background: white;
-                        padding: 20px;
-                        border-radius: 10px;
-                        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                        padding: 15px;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
                         text-align: center;
                     }
                     
                     .stat-value {
-                        font-size: 32px;
+                        font-size: 24px;
                         font-weight: bold;
                         color: #1e40af;
-                        margin: 10px 0;
+                        margin: 5px 0;
                     }
                     
                     .stat-label {
                         color: #6b7280;
-                        font-size: 14px;
-                    }
-                    
-                    .table-container {
-                        padding: 25px;
-                        overflow-x: auto;
+                        font-size: 12px;
                     }
                     
                     table {
                         width: 100%;
                         border-collapse: collapse;
                         font-size: 14px;
+                        margin-bottom: 20px;
                     }
                     
                     th {
                         background: #f1f5f9;
-                        padding: 15px;
+                        padding: 12px;
                         text-align: left;
                         font-weight: 600;
                         color: #1e40af;
                         border-bottom: 2px solid #e5e7eb;
-                        position: sticky;
-                        top: 0;
                     }
                     
                     td {
-                        padding: 12px 15px;
+                        padding: 10px;
                         border-bottom: 1px solid #e5e7eb;
-                        vertical-align: top;
                     }
                     
                     tr:hover {
@@ -607,8 +498,8 @@ app.get('/admin/pedidos', async (req, res) => {
                     }
                     
                     .badge {
-                        padding: 4px 10px;
-                        border-radius: 20px;
+                        padding: 4px 8px;
+                        border-radius: 4px;
                         font-size: 12px;
                         font-weight: 600;
                         display: inline-block;
@@ -622,266 +513,64 @@ app.get('/admin/pedidos', async (req, res) => {
                     
                     .btn {
                         display: inline-block;
-                        padding: 8px 16px;
+                        padding: 6px 12px;
                         background: #3b82f6;
                         color: white;
-                        border-radius: 5px;
+                        border-radius: 4px;
                         text-decoration: none;
-                        font-weight: 500;
                         border: none;
                         cursor: pointer;
-                        transition: background 0.3s;
                         font-size: 12px;
+                        margin: 2px;
                     }
                     
                     .btn:hover { background: #2563eb; }
-                    
                     .btn-danger { background: #ef4444; }
                     .btn-danger:hover { background: #dc2626; }
-                    
                     .btn-warning { background: #f59e0b; }
                     .btn-warning:hover { background: #d97706; }
-                    
                     .btn-success { background: #10b981; }
                     .btn-success:hover { background: #059669; }
                     
-                    .btn-secondary { 
-                        background: #6b7280; 
-                        color: white;
-                        text-decoration: none;
-                        padding: 10px 20px;
-                        border-radius: 5px;
-                        display: inline-block;
-                    }
-                    
-                    .btn-secondary:hover { background: #4b5563; }
-                    
-                    .detail-row {
-                        background: #f9fafb !important;
-                    }
-                    
-                    .detail-cell {
-                        padding: 15px;
-                        background: #f8fafc;
-                        border-top: 1px solid #e5e7eb;
-                    }
-                    
-                    .detail-grid {
-                        display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                        gap: 15px;
-                    }
-                    
-                    .detail-item {
-                        background: white;
-                        padding: 10px;
-                        border-radius: 5px;
-                        border: 1px solid #e5e7eb;
-                    }
-                    
-                    .detail-label {
-                        font-size: 12px;
-                        color: #6b7280;
-                        margin-bottom: 5px;
-                    }
-                    
-                    .detail-value {
-                        font-weight: 500;
-                        color: #1f2937;
-                    }
-                    
                     .actions {
                         display: flex;
-                        gap: 8px;
-                        flex-wrap: wrap;
-                    }
-                    
-                    .arquivos-list {
-                        display: flex;
-                        flex-direction: column;
                         gap: 5px;
-                        margin-top: 10px;
-                    }
-                    
-                    .arquivo-item {
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        padding: 5px 10px;
-                        background: #f3f4f6;
-                        border-radius: 5px;
-                    }
-                    
-                    .arquivo-item a {
-                        color: #3b82f6;
-                        text-decoration: none;
-                    }
-                    
-                    .arquivo-item a:hover {
-                        text-decoration: underline;
-                    }
-                    
-                    .admin-actions {
-                        margin-top: 20px;
-                        padding: 20px;
-                        background: #f8fafc;
-                        border-radius: 10px;
-                        border: 1px solid #e5e7eb;
-                    }
-                    
-                    .admin-actions h3 {
-                        margin-bottom: 15px;
-                        color: #1e40af;
-                    }
-                    
-                    .action-buttons {
-                        display: flex;
-                        gap: 10px;
                         flex-wrap: wrap;
                     }
                     
                     .search-box {
-                        margin-bottom: 20px;
+                        margin-bottom: 15px;
                         display: flex;
                         gap: 10px;
                     }
                     
                     .search-box input {
                         flex: 1;
-                        padding: 10px 15px;
+                        padding: 8px 12px;
                         border: 1px solid #d1d5db;
-                        border-radius: 5px;
+                        border-radius: 4px;
                         font-size: 14px;
                     }
                     
-                    .user-status {
-                        display: inline-block;
-                        width: 10px;
-                        height: 10px;
-                        border-radius: 50%;
-                        margin-right: 5px;
-                    }
-                    
-                    .user-status.ativo { background: #10b981; }
-                    .user-status.inativo { background: #ef4444; }
-                    
-                    .modal {
-                        display: none;
-                        position: fixed;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(0,0,0,0.5);
-                        z-index: 1000;
-                        align-items: center;
-                        justify-content: center;
-                    }
-                    
-                    .modal-content {
-                        background: white;
-                        padding: 30px;
-                        border-radius: 10px;
-                        max-width: 500px;
-                        width: 90%;
-                        max-height: 80vh;
-                        overflow-y: auto;
-                    }
-                    
-                    .modal-header {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin-bottom: 20px;
-                    }
-                    
-                    .modal-header h2 {
-                        color: #1e40af;
-                    }
-                    
-                    .close-modal {
-                        background: none;
-                        border: none;
-                        font-size: 24px;
-                        cursor: pointer;
-                        color: #6b7280;
-                    }
-                    
-                    .form-group {
-                        margin-bottom: 15px;
-                    }
-                    
-                    .form-group label {
-                        display: block;
-                        margin-bottom: 5px;
-                        color: #374151;
-                        font-weight: 500;
-                    }
-                    
-                    .form-group input,
-                    .form-group textarea,
-                    .form-group select {
-                        width: 100%;
-                        padding: 10px;
-                        border: 1px solid #d1d5db;
-                        border-radius: 5px;
-                        font-size: 14px;
-                    }
-                    
-                    .form-group textarea {
-                        min-height: 100px;
-                        resize: vertical;
-                    }
-                    
-                    .upload-area {
-                        border: 2px dashed #d1d5db;
-                        border-radius: 10px;
-                        padding: 30px;
-                        text-align: center;
-                        cursor: pointer;
-                        transition: border-color 0.3s;
-                    }
-                    
-                    .upload-area:hover {
-                        border-color: #3b82f6;
-                    }
-                    
-                    .upload-area i {
-                        font-size: 48px;
-                        color: #9ca3af;
-                        margin-bottom: 10px;
-                    }
-                    
-                    .upload-area p {
-                        color: #6b7280;
-                        margin: 5px 0;
-                    }
-                    
-                    .arquivos-upload {
-                        margin-top: 15px;
-                        display: flex;
-                        flex-direction: column;
-                        gap: 10px;
-                    }
-                    
-                    .arquivo-upload-item {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        padding: 10px;
-                        background: #f9fafb;
-                        border-radius: 5px;
+                    .admin-section {
+                        margin-top: 30px;
+                        padding: 20px;
+                        background: #f8fafc;
+                        border-radius: 8px;
                         border: 1px solid #e5e7eb;
                     }
                     
+                    .admin-section h3 {
+                        margin-bottom: 15px;
+                        color: #1e40af;
+                    }
+                    
                     @media (max-width: 768px) {
-                        .header { flex-direction: column; text-align: center; gap: 15px; }
-                        .tabs { flex-wrap: wrap; }
-                        .tab { flex: 1; text-align: center; padding: 12px; }
-                        .stats { grid-template-columns: 1fr; }
+                        .header { padding: 15px; }
+                        .header h1 { font-size: 20px; }
+                        .tab { padding: 10px; flex: 1; text-align: center; }
                         table { font-size: 12px; }
                         th, td { padding: 8px; }
-                        .actions { flex-direction: column; }
                     }
                 </style>
                 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -890,12 +579,6 @@ app.get('/admin/pedidos', async (req, res) => {
                 <div class="container">
                     <div class="header">
                         <h1><i class="fas fa-chart-line"></i> Painel Administrativo - Facilitaki</h1>
-                        <div>
-                            <a href="/" class="btn" target="_blank"><i class="fas fa-external-link-alt"></i> Ver Site</a>
-                            <a href="/admin/pedidos?senha=admin2025&export=csv" class="btn" style="background: #10b981;">
-                                <i class="fas fa-download"></i> Exportar CSV
-                            </a>
-                        </div>
                     </div>
                     
                     <div class="stats">
@@ -912,7 +595,7 @@ app.get('/admin/pedidos', async (req, res) => {
                             <div class="stat-value">${Math.round(totais.rows[0]?.media_valor || 0).toLocaleString('pt-MZ')} MT</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">Usuários Cadastrados</div>
+                            <div class="stat-label">Usuários</div>
                             <div class="stat-value">${usuarios.rows.length}</div>
                         </div>
                     </div>
@@ -921,129 +604,51 @@ app.get('/admin/pedidos', async (req, res) => {
                         <div class="tab active" onclick="abrirTab('pedidos')"><i class="fas fa-shopping-cart"></i> Pedidos</div>
                         <div class="tab" onclick="abrirTab('usuarios')"><i class="fas fa-users"></i> Usuários</div>
                         <div class="tab" onclick="abrirTab('contatos')"><i class="fas fa-envelope"></i> Contatos</div>
-                        <div class="tab" onclick="abrirTab('upload')"><i class="fas fa-upload"></i> Upload</div>
-                        <div class="tab" onclick="abrirTab('relatorios')"><i class="fas fa-chart-bar"></i> Relatórios</div>
                     </div>
                     
                     <!-- TAB PEDIDOS -->
                     <div id="tab-pedidos" class="tab-content active">
                         <div class="search-box">
-                            <input type="text" id="buscarPedido" placeholder="Buscar pedido por ID, cliente, telefone..." onkeyup="buscarPedidos()">
-                            <button class="btn" onclick="resetarBusca()"><i class="fas fa-redo"></i> Resetar</button>
+                            <input type="text" id="buscarPedido" placeholder="Buscar pedido..." onkeyup="buscarPedidos()">
                         </div>
                         
-                        <div class="table-container">
-                            <h2 style="margin-bottom: 20px; color: #1e40af; display: flex; align-items: center; gap: 10px;">
-                                <i class="fas fa-list"></i> Todos os Pedidos (${pedidos.rows.length})
-                            </h2>
-                            
-                            <table id="tabelaPedidos">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Data/Hora</th>
-                                        <th>Cliente</th>
-                                        <th>Usuário</th>
-                                        <th>Serviço</th>
-                                        <th>Valor</th>
-                                        <th>Status</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
+                        <table id="tabelaPedidos">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Data</th>
+                                    <th>Cliente</th>
+                                    <th>Serviço</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
         
         // Adicionar cada pedido à tabela
         pedidos.rows.forEach(pedido => {
             const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
             const statusClass = pedido.status ? pedido.status.toLowerCase().replace(' ', '-') : 'pendente';
-            const arquivos = pedido.arquivos || [];
             
             html += `
-                <tr data-id="${pedido.id}" data-cliente="${pedido.cliente || ''}" data-telefone="${pedido.telefone || ''}">
+                <tr>
                     <td><strong>#${pedido.id}</strong></td>
-                    <td>${dataPedido.toLocaleDateString('pt-MZ')}<br>
-                        <small>${dataPedido.toLocaleTimeString('pt-MZ').substring(0,5)}</small>
-                    </td>
+                    <td>${dataPedido.toLocaleDateString('pt-MZ')}</td>
                     <td>
                         <strong>${pedido.cliente || 'Não informado'}</strong><br>
-                        <small>📱 ${pedido.telefone || 'Não informado'}</small>
+                        <small>${pedido.telefone || 'Não informado'}</small>
                     </td>
-                    <td>
-                        ${pedido.usuario_nome ? `
-                            <strong>${pedido.usuario_nome}</strong><br>
-                            <small>${pedido.usuario_telefone}</small>
-                        ` : 'Sem usuário'}
-                    </td>
-                    <td>
-                        <strong>${pedido.nome_plano || pedido.plano || 'Serviço'}</strong><br>
-                        <small>${pedido.cadeira ? `Cadeira: ${pedido.cadeira}` : ''}</small>
-                    </td>
-                    <td><strong style="color: #1e40af;">${pedido.preco ? pedido.preco.toLocaleString('pt-MZ') : '0'} MT</strong></td>
+                    <td>${pedido.nome_plano || pedido.plano || 'Serviço'}</td>
+                    <td><strong>${pedido.preco ? pedido.preco.toLocaleString('pt-MZ') : '0'} MT</strong></td>
                     <td><span class="badge ${statusClass}">${pedido.status || 'pendente'}</span></td>
                     <td class="actions">
-                        <button onclick="verDetalhes(${pedido.id})" class="btn" title="Ver detalhes">
-                            <i class="fas fa-eye"></i>
-                        </button>
                         <button onclick="mudarStatus(${pedido.id})" class="btn btn-warning" title="Alterar status">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button onclick="gerenciarArquivos(${pedido.id})" class="btn btn-success" title="Gerenciar arquivos">
-                            <i class="fas fa-file-upload"></i>
-                        </button>
-                        <button onclick="excluirPedido(${pedido.id}, '${pedido.cliente || ''}')" class="btn btn-danger" title="Excluir pedido">
+                        <button onclick="excluirPedido(${pedido.id})" class="btn btn-danger" title="Excluir pedido">
                             <i class="fas fa-trash"></i>
                         </button>
-                    </td>
-                </tr>
-                <tr id="detalhes-${pedido.id}" class="detail-row" style="display: none;">
-                    <td colspan="8" class="detail-cell">
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Instituição</div>
-                                <div class="detail-value">${pedido.instituicao || 'Não informada'}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Curso</div>
-                                <div class="detail-value">${pedido.curso || 'Não informado'}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Tema</div>
-                                <div class="detail-value">${pedido.tema || 'Não informado'}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Prazo</div>
-                                <div class="detail-value">${pedido.prazo || 'Não definido'}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Método Pagamento</div>
-                                <div class="detail-value">${pedido.metodo_pagamento || 'Não definido'}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Arquivos</div>
-                                <div class="detail-value">
-                                    ${arquivos.length > 0 ? `
-                                        <div class="arquivos-list">
-                                            ${arquivos.map(arquivo => `
-                                                <div class="arquivo-item">
-                                                    <i class="fas fa-file"></i>
-                                                    <a href="/uploads/${arquivo}" target="_blank">${arquivo}</a>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    ` : 'Nenhum arquivo'}
-                                </div>
-                            </div>
-                            <div class="detail-item" style="grid-column: 1 / -1;">
-                                <div class="detail-label">Descrição</div>
-                                <div class="detail-value">${pedido.descricao || 'Sem descrição'}</div>
-                            </div>
-                            ${pedido.observacoes_admin ? `
-                            <div class="detail-item" style="grid-column: 1 / -1; background: #fef3c7; border-color: #f59e0b;">
-                                <div class="detail-label">Observações Admin</div>
-                                <div class="detail-value">${pedido.observacoes_admin}</div>
-                            </div>
-                            ` : ''}
-                        </div>
                     </td>
                 </tr>`;
         });
@@ -1057,17 +662,14 @@ app.get('/admin/pedidos', async (req, res) => {
                             ''
                         }
                         
-                        <div class="admin-actions">
-                            <h3><i class="fas fa-cog"></i> Ações Administrativas</h3>
-                            <div class="action-buttons">
+                        <div class="admin-section">
+                            <h3><i class="fas fa-cog"></i> Ações Rápidas</h3>
+                            <div>
                                 <button onclick="atualizarTodosStatus('concluido')" class="btn btn-success">
                                     <i class="fas fa-check-circle"></i> Marcar Todos Concluídos
                                 </button>
-                                <button onclick="limparObservacoes()" class="btn btn-warning">
-                                    <i class="fas fa-eraser"></i> Limpar Observações
-                                </button>
-                                <button onclick="exportarPedidos()" class="btn">
-                                    <i class="fas fa-file-export"></i> Exportar Relatório
+                                <button onclick="exportarCSV()" class="btn">
+                                    <i class="fas fa-download"></i> Exportar CSV
                                 </button>
                             </div>
                         </div>
@@ -1075,25 +677,18 @@ app.get('/admin/pedidos', async (req, res) => {
                     
                     <!-- TAB USUÁRIOS -->
                     <div id="tab-usuarios" class="tab-content">
-                        <div class="table-container">
-                            <h2 style="margin-bottom: 20px; color: #1e40af; display: flex; align-items: center; gap: 10px;">
-                                <i class="fas fa-users"></i> Gerenciar Usuários (${usuarios.rows.length})
-                            </h2>
-                            
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Nome</th>
-                                        <th>Telefone</th>
-                                        <th>Data Cadastro</th>
-                                        <th>Status</th>
-                                        <th>Tipo</th>
-                                        <th>Pedidos</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nome</th>
+                                    <th>Telefone</th>
+                                    <th>Data Cadastro</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
         
         // Adicionar cada usuário à tabela
         usuarios.rows.forEach(usuario => {
@@ -1107,30 +702,18 @@ app.get('/admin/pedidos', async (req, res) => {
                     <td><strong>${usuario.nome}</strong></td>
                     <td>${usuario.telefone}</td>
                     <td>${dataCadastro.toLocaleDateString('pt-MZ')}</td>
-                    <td>
-                        <span class="user-status ${statusClass}"></span>
-                        ${statusText}
-                    </td>
-                    <td><span class="badge">${usuario.tipo_usuario || 'cliente'}</span></td>
-                    <td>
-                        <button onclick="verPedidosUsuario(${usuario.id})" class="btn">
-                            <i class="fas fa-list"></i> Ver Pedidos
-                        </button>
-                    </td>
+                    <td>${statusText}</td>
                     <td class="actions">
                         ${usuario.ativo ? `
-                            <button onclick="desativarUsuario(${usuario.id}, '${usuario.nome}')" class="btn btn-warning" title="Desativar usuário">
+                            <button onclick="desativarUsuario(${usuario.id})" class="btn btn-warning" title="Desativar">
                                 <i class="fas fa-user-slash"></i>
                             </button>
                         ` : `
-                            <button onclick="ativarUsuario(${usuario.id}, '${usuario.nome}')" class="btn btn-success" title="Ativar usuário">
+                            <button onclick="ativarUsuario(${usuario.id})" class="btn btn-success" title="Ativar">
                                 <i class="fas fa-user-check"></i>
                             </button>
                         `}
-                        <button onclick="alterarTipoUsuario(${usuario.id}, '${usuario.nome}')" class="btn" title="Alterar tipo de usuário">
-                            <i class="fas fa-user-cog"></i>
-                        </button>
-                        <button onclick="excluirUsuario(${usuario.id}, '${usuario.nome}')" class="btn btn-danger" title="Excluir usuário">
+                        <button onclick="excluirUsuario(${usuario.id})" class="btn btn-danger" title="Excluir">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -1138,37 +721,24 @@ app.get('/admin/pedidos', async (req, res) => {
         });
         
         html += `
-                                </tbody>
-                            </table>
-                            
-                            ${usuarios.rows.length === 0 ? 
-                                '<div style="text-align: center; padding: 40px; color: #6b7280;"><i class="fas fa-user-slash" style="font-size: 48px; margin-bottom: 20px;"></i><h3>Nenhum usuário cadastrado</h3></div>' : 
-                                ''
-                            }
-                        </div>
+                            </tbody>
+                        </table>
                     </div>
                     
                     <!-- TAB CONTATOS -->
                     <div id="tab-contatos" class="tab-content">
-                        <div class="table-container">
-                            <h2 style="margin-bottom: 20px; color: #1e40af; display: flex; align-items: center; gap: 10px;">
-                                <i class="fas fa-envelope"></i> Mensagens de Contato (${contatos.rows.length})
-                            </h2>
-                            
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Data</th>
-                                        <th>Nome</th>
-                                        <th>Telefone</th>
-                                        <th>Email</th>
-                                        <th>Mensagem</th>
-                                        <th>Status</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Data</th>
+                                    <th>Nome</th>
+                                    <th>Telefone</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
         
         // Adicionar cada contato à tabela
         contatos.rows.forEach(contato => {
@@ -1179,28 +749,21 @@ app.get('/admin/pedidos', async (req, res) => {
             html += `
                 <tr>
                     <td><strong>#${contato.id}</strong></td>
-                    <td>${dataContato.toLocaleDateString('pt-MZ')}<br>
-                        <small>${dataContato.toLocaleTimeString('pt-MZ').substring(0,5)}</small>
-                    </td>
+                    <td>${dataContato.toLocaleDateString('pt-MZ')}</td>
                     <td><strong>${contato.nome}</strong></td>
                     <td>${contato.telefone}</td>
-                    <td>${contato.email || 'Não informado'}</td>
-                    <td style="max-width: 300px; word-wrap: break-word;">
-                        ${contato.mensagem.length > 100 ? contato.mensagem.substring(0, 100) + '...' : contato.mensagem}
-                        ${contato.mensagem.length > 100 ? `<br><button onclick="verMensagemCompleta(${contato.id})" class="btn" style="padding: 2px 8px; margin-top: 5px;">Ver mais</button>` : ''}
-                    </td>
                     <td><span class="${respondidoClass}">${respondidoText}</span></td>
                     <td class="actions">
                         ${!contato.respondido ? `
-                            <button onclick="marcarComoRespondido(${contato.id})" class="btn btn-success" title="Marcar como respondido">
+                            <button onclick="marcarRespondido(${contato.id})" class="btn btn-success" title="Marcar respondido">
                                 <i class="fas fa-check"></i>
                             </button>
                         ` : `
-                            <button onclick="marcarComoNaoRespondido(${contato.id})" class="btn btn-warning" title="Marcar como não respondido">
+                            <button onclick="marcarNaoRespondido(${contato.id})" class="btn btn-warning" title="Marcar não respondido">
                                 <i class="fas fa-times"></i>
                             </button>
                         `}
-                        <button onclick="excluirContato(${contato.id}, '${contato.nome}')" class="btn btn-danger" title="Excluir contato">
+                        <button onclick="excluirContato(${contato.id})" class="btn btn-danger" title="Excluir">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -1208,112 +771,12 @@ app.get('/admin/pedidos', async (req, res) => {
         });
         
         html += `
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    
-                    <!-- TAB UPLOAD -->
-                    <div id="tab-upload" class="tab-content">
-                        <div class="table-container">
-                            <h2 style="margin-bottom: 20px; color: #1e40af; display: flex; align-items: center; gap: 10px;">
-                                <i class="fas fa-upload"></i> Upload de Arquivos para Pedido
-                            </h2>
-                            
-                            <div class="admin-actions">
-                                <h3><i class="fas fa-paperclip"></i> Selecionar Pedido</h3>
-                                <div class="form-group">
-                                    <label for="pedidoUpload">ID do Pedido:</label>
-                                    <input type="number" id="pedidoUpload" placeholder="Digite o ID do pedido" min="1">
-                                </div>
-                                <button onclick="verificarPedido()" class="btn">
-                                    <i class="fas fa-search"></i> Verificar Pedido
-                                </button>
-                            </div>
-                            
-                            <div id="uploadArea" style="display: none;">
-                                <h3 style="margin-top: 30px; color: #1e40af;"><i class="fas fa-cloud-upload-alt"></i> Área de Upload</h3>
-                                
-                                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-                                    <i class="fas fa-cloud-upload-alt"></i>
-                                    <p><strong>Clique para selecionar arquivos</strong></p>
-                                    <p>ou arraste e solte aqui</p>
-                                    <p style="font-size: 12px; color: #9ca3af;">Formatos permitidos: PDF, Word, TXT, JPG, PNG, GIF (Máx: 10MB)</p>
-                                </div>
-                                
-                                <input type="file" id="fileInput" multiple style="display: none;" onchange="prepararUpload(this.files)">
-                                
-                                <div id="arquivosLista" class="arquivos-upload"></div>
-                                
-                                <button onclick="enviarArquivos()" class="btn btn-success" style="margin-top: 20px; display: none;" id="btnEnviar">
-                                    <i class="fas fa-upload"></i> Enviar Arquivos
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- TAB RELATÓRIOS -->
-                    <div id="tab-relatorios" class="tab-content">
-                        <div class="table-container">
-                            <h2 style="margin-bottom: 20px; color: #1e40af; display: flex; align-items: center; gap: 10px;">
-                                <i class="fas fa-chart-bar"></i> Relatórios e Estatísticas
-                            </h2>
-                            
-                            <div class="stats" style="margin-bottom: 30px;">
-                                <div class="stat-card">
-                                    <div class="stat-label">Pedidos Hoje</div>
-                                    <div class="stat-value" id="pedidosHoje">0</div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="stat-label">Pedidos Esta Semana</div>
-                                    <div class="stat-value" id="pedidosSemana">0</div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="stat-label">Pedidos Este Mês</div>
-                                    <div class="stat-value" id="pedidosMes">0</div>
-                                </div>
-                                <div class="stat-card">
-                                    <div class="stat-label">Taxa de Conclusão</div>
-                                    <div class="stat-value" id="taxaConclusao">0%</div>
-                                </div>
-                            </div>
-                            
-                            <div class="admin-actions">
-                                <h3><i class="fas fa-download"></i> Gerar Relatórios</h3>
-                                <div class="action-buttons">
-                                    <button onclick="gerarRelatorio('diario')" class="btn">
-                                        <i class="fas fa-file-alt"></i> Relatório Diário
-                                    </button>
-                                    <button onclick="gerarRelatorio('semanal')" class="btn">
-                                        <i class="fas fa-file-alt"></i> Relatório Semanal
-                                    </button>
-                                    <button onclick="gerarRelatorio('mensal')" class="btn">
-                                        <i class="fas fa-file-alt"></i> Relatório Mensal
-                                    </button>
-                                    <button onclick="gerarRelatorio('completo')" class="btn btn-success">
-                                        <i class="fas fa-file-excel"></i> Relatório Completo
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- MODAL PARA MENSAGEM COMPLETA -->
-                <div id="modalMensagem" class="modal">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h2><i class="fas fa-envelope"></i> Mensagem Completa</h2>
-                            <button class="close-modal" onclick="fecharModal('modalMensagem')">&times;</button>
-                        </div>
-                        <div id="conteudoMensagem"></div>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
                 
                 <script>
-                    let pedidoUploadId = null;
-                    let arquivosParaUpload = [];
-                    
                     function abrirTab(tabName) {
                         // Esconder todas as tabs
                         document.querySelectorAll('.tab-content').forEach(tab => {
@@ -1326,38 +789,20 @@ app.get('/admin/pedidos', async (req, res) => {
                         // Mostrar a tab selecionada
                         document.getElementById('tab-' + tabName).classList.add('active');
                         document.querySelector('.tab[onclick="abrirTab(\\'' + tabName + '\\')"]').classList.add('active');
-                        
-                        // Carregar estatísticas se for a tab de relatórios
-                        if (tabName === 'relatorios') {
-                            carregarEstatisticas();
-                        }
-                    }
-                    
-                    function verDetalhes(id) {
-                        const detalhes = document.getElementById('detalhes-' + id);
-                        detalhes.style.display = detalhes.style.display === 'table-row' ? 'none' : 'table-row';
                     }
                     
                     function buscarPedidos() {
                         const termo = document.getElementById('buscarPedido').value.toLowerCase();
-                        const linhas = document.querySelectorAll('#tabelaPedidos tbody tr:not(.detail-row)');
+                        const linhas = document.querySelectorAll('#tabelaPedidos tbody tr');
                         
                         linhas.forEach(linha => {
-                            const id = linha.getAttribute('data-id') || '';
-                            const cliente = linha.getAttribute('data-cliente') || '';
-                            const telefone = linha.getAttribute('data-telefone') || '';
-                            
-                            if (id.includes(termo) || cliente.toLowerCase().includes(termo) || telefone.includes(termo)) {
+                            const texto = linha.textContent.toLowerCase();
+                            if (texto.includes(termo)) {
                                 linha.style.display = '';
                             } else {
                                 linha.style.display = 'none';
                             }
                         });
-                    }
-                    
-                    function resetarBusca() {
-                        document.getElementById('buscarPedido').value = '';
-                        buscarPedidos();
                     }
                     
                     function mudarStatus(id) {
@@ -1372,51 +817,25 @@ app.get('/admin/pedidos', async (req, res) => {
                                     } else {
                                         alert('Erro: ' + data.erro);
                                     }
-                                })
-                                .catch(error => alert('Erro: ' + error));
+                                });
                         }
                     }
                     
-                    function gerenciarArquivos(id) {
-                        const observacoes = prompt('Digite observações para o pedido (opcional):');
-                        if (observacoes !== null) {
-                            fetch('/api/admin/adicionar-observacoes?senha=admin2025&pedido=' + id, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ observacoes: observacoes })
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Observações adicionadas!');
-                                    location.reload();
-                                }
-                            });
-                        }
-                    }
-                    
-                    function excluirPedido(id, cliente) {
-                        if (confirm('Tem certeza que deseja excluir o pedido #' + id + ' do cliente "' + cliente + '"?\\n\\nEsta ação não pode ser desfeita!')) {
+                    function excluirPedido(id) {
+                        if (confirm('Excluir pedido #' + id + '?')) {
                             fetch('/api/admin/excluir-pedido?senha=admin2025&pedido=' + id)
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.success) {
-                                        alert('Pedido excluído com sucesso!');
+                                        alert('Pedido excluído!');
                                         location.reload();
-                                    } else {
-                                        alert('Erro: ' + data.erro);
                                     }
-                                })
-                                .catch(error => alert('Erro: ' + error));
+                                });
                         }
                     }
                     
-                    function verPedidosUsuario(usuarioId) {
-                        window.open('/admin/pedidos?senha=admin2025&usuario=' + usuarioId, '_blank');
-                    }
-                    
-                    function desativarUsuario(id, nome) {
-                        if (confirm('Desativar o usuário "' + nome + '"?\\nEle não poderá fazer login até ser reativado.')) {
+                    function desativarUsuario(id) {
+                        if (confirm('Desativar usuário?')) {
                             fetch('/api/admin/desativar-usuario?senha=admin2025&usuario=' + id)
                                 .then(response => response.json())
                                 .then(data => {
@@ -1428,7 +847,7 @@ app.get('/admin/pedidos', async (req, res) => {
                         }
                     }
                     
-                    function ativarUsuario(id, nome) {
+                    function ativarUsuario(id) {
                         fetch('/api/admin/ativar-usuario?senha=admin2025&usuario=' + id)
                             .then(response => response.json())
                             .then(data => {
@@ -1439,193 +858,52 @@ app.get('/admin/pedidos', async (req, res) => {
                             });
                     }
                     
-                    function alterarTipoUsuario(id, nome) {
-                        const novoTipo = prompt('Novo tipo para "' + nome + '":\\n(cliente, admin, colaborador)');
-                        if (novoTipo) {
-                            fetch('/api/admin/alterar-tipo-usuario?senha=admin2025&usuario=' + id + '&tipo=' + encodeURIComponent(novoTipo))
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Tipo alterado!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function excluirUsuario(id, nome) {
-                        if (confirm('🚨 ATENÇÃO!\\n\\nTem certeza que deseja EXCLUIR PERMANENTEMENTE o usuário "' + nome + '"?\\n\\nEsta ação:\\n• Exclui TODOS os pedidos do usuário\\n• Remove o usuário do sistema\\n• NÃO PODE ser desfeita!')) {
+                    function excluirUsuario(id) {
+                        if (confirm('🚨 ATENÇÃO!\\nExcluir usuário e todos os seus pedidos?')) {
                             fetch('/api/admin/excluir-usuario?senha=admin2025&usuario=' + id)
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.success) {
-                                        alert('Usuário excluído com sucesso!');
+                                        alert('Usuário excluído!');
                                         location.reload();
-                                    } else {
-                                        alert('Erro: ' + data.erro);
                                     }
                                 });
                         }
                     }
                     
-                    function verMensagemCompleta(id) {
-                        fetch('/api/admin/ver-mensagem?senha=admin2025&contato=' + id)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    document.getElementById('conteudoMensagem').innerHTML = \`
-                                        <div style="margin-bottom: 15px;">
-                                            <strong>Nome:</strong> \${data.contato.nome}<br>
-                                            <strong>Telefone:</strong> \${data.contato.telefone}<br>
-                                            <strong>Email:</strong> \${data.contato.email || 'Não informado'}<br>
-                                            <strong>Data:</strong> \${new Date(data.contato.data_contato).toLocaleString('pt-MZ')}
-                                        </div>
-                                        <div style="background: #f9fafb; padding: 15px; border-radius: 5px; border: 1px solid #e5e7eb;">
-                                            <strong>Mensagem:</strong><br>
-                                            \${data.contato.mensagem}
-                                        </div>
-                                    \`;
-                                    document.getElementById('modalMensagem').style.display = 'flex';
-                                }
-                            });
-                    }
-                    
-                    function fecharModal(modalId) {
-                        document.getElementById(modalId).style.display = 'none';
-                    }
-                    
-                    function marcarComoRespondido(id) {
+                    function marcarRespondido(id) {
                         fetch('/api/admin/marcar-respondido?senha=admin2025&contato=' + id)
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    alert('Mensagem marcada como respondida!');
+                                    alert('Marcado como respondido!');
                                     location.reload();
                                 }
                             });
                     }
                     
-                    function marcarComoNaoRespondido(id) {
+                    function marcarNaoRespondido(id) {
                         fetch('/api/admin/marcar-nao-respondido?senha=admin2025&contato=' + id)
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    alert('Mensagem marcada como não respondida!');
+                                    alert('Marcado como não respondido!');
                                     location.reload();
                                 }
                             });
                     }
                     
-                    function excluirContato(id, nome) {
-                        if (confirm('Excluir mensagem de "' + nome + '"?')) {
+                    function excluirContato(id) {
+                        if (confirm('Excluir contato?')) {
                             fetch('/api/admin/excluir-contato?senha=admin2025&contato=' + id)
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.success) {
-                                        alert('Mensagem excluída!');
+                                        alert('Contato excluído!');
                                         location.reload();
                                     }
                                 });
                         }
-                    }
-                    
-                    function verificarPedido() {
-                        const pedidoId = document.getElementById('pedidoUpload').value;
-                        if (!pedidoId) {
-                            alert('Digite o ID do pedido!');
-                            return;
-                        }
-                        
-                        fetch('/api/admin/verificar-pedido?senha=admin2025&pedido=' + pedidoId)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    pedidoUploadId = pedidoId;
-                                    document.getElementById('uploadArea').style.display = 'block';
-                                    alert('Pedido encontrado! Cliente: ' + data.pedido.cliente);
-                                } else {
-                                    alert('Pedido não encontrado!');
-                                }
-                            });
-                    }
-                    
-                    function prepararUpload(files) {
-                        const lista = document.getElementById('arquivosLista');
-                        lista.innerHTML = '';
-                        arquivosParaUpload = [];
-                        
-                        for (let i = 0; i < files.length; i++) {
-                            const file = files[i];
-                            if (file.size > 10 * 1024 * 1024) {
-                                alert('Arquivo "' + file.name + '" excede 10MB!');
-                                continue;
-                            }
-                            
-                            arquivosParaUpload.push(file);
-                            
-                            const item = document.createElement('div');
-                            item.className = 'arquivo-upload-item';
-                            item.innerHTML = \`
-                                <div>
-                                    <i class="fas fa-file"></i> \${file.name} (\${(file.size / 1024 / 1024).toFixed(2)} MB)
-                                </div>
-                                <button onclick="removerArquivo(\${i})" class="btn btn-danger" style="padding: 2px 8px;">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            \`;
-                            lista.appendChild(item);
-                        }
-                        
-                        if (arquivosParaUpload.length > 0) {
-                            document.getElementById('btnEnviar').style.display = 'inline-block';
-                        }
-                    }
-                    
-                    function removerArquivo(index) {
-                        arquivosParaUpload.splice(index, 1);
-                        prepararUpload(arquivosParaUpload);
-                    }
-                    
-                    function enviarArquivos() {
-                        if (arquivosParaUpload.length === 0) {
-                            alert('Selecione arquivos primeiro!');
-                            return;
-                        }
-                        
-                        const formData = new FormData();
-                        formData.append('pedidoId', pedidoUploadId);
-                        
-                        arquivosParaUpload.forEach(file => {
-                            formData.append('arquivos', file);
-                        });
-                        
-                        fetch('/api/upload-arquivos?senha=admin2025', {
-                            method: 'POST',
-                            body: formData
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                alert('Arquivos enviados com sucesso!');
-                                location.reload();
-                            } else {
-                                alert('Erro: ' + data.erro);
-                            }
-                        })
-                        .catch(error => alert('Erro: ' + error));
-                    }
-                    
-                    function carregarEstatisticas() {
-                        fetch('/api/admin/estatisticas?senha=admin2025')
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    document.getElementById('pedidosHoje').textContent = data.hoje;
-                                    document.getElementById('pedidosSemana').textContent = data.semana;
-                                    document.getElementById('pedidosMes').textContent = data.mes;
-                                    document.getElementById('taxaConclusao').textContent = data.taxaConclusao + '%';
-                                }
-                            });
                     }
                     
                     function atualizarTodosStatus(status) {
@@ -1641,42 +919,19 @@ app.get('/admin/pedidos', async (req, res) => {
                         }
                     }
                     
-                    function limparObservacoes() {
-                        if (confirm('Limpar observações administrativas de TODOS os pedidos?')) {
-                            fetch('/api/admin/limpar-observacoes?senha=admin2025')
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Observações limpas!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function exportarPedidos() {
-                        window.location.href = '/admin/pedidos?senha=admin2025&export=csv';
-                    }
-                    
-                    function gerarRelatorio(tipo) {
-                        window.open('/api/admin/relatorio?senha=admin2025&tipo=' + tipo, '_blank');
-                    }
-                    
-                    // Exportar para CSV
-                    if (window.location.search.includes('export=csv')) {
-                        let csv = 'ID;Data;Cliente;Telefone;Serviço;Preço;Status;Usuário\\n';
-                        document.querySelectorAll('tbody tr:not(.detail-row)').forEach(row => {
+                    function exportarCSV() {
+                        let csv = 'ID;Data;Cliente;Telefone;Serviço;Preço;Status\\n';
+                        document.querySelectorAll('#tabelaPedidos tbody tr').forEach(row => {
                             const cells = row.querySelectorAll('td');
-                            if (cells.length >= 7) {
+                            if (cells.length >= 6) {
                                 csv += [
                                     cells[0].textContent.replace('#', '').trim(),
                                     cells[1].textContent.trim(),
                                     cells[2].querySelector('strong')?.textContent.trim() || '',
-                                    cells[2].querySelector('small')?.textContent.replace('📱', '').trim() || '',
-                                    cells[4].querySelector('strong')?.textContent.trim() || '',
-                                    cells[5].querySelector('strong')?.textContent.replace('MT', '').trim() || '',
-                                    cells[6].textContent.trim(),
-                                    cells[3].querySelector('strong')?.textContent.trim() || ''
+                                    cells[2].querySelector('small')?.textContent.trim() || '',
+                                    cells[3].textContent.trim(),
+                                    cells[4].querySelector('strong')?.textContent.replace('MT', '').trim() || '',
+                                    cells[5].textContent.trim()
                                 ].join(';') + '\\n';
                             }
                         });
@@ -1686,28 +941,6 @@ app.get('/admin/pedidos', async (req, res) => {
                         link.href = URL.createObjectURL(blob);
                         link.download = 'pedidos_facilitaki_' + new Date().toISOString().split('T')[0] + '.csv';
                         link.click();
-                        
-                        // Remove o parâmetro da URL
-                        history.replaceState({}, '', window.location.pathname + '?senha=admin2025');
-                    }
-                    
-                    // Permitir arrastar e soltar arquivos
-                    const uploadArea = document.querySelector('.upload-area');
-                    if (uploadArea) {
-                        uploadArea.addEventListener('dragover', (e) => {
-                            e.preventDefault();
-                            uploadArea.style.borderColor = '#3b82f6';
-                        });
-                        
-                        uploadArea.addEventListener('dragleave', () => {
-                            uploadArea.style.borderColor = '#d1d5db';
-                        });
-                        
-                        uploadArea.addEventListener('drop', (e) => {
-                            e.preventDefault();
-                            uploadArea.style.borderColor = '#d1d5db';
-                            prepararUpload(e.dataTransfer.files);
-                        });
                     }
                 </script>
             </body>
@@ -1735,7 +968,6 @@ app.get('/admin/pedidos', async (req, res) => {
 
 // ===== ROTAS ADMIN - AÇÕES =====
 
-// Atualizar status do pedido
 app.get('/api/admin/atualizar-status', async (req, res) => {
     const { senha, pedido, status } = req.query;
     
@@ -1744,53 +976,13 @@ app.get('/api/admin/atualizar-status', async (req, res) => {
     }
     
     try {
-        await pool.query(
-            'UPDATE pedidos SET status = $1 WHERE id = $2',
-            [status, pedido]
-        );
-        
-        res.json({ 
-            success: true, 
-            mensagem: `Status do pedido #${pedido} atualizado para: ${status}` 
-        });
-        
+        await pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [status, pedido]);
+        res.json({ success: true, mensagem: `Status atualizado` });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Adicionar observações ao pedido
-app.post('/api/admin/adicionar-observacoes', async (req, res) => {
-    const { senha, pedido } = req.query;
-    const { observacoes } = req.body;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query(
-            'UPDATE pedidos SET observacoes_admin = $1 WHERE id = $2',
-            [observacoes, pedido]
-        );
-        
-        res.json({ 
-            success: true, 
-            mensagem: `Observações adicionadas ao pedido #${pedido}` 
-        });
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// Excluir pedido
 app.get('/api/admin/excluir-pedido', async (req, res) => {
     const { senha, pedido } = req.query;
     
@@ -1799,36 +991,13 @@ app.get('/api/admin/excluir-pedido', async (req, res) => {
     }
     
     try {
-        // Obter informações do pedido para excluir arquivos
-        const pedidoInfo = await pool.query('SELECT arquivos FROM pedidos WHERE id = $1', [pedido]);
-        
-        if (pedidoInfo.rows.length > 0 && pedidoInfo.rows[0].arquivos) {
-            // Excluir arquivos físicos
-            pedidoInfo.rows[0].arquivos.forEach(arquivo => {
-                const filePath = path.join(__dirname, 'uploads', arquivo);
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            });
-        }
-        
-        // Excluir pedido do banco
         await pool.query('DELETE FROM pedidos WHERE id = $1', [pedido]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: `Pedido #${pedido} excluído com sucesso` 
-        });
-        
+        res.json({ success: true, mensagem: 'Pedido excluído' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Desativar usuário
 app.get('/api/admin/desativar-usuario', async (req, res) => {
     const { senha, usuario } = req.query;
     
@@ -1838,21 +1007,12 @@ app.get('/api/admin/desativar-usuario', async (req, res) => {
     
     try {
         await pool.query('UPDATE usuarios SET ativo = false WHERE id = $1', [usuario]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: 'Usuário desativado com sucesso' 
-        });
-        
+        res.json({ success: true, mensagem: 'Usuário desativado' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Ativar usuário
 app.get('/api/admin/ativar-usuario', async (req, res) => {
     const { senha, usuario } = req.query;
     
@@ -1862,45 +1022,12 @@ app.get('/api/admin/ativar-usuario', async (req, res) => {
     
     try {
         await pool.query('UPDATE usuarios SET ativo = true WHERE id = $1', [usuario]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: 'Usuário ativado com sucesso' 
-        });
-        
+        res.json({ success: true, mensagem: 'Usuário ativado' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Alterar tipo de usuário
-app.get('/api/admin/alterar-tipo-usuario', async (req, res) => {
-    const { senha, usuario, tipo } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE usuarios SET tipo_usuario = $1 WHERE id = $2', [tipo, usuario]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: `Tipo do usuário alterado para: ${tipo}` 
-        });
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// Excluir usuário (e todos seus pedidos)
 app.get('/api/admin/excluir-usuario', async (req, res) => {
     const { senha, usuario } = req.query;
     
@@ -1909,68 +1036,14 @@ app.get('/api/admin/excluir-usuario', async (req, res) => {
     }
     
     try {
-        // Primeiro, excluir todos os arquivos dos pedidos do usuário
-        const pedidos = await pool.query('SELECT arquivos FROM pedidos WHERE usuario_id = $1', [usuario]);
-        
-        for (const pedido of pedidos.rows) {
-            if (pedido.arquivos) {
-                pedido.arquivos.forEach(arquivo => {
-                    const filePath = path.join(__dirname, 'uploads', arquivo);
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                    }
-                });
-            }
-        }
-        
-        // Excluir todos os pedidos do usuário
         await pool.query('DELETE FROM pedidos WHERE usuario_id = $1', [usuario]);
-        
-        // Excluir o usuário
         await pool.query('DELETE FROM usuarios WHERE id = $1', [usuario]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: 'Usuário e todos os seus pedidos foram excluídos com sucesso' 
-        });
-        
+        res.json({ success: true, mensagem: 'Usuário excluído' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Ver mensagem completa
-app.get('/api/admin/ver-mensagem', async (req, res) => {
-    const { senha, contato } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        const resultado = await pool.query('SELECT * FROM contatos WHERE id = $1', [contato]);
-        
-        if (resultado.rows.length === 0) {
-            return res.json({ success: false, erro: 'Mensagem não encontrada' });
-        }
-        
-        res.json({ 
-            success: true, 
-            contato: resultado.rows[0]
-        });
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// Marcar como respondido
 app.get('/api/admin/marcar-respondido', async (req, res) => {
     const { senha, contato } = req.query;
     
@@ -1980,21 +1053,12 @@ app.get('/api/admin/marcar-respondido', async (req, res) => {
     
     try {
         await pool.query('UPDATE contatos SET respondido = true WHERE id = $1', [contato]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: 'Mensagem marcada como respondida' 
-        });
-        
+        res.json({ success: true, mensagem: 'Marcado como respondido' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Marcar como não respondido
 app.get('/api/admin/marcar-nao-respondido', async (req, res) => {
     const { senha, contato } = req.query;
     
@@ -2004,21 +1068,12 @@ app.get('/api/admin/marcar-nao-respondido', async (req, res) => {
     
     try {
         await pool.query('UPDATE contatos SET respondido = false WHERE id = $1', [contato]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: 'Mensagem marcada como não respondida' 
-        });
-        
+        res.json({ success: true, mensagem: 'Marcado como não respondido' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Excluir contato
 app.get('/api/admin/excluir-contato', async (req, res) => {
     const { senha, contato } = req.query;
     
@@ -2028,149 +1083,12 @@ app.get('/api/admin/excluir-contato', async (req, res) => {
     
     try {
         await pool.query('DELETE FROM contatos WHERE id = $1', [contato]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: 'Mensagem excluída com sucesso' 
-        });
-        
+        res.json({ success: true, mensagem: 'Contato excluído' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Verificar pedido para upload
-app.get('/api/admin/verificar-pedido', async (req, res) => {
-    const { senha, pedido } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        const resultado = await pool.query('SELECT id, cliente FROM pedidos WHERE id = $1', [pedido]);
-        
-        if (resultado.rows.length === 0) {
-            return res.json({ success: false, erro: 'Pedido não encontrado' });
-        }
-        
-        res.json({ 
-            success: true, 
-            pedido: resultado.rows[0]
-        });
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// Upload de arquivos
-app.post('/api/upload-arquivos', upload.array('arquivos', 10), async (req, res) => {
-    const { senha } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        const { pedidoId } = req.body;
-        
-        if (!pedidoId || !req.files || req.files.length === 0) {
-            return res.json({ success: false, erro: 'Pedido ID e arquivos são obrigatórios' });
-        }
-        
-        // Obter arquivos atuais
-        const pedido = await pool.query('SELECT arquivos FROM pedidos WHERE id = $1', [pedidoId]);
-        
-        if (pedido.rows.length === 0) {
-            return res.json({ success: false, erro: 'Pedido não encontrado' });
-        }
-        
-        const arquivosAtuais = pedido.rows[0].arquivos || [];
-        const novosArquivos = req.files.map(file => file.filename);
-        const todosArquivos = [...arquivosAtuais, ...novosArquivos];
-        
-        // Atualizar banco de dados
-        await pool.query('UPDATE pedidos SET arquivos = $1 WHERE id = $2', [todosArquivos, pedidoId]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: `${req.files.length} arquivo(s) enviado(s) com sucesso`,
-            arquivos: novosArquivos
-        });
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// Obter estatísticas
-app.get('/api/admin/estatisticas', async (req, res) => {
-    const { senha } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        // Pedidos hoje
-        const hoje = await pool.query(`
-            SELECT COUNT(*) as total FROM pedidos 
-            WHERE DATE(data_pedido) = CURRENT_DATE
-        `);
-        
-        // Pedidos esta semana
-        const semana = await pool.query(`
-            SELECT COUNT(*) as total FROM pedidos 
-            WHERE EXTRACT(WEEK FROM data_pedido) = EXTRACT(WEEK FROM CURRENT_DATE)
-            AND EXTRACT(YEAR FROM data_pedido) = EXTRACT(YEAR FROM CURRENT_DATE)
-        `);
-        
-        // Pedidos este mês
-        const mes = await pool.query(`
-            SELECT COUNT(*) as total FROM pedidos 
-            WHERE EXTRACT(MONTH FROM data_pedido) = EXTRACT(MONTH FROM CURRENT_DATE)
-            AND EXTRACT(YEAR FROM data_pedido) = EXTRACT(YEAR FROM CURRENT_DATE)
-        `);
-        
-        // Taxa de conclusão
-        const conclusao = await pool.query(`
-            SELECT 
-                COUNT(CASE WHEN status = 'concluido' THEN 1 END) as concluidos,
-                COUNT(*) as total
-            FROM pedidos
-        `);
-        
-        const totalConcluidos = parseInt(conclusao.rows[0].concluidos) || 0;
-        const totalPedidos = parseInt(conclusao.rows[0].total) || 1;
-        const taxaConclusao = Math.round((totalConcluidos / totalPedidos) * 100);
-        
-        res.json({ 
-            success: true,
-            hoje: parseInt(hoje.rows[0].total) || 0,
-            semana: parseInt(semana.rows[0].total) || 0,
-            mes: parseInt(mes.rows[0].total) || 0,
-            taxaConclusao: taxaConclusao
-        });
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// Atualizar todos os status
 app.get('/api/admin/atualizar-todos-status', async (req, res) => {
     const { senha, status } = req.query;
     
@@ -2180,112 +1098,15 @@ app.get('/api/admin/atualizar-todos-status', async (req, res) => {
     
     try {
         await pool.query('UPDATE pedidos SET status = $1', [status]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: `Todos os pedidos foram atualizados para: ${status}` 
-        });
-        
+        res.json({ success: true, mensagem: 'Status atualizados' });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
+        res.json({ success: false, erro: error.message });
     }
 });
 
-// Limpar observações
-app.get('/api/admin/limpar-observacoes', async (req, res) => {
-    const { senha } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE pedidos SET observacoes_admin = NULL');
-        
-        res.json({ 
-            success: true, 
-            mensagem: 'Observações limpas de todos os pedidos' 
-        });
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
+// ===== ROTAS PRINCIPAIS =====
 
-// Gerar relatório
-app.get('/api/admin/relatorio', async (req, res) => {
-    const { senha, tipo } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        let query = '';
-        let filename = '';
-        
-        switch (tipo) {
-            case 'diario':
-                query = `SELECT * FROM pedidos WHERE DATE(data_pedido) = CURRENT_DATE ORDER BY data_pedido DESC`;
-                filename = `relatorio_diario_${new Date().toISOString().split('T')[0]}.csv`;
-                break;
-            case 'semanal':
-                query = `SELECT * FROM pedidos WHERE EXTRACT(WEEK FROM data_pedido) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM data_pedido) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY data_pedido DESC`;
-                filename = `relatorio_semanal_${new Date().toISOString().split('T')[0]}.csv`;
-                break;
-            case 'mensal':
-                query = `SELECT * FROM pedidos WHERE EXTRACT(MONTH FROM data_pedido) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM data_pedido) = EXTRACT(YEAR FROM CURRENT_DATE) ORDER BY data_pedido DESC`;
-                filename = `relatorio_mensal_${new Date().toISOString().split('T')[0]}.csv`;
-                break;
-            default:
-                query = `SELECT * FROM pedidos ORDER BY data_pedido DESC`;
-                filename = `relatorio_completo_${new Date().toISOString().split('T')[0]}.csv`;
-        }
-        
-        const resultado = await pool.query(query);
-        
-        // Gerar CSV
-        let csv = 'ID;Data;Cliente;Telefone;Instituição;Curso;Cadeira;Tema;Plano;Preço;Status;Método Pagamento;Arquivos\n';
-        
-        resultado.rows.forEach(pedido => {
-            const data = pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString('pt-MZ') : '';
-            const arquivos = pedido.arquivos ? pedido.arquivos.join(', ') : '';
-            
-            csv += `"${pedido.id}";"${data}";"${pedido.cliente || ''}";"${pedido.telefone || ''}";"${pedido.instituicao || ''}";"${pedido.curso || ''}";"${pedido.cadeira || ''}";"${pedido.tema || ''}";"${pedido.nome_plano || ''}";"${pedido.preco || 0}";"${pedido.status || ''}";"${pedido.metodo_pagamento || ''}";"${arquivos}"\n`;
-        });
-        
-        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.send('\uFEFF' + csv);
-        
-    } catch (error) {
-        res.json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// Rota para servir arquivos uploadados
-app.get('/uploads/:filename', (req, res) => {
-    const filePath = path.join(__dirname, 'uploads', req.params.filename);
-    
-    if (fs.existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.status(404).json({ success: false, erro: 'Arquivo não encontrado' });
-    }
-});
-
-// ===== ROTAS PRINCIPAIS DA APLICAÇÃO =====
-
-// 5. Cadastro
+// Cadastro
 app.post('/api/cadastrar', async (req, res) => {
     try {
         const { nome, telefone, senha } = req.body;
@@ -2349,7 +1170,7 @@ app.post('/api/cadastrar', async (req, res) => {
     }
 });
 
-// 6. Login
+// Login
 app.post('/api/login', async (req, res) => {
     try {
         const { telefone, senha } = req.body;
@@ -2399,8 +1220,7 @@ app.post('/api/login', async (req, res) => {
             { 
                 id: usuario.rows[0].id,
                 nome: usuario.rows[0].nome,
-                telefone: usuario.rows[0].telefone,
-                tipo: usuario.rows[0].tipo_usuario
+                telefone: usuario.rows[0].telefone
             },
             SECRET_KEY,
             { expiresIn: '30d' }
@@ -2413,8 +1233,7 @@ app.post('/api/login', async (req, res) => {
             usuario: {
                 id: usuario.rows[0].id,
                 nome: usuario.rows[0].nome,
-                telefone: usuario.rows[0].telefone,
-                tipo: usuario.rows[0].tipo_usuario
+                telefone: usuario.rows[0].telefone
             }
         });
         
@@ -2426,11 +1245,10 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 7. CRIAR PEDIDO (ROTA PRINCIPAL)
+// Criar pedido
 app.post('/api/pedidos', autenticarToken, async (req, res) => {
     try {
         console.log('📦 Criando pedido para usuário:', req.usuario.id);
-        console.log('📊 Dados recebidos:', JSON.stringify(req.body, null, 2));
         
         const {
             cliente, telefone, instituicao, curso, cadeira,
@@ -2473,28 +1291,21 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
         );
         
         console.log('✅ Pedido criado! ID:', pedido.rows[0].id);
-        console.log('💰 Valor salvo:', pedido.rows[0].preco, 'MT');
-        console.log('👤 Cliente:', pedido.rows[0].cliente);
-        console.log('📅 Data:', pedido.rows[0].data_pedido);
         
         res.json({
             success: true,
             mensagem: 'Pedido criado com sucesso!',
-            pedido: pedido.rows[0],
-            salvo_no_banco: true
+            pedido: pedido.rows[0]
         });
         
     } catch (error) {
         console.error('❌ Erro ao criar pedido:', error.message);
-        console.error('🔍 Detalhes do erro:', error);
         
-        // Se for erro de coluna faltante, sugerir correção
-        if (error.message.includes('column') || error.message.includes('usuario_id')) {
+        if (error.message.includes('column')) {
             return res.json({
                 success: false,
-                erro: 'Problema na tabela. Execute a correção primeiro:',
-                correcao_url: 'https://facilitaki.onrender.com/api/fix-pedidos',
-                dica: 'Acesse a URL acima para corrigir a tabela'
+                erro: 'Problema na tabela. Execute a correção:',
+                correcao_url: '/api/fix-pedidos'
             });
         }
         
@@ -2505,7 +1316,7 @@ app.post('/api/pedidos', autenticarToken, async (req, res) => {
     }
 });
 
-// 8. Meus pedidos
+// Meus pedidos
 app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
     try {
         console.log('📋 Buscando pedidos do usuário:', req.usuario.id);
@@ -2530,7 +1341,7 @@ app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
     }
 });
 
-// 9. Contato
+// Contato
 app.post('/api/contato', async (req, res) => {
     try {
         const { nome, telefone, email, mensagem } = req.body;
@@ -2564,7 +1375,7 @@ app.post('/api/contato', async (req, res) => {
     }
 });
 
-// 10. Verificar token
+// Verificar token
 app.get('/api/verificar-token', autenticarToken, (req, res) => {
     res.json({
         success: true,
@@ -2573,11 +1384,11 @@ app.get('/api/verificar-token', autenticarToken, (req, res) => {
     });
 });
 
-// 11. Usuário atual
+// Usuário atual
 app.get('/api/usuario', autenticarToken, async (req, res) => {
     try {
         const result = await pool.query(
-            'SELECT id, nome, telefone, data_cadastro, tipo_usuario FROM usuarios WHERE id = $1',
+            'SELECT id, nome, telefone, data_cadastro FROM usuarios WHERE id = $1',
             [req.usuario.id]
         );
         
@@ -2602,61 +1413,13 @@ app.get('/api/usuario', autenticarToken, async (req, res) => {
     }
 });
 
-// 12. Logout
+// Logout
 app.post('/api/logout', autenticarToken, (req, res) => {
     console.log(`👋 Usuário ${req.usuario.nome} fez logout`);
     res.json({
         success: true,
         mensagem: 'Logout realizado com sucesso'
     });
-});
-
-// 13. Upload de arquivos pelo usuário
-app.post('/api/meus-pedidos/:id/upload', autenticarToken, upload.array('arquivos', 5), async (req, res) => {
-    try {
-        const pedidoId = req.params.id;
-        
-        // Verificar se o pedido pertence ao usuário
-        const pedido = await pool.query(
-            'SELECT id FROM pedidos WHERE id = $1 AND usuario_id = $2',
-            [pedidoId, req.usuario.id]
-        );
-        
-        if (pedido.rows.length === 0) {
-            return res.status(404).json({ 
-                success: false,
-                erro: 'Pedido não encontrado ou acesso negado' 
-            });
-        }
-        
-        if (!req.files || req.files.length === 0) {
-            return res.status(400).json({ 
-                success: false,
-                erro: 'Nenhum arquivo enviado' 
-            });
-        }
-        
-        // Obter arquivos atuais
-        const pedidoInfo = await pool.query('SELECT arquivos FROM pedidos WHERE id = $1', [pedidoId]);
-        const arquivosAtuais = pedidoInfo.rows[0].arquivos || [];
-        const novosArquivos = req.files.map(file => file.filename);
-        const todosArquivos = [...arquivosAtuais, ...novosArquivos];
-        
-        // Atualizar banco de dados
-        await pool.query('UPDATE pedidos SET arquivos = $1 WHERE id = $2', [todosArquivos, pedidoId]);
-        
-        res.json({ 
-            success: true, 
-            mensagem: `${req.files.length} arquivo(s) enviado(s) com sucesso`,
-            arquivos: novosArquivos
-        });
-        
-    } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro: ' + error.message 
-        });
-    }
 });
 
 // ===== ROTAS PARA ARQUIVOS ESTÁTICOS =====
@@ -2684,31 +1447,18 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log('='.repeat(60));
-    console.log('🚀 FACILITAKI - VERSÃO COMPLETA COM PAINEL ADMIN E UPLOAD');
+    console.log('🚀 FACILITAKI - VERSÃO SIMPLIFICADA');
     console.log('='.repeat(60));
     console.log(`📍 URL: https://facilitaki.onrender.com`);
     console.log(`🔧 Porta: ${PORT}`);
     console.log(`💾 Banco: PostgreSQL (Render)`);
-    console.log(`📁 Uploads: ${path.join(__dirname, 'uploads')}`);
     console.log(`👨‍💼 Painel Admin: /admin/pedidos?senha=admin2025`);
     console.log(`🛠️  Correções: /api/fix-pedidos`);
     console.log('='.repeat(60));
-    console.log('✅ SISTEMA 100% FUNCIONAL:');
-    console.log('   ✅ Cadastro de usuários');
-    console.log('   ✅ Login com JWT');
+    console.log('✅ SISTEMA FUNCIONAL:');
+    console.log('   ✅ Cadastro e login');
     console.log('   ✅ Criação de pedidos');
-    console.log('   ✅ Upload de arquivos');
-    console.log('   ✅ Armazenamento PostgreSQL');
-    console.log('   ✅ Painel administrativo completo');
+    console.log('   ✅ Painel administrativo');
     console.log('   ✅ Exclusão de pedidos e usuários');
-    console.log('   ✅ Gerenciamento de contatos');
-    console.log('   ✅ Relatórios e estatísticas');
-    console.log('='.repeat(60));
-    console.log('🎯 ACESSE AGORA:');
-    console.log('   1. https://facilitaki.onrender.com');
-    console.log('   2. https://facilitaki.onrender.com/admin/pedidos?senha=admin2025');
-    console.log('   3. https://facilitaki.onrender.com/api/debug/db');
     console.log('='.repeat(60));
 });
-
-
