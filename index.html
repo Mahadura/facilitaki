@@ -1135,63 +1135,111 @@
         </div>
     </footer>
 
-    <!-- Modal para Descrição do Trabalho - VERSÃO CORRIGIDA E RESPONSIVA -->
-    <div id="modalDescricaoTrabalho" class="modal">
-        <div class="modal-content" style="max-width: 500px; padding: 2rem;">
-            <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
-                <i class="fas fa-book"></i> Descreva seu Trabalho
-            </h3>
-            
-            <div class="form-group">
-                <label for="temaTrabalho">Tema do Trabalho *</label>
-                <input type="text" id="temaTrabalho" placeholder="Ex: Projeto de Pesquisa sobre..." required>
+    
+    <!-- Modal para Upload de Arquivos - VERSÃO SIMPLIFICADA -->
+<div id="modalDescricaoTrabalho" class="modal">
+    <div class="modal-content" style="max-width: 600px; padding: 2rem;">
+        <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
+            <i class="fas fa-file-upload"></i> Enviar Trabalho
+        </h3>
+        
+        <!-- Upload de Arquivo -->
+        <div class="form-group">
+            <label for="arquivoTrabalho">Arquivo do Trabalho *</label>
+            <div style="border: 2px dashed #3b82f6; border-radius: 10px; padding: 2rem; text-align: center; background: #f8fafc; cursor: pointer;"
+                 id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <i class="fas fa-cloud-upload-alt" style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;"></i>
+                <h4 style="color: #1e40af; margin-bottom: 0.5rem;">Clique para selecionar arquivo</h4>
+                <p style="color: #6b7280; margin-bottom: 0.5rem;">Arraste e solte ou clique para fazer upload</p>
+                <p style="color: #9ca3af; font-size: 0.9rem;">Formatos suportados: PDF, DOC, DOCX (Tamanho máximo: 10MB)</p>
+                
+                <input type="file" id="fileInput" accept=".pdf,.doc,.docx" style="display: none;" 
+                       onchange="handleFileSelect(event)">
             </div>
             
-            <div class="form-group">
-                <label for="disciplinaTrabalho">Disciplina/Cadeira *</label>
-                <input type="text" id="disciplinaTrabalho" placeholder="Ex: Didáctica de Biologia" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="descricaoDetalhada">Descrição</label>
-                <textarea id="descricaoDetalhada" rows="4" placeholder="Descreva os detalhes do trabalho..."></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label for="prazoTrabalhoDetalhe">Prazo de Entrega</label>
-                <input type="date" id="prazoTrabalhoDetalhe">
-            </div>
-            
-            <div class="form-group">
-                <label for="metodoPagamentoModal">Método de Pagamento *</label>
-                <select id="metodoPagamentoModal" required>
-                    <option value="">Selecione um método</option>
-                    <option value="mpesa">M-Pesa</option>
-                    <option value="emola">e-Mola</option>
-                    <option value="deposito">Depósito Bancário</option>
-                </select>
-            </div>
-            
-            <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0; border: 1px solid #e5e7eb;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                    <span>Serviço:</span>
-                    <strong id="nomeServicoModal" style="color: #1e40af; font-size: 1.1rem;">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Valor:</span>
-                    <strong style="color: #1e40af; font-size: 1.3rem;" id="valorServicoModal">0 MT</strong>
+            <!-- Pré-visualização do arquivo -->
+            <div id="filePreview" style="display: none; margin-top: 1rem;">
+                <div style="background: #f0f9ff; padding: 1rem; border-radius: 8px; border: 1px solid #bfdbfe; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <i class="fas fa-file" style="font-size: 1.5rem; color: #3b82f6;"></i>
+                        <div>
+                            <div id="fileName" style="font-weight: bold; color: #1e40af;"></div>
+                            <div id="fileSize" style="font-size: 0.85rem; color: #6b7280;"></div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="removerArquivo()" style="background: none; border: none; color: #ef4444; cursor: pointer;">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
             </div>
             
-            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                <button class="btn-secondary" onclick="fecharModalDescricao()" style="flex: 1; padding: 1rem;">
-                    <i class="fas fa-times"></i> Cancelar
-                </button>
-                <button class="btn-primary" onclick="solicitarServicoComDescricao()" style="flex: 1; padding: 1rem;">
-                    <i class="fas fa-paper-plane"></i> Solicitar Serviço
-                </button>
+            <!-- Barra de progresso -->
+            <div id="uploadProgress" style="display: none; margin-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="color: #1e40af;">Upload em progresso...</span>
+                    <span id="progressPercent" style="color: #3b82f6;">0%</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
+                    <div id="progressBar" style="width: 0%; height: 100%; background: #3b82f6; border-radius: 4px; transition: width 0.3s;"></div>
+                </div>
             </div>
         </div>
+        
+        <!-- Instruções adicionais (opcional) -->
+        <div class="form-group">
+            <label for="descricaoDetalhada">Instruções Adicionais (opcional)</label>
+            <textarea id="descricaoDetalhada" rows="3" placeholder="Alguma instrução especial ou detalhe adicional..."></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="prazoTrabalhoDetalhe">Prazo de Entrega (opcional)</label>
+            <input type="date" id="prazoTrabalhoDetalhe">
+        </div>
+        
+        <div class="form-group">
+            <label for="metodoPagamentoModal">Método de Pagamento *</label>
+            <select id="metodoPagamentoModal" required>
+                <option value="">Selecione um método</option>
+                <option value="mpesa">M-Pesa</option>
+                <option value="emola">e-Mola</option>
+                <option value="deposito">Depósito Bancário</option>
+            </select>
+        </div>
+        
+        <!-- Resumo do Serviço -->
+        <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0; border: 1px solid #e5e7eb;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span>Serviço:</span>
+                <strong id="nomeServicoModal" style="color: #1e40af; font-size: 1.1rem;">-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Valor:</span>
+                <strong style="color: #1e40af; font-size: 1.3rem;" id="valorServicoModal">0 MT</strong>
+            </div>
+        </div>
+        
+        <!-- Termos e Condições -->
+        <div style="background: #f0f9ff; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-size: 0.9rem;">
+            <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
+                <input type="checkbox" id="aceitarTermos" required style="margin-top: 0.25rem;">
+                <label for="aceitarTermos" style="color: #4b5563;">
+                    Concordo com os 
+                    <a href="#" onclick="mostrarTermos()" style="color: #3b82f6;">Termos de Serviço</a> 
+                    e confirmo que este arquivo é de minha autoria ou tenho permissão para usá-lo.
+                </label>
+            </div>
+        </div>
+        
+        <!-- Botões -->
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <button class="btn-secondary" onclick="fecharModalDescricao()" style="flex: 1; padding: 1rem;">
+                <i class="fas fa-times"></i> Cancelar
+            </button>
+            <button class="btn-primary" id="btnSolicitarServico" onclick="solicitarServicoComArquivo()" style="flex: 1; padding: 1rem;" disabled>
+                <i class="fas fa-check-circle"></i> Submeter
+            </button>
+        </div>
+    </div>
     </div>
 
     <!-- Modal de Recarga -->
@@ -1230,5 +1278,6 @@
 </body>
 
 </html>
+
 
 
