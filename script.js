@@ -928,14 +928,10 @@ function abrirDescricaoTrabalho() {
         modal.dataset.servicoPreco = servico.preco;
         
         // Limpar campos anteriores
-        const temaTrabalho = document.getElementById('temaTrabalho');
-        const disciplinaTrabalho = document.getElementById('disciplinaTrabalho');
         const descricaoDetalhada = document.getElementById('descricaoDetalhada');
         const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
         const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
         
-        if (temaTrabalho) temaTrabalho.value = '';
-        if (disciplinaTrabalho) disciplinaTrabalho.value = '';
         if (descricaoDetalhada) descricaoDetalhada.value = '';
         if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
         if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
@@ -1585,3 +1581,4 @@ console.log('🎯 Facilitaki carregado! API_URL:', API_URL);
 console.log('🛠️  Comandos disponíveis no console:');
 console.log('   • debugAPI() - Testar endpoints');
 console.log('   • testarCriarPedido() - Testar criação de pedido');
+
