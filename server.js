@@ -18,6 +18,9 @@ app.use(cors({
     optionsSuccessStatus: 200
 }));
 
+// Middleware para processar dados de formulários (application/x-www-form-urlencoded)
+app.use(express.urlencoded({ extended: true }));
+
 // Servir arquivos estáticos
 app.use(express.static(__dirname));
 
@@ -311,10 +314,14 @@ app.get('/api/fix-pedidos', async (req, res) => {
     }
 });
 
-// ===== ROTA DE UPLOAD SIMPLIFICADA =====
+// ===== ROTA DE UPLOAD SIMPLIFICADA (CORRIGIDA) =====
 app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
     try {
-        console.log('📤 Recebendo pedido...');
+        console.log('📤 Recebendo pedido com upload...');
+        
+        // DEBUG: Log dos dados recebidos
+        console.log('🔍 DEBUG: Body recebido:', req.body);
+        console.log('🔍 DEBUG: Headers:', req.headers);
         
         // Extrair dados do corpo
         const {
@@ -322,23 +329,34 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
             tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
         } = req.body;
         
-        console.log('📝 Criando pedido para:', cliente);
+        console.log('📝 Dados extraídos:', {
+            cliente, telefone, plano, preco, metodoPagamento
+        });
         
         // Validação básica
         if (!cliente || !telefone || !plano || !preco || !metodoPagamento) {
             return res.status(400).json({ 
                 success: false,
-                erro: 'Preencha: cliente, telefone, plano, preço e método de pagamento' 
+                erro: 'Preencha: cliente, telefone, plano, preço e método de pagamento',
+                dados_recebidos: {
+                    cliente: !!cliente,
+                    telefone: !!telefone,
+                    plano: !!plano,
+                    preco: !!preco,
+                    metodoPagamento: !!metodoPagamento,
+                    todos_campos: req.body
+                }
             });
         }
         
         const telefoneLimpo = telefone.replace(/\D/g, '');
         const precoNum = parseFloat(preco);
         
-        // Informações do arquivo (simulado)
+        // Informações do arquivo
         const infoArquivo = {
-            nota: 'Arquivo será enviado por WhatsApp após pagamento',
-            data_registro: new Date().toISOString()
+            nota: 'Arquivo anexado no pedido',
+            data_registro: new Date().toISOString(),
+            nome_arquivo: req.body.arquivoNome || 'arquivo_enviado'
         };
         
         // Inserir pedido no banco de dados
@@ -356,7 +374,7 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
                 instituicao || 'Não informada',
                 curso || 'Não informado',
                 cadeira || 'Não informada',
-                tema || 'Arquivo será enviado por WhatsApp',
+                tema || 'Arquivo anexado',
                 descricao || '',
                 prazo || null,
                 plano,
