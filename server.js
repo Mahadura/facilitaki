@@ -1,1582 +1,1602 @@
-const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const path = require('path');
-require('dotenv').config();
+// script.js - Facilitaki - Sistema Completo com Upload Real (VERSÃO SEM TEMA/DISCIPLINA)
 
-const app = express();
+// ===== VARIÁVEIS GLOBAIS =====
+let usuarioLogado = null;
+let carrinho = {
+    plano: null,
+    preco: 0,
+    metodoPagamento: null
+};
+let arquivoSelecionado = null;
 
-// Middlewares essenciais
-app.use(express.json());
-app.use(cors({
-    origin: ['https://facilitaki.onrender.com', 'http://localhost:10000', 'http://localhost:5500'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
-    credentials: true,
-    optionsSuccessStatus: 200
-}));
+// ===== URL DO SERVIDOR =====
+const API_URL = 'https://facilitaki.onrender.com';
 
-// Middleware para processar dados de formulários (application/x-www-form-urlencoded)
-app.use(express.urlencoded({ extended: true }));
-
-// Servir arquivos estáticos
-app.use(express.static(__dirname));
-
-// ===== CONFIGURAÇÃO DO BANCO DE DADOS RENDER =====
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db';
-
-const pool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-});
-
-// ===== FUNÇÃO PARA CORRIGIR TABELA PEDIDOS =====
-async function corrigirTabelaPedidos() {
+// ===== FUNÇÃO PARA TESTAR CONEXÃO =====
+async function testarConexaoAPI() {
+    console.log('🔍 Testando conexão com a API...');
     try {
-        console.log('🛠️  Verificando tabela pedidos...');
+        const response = await fetch(`${API_URL}/status`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
         
-        // Verificar se a tabela existe
-        const existe = await pool.query(`
-            SELECT EXISTS (
-                SELECT 1 FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'pedidos'
-            ) as existe
-        `);
-        
-        if (!existe.rows[0].existe) {
-            console.log('📦 Criando tabela pedidos completa...');
-            await pool.query(`
-                CREATE TABLE pedidos (
-                    id SERIAL PRIMARY KEY,
-                    usuario_id INTEGER,
-                    cliente VARCHAR(100) NOT NULL,
-                    telefone VARCHAR(20) NOT NULL,
-                    instituicao VARCHAR(100),
-                    curso VARCHAR(100),
-                    cadeira VARCHAR(100),
-                    tema VARCHAR(200),
-                    descricao TEXT,
-                    prazo DATE,
-                    plano VARCHAR(50) NOT NULL,
-                    nome_plano VARCHAR(100) NOT NULL,
-                    preco DECIMAL(10,2) NOT NULL,
-                    metodo_pagamento VARCHAR(50),
-                    status VARCHAR(20) DEFAULT 'pendente',
-                    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    arquivos TEXT,
-                    observacoes_admin TEXT
-                )
-            `);
-            console.log('✅ Tabela pedidos criada!');
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Conexão com API OK:', data);
             return true;
-        }
-        
-        // Verificar colunas faltantes
-        const colunas = await pool.query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'pedidos'
-        `);
-        
-        const colunasExistentes = colunas.rows.map(c => c.column_name);
-        const colunasNecessarias = [
-            'id', 'usuario_id', 'cliente', 'telefone', 'instituicao', 
-            'curso', 'cadeira', 'tema', 'descricao', 'prazo', 'plano', 
-            'nome_plano', 'preco', 'metodo_pagamento', 'status', 'data_pedido',
-            'arquivos', 'observacoes_admin'
-        ];
-        
-        let corrigido = false;
-        
-        // Adicionar colunas faltantes
-        for (const coluna of colunasNecessarias) {
-            if (!colunasExistentes.includes(coluna)) {
-                console.log(`➕ Adicionando coluna ${coluna}...`);
-                
-                let tipo = 'VARCHAR(100)';
-                if (coluna === 'id') tipo = 'SERIAL PRIMARY KEY';
-                if (coluna === 'usuario_id') tipo = 'INTEGER';
-                if (coluna === 'telefone') tipo = 'VARCHAR(20)';
-                if (coluna === 'preco') tipo = 'DECIMAL(10,2)';
-                if (coluna === 'descricao') tipo = 'TEXT';
-                if (coluna === 'prazo') tipo = 'DATE';
-                if (coluna === 'plano') tipo = 'VARCHAR(50)';
-                if (coluna === 'nome_plano') tipo = 'VARCHAR(100)';
-                if (coluna === 'metodo_pagamento') tipo = 'VARCHAR(50)';
-                if (coluna === 'status') tipo = 'VARCHAR(20)';
-                if (coluna === 'data_pedido') tipo = 'TIMESTAMP';
-                if (coluna === 'arquivos') tipo = 'TEXT';
-                if (coluna === 'observacoes_admin') tipo = 'TEXT';
-                
-                await pool.query(`ALTER TABLE pedidos ADD COLUMN ${coluna} ${tipo}`);
-                
-                // Adicionar defaults
-                if (coluna === 'status') {
-                    await pool.query(`ALTER TABLE pedidos ALTER COLUMN status SET DEFAULT 'pendente'`);
-                }
-                if (coluna === 'data_pedido') {
-                    await pool.query(`ALTER TABLE pedidos ALTER COLUMN data_pedido SET DEFAULT CURRENT_TIMESTAMP`);
-                }
-                
-                corrigido = true;
-            }
-        }
-        
-        if (corrigido) {
-            console.log('✅ Tabela pedidos corrigida!');
         } else {
-            console.log('✅ Tabela pedidos já está correta');
+            console.error('❌ API respondeu com erro:', response.status);
+            return false;
         }
-        
-        return corrigido;
-        
     } catch (error) {
-        console.error('❌ Erro ao corrigir tabela:', error.message);
+        console.error('❌ Falha na conexão com API:', error);
+        mostrarMensagemGlobal('Não foi possível conectar ao servidor', 'error');
         return false;
     }
 }
 
-// ===== INICIALIZAÇÃO DO BANCO =====
-async function inicializarBanco() {
-    try {
-        console.log('🔧 Inicializando banco de dados...');
+// ===== NAVEGAÇÃO =====
+function navegarPara(sectionId) {
+    console.log('📍 Navegando para:', sectionId);
+    
+    // Esconder todas as seções
+    document.querySelectorAll('.section').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    // Remover classe active de todos os links
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Mostrar a seção solicitada
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.classList.add('active');
         
-        // Criar tabela usuarios
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                nome VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) UNIQUE NOT NULL,
-                senha VARCHAR(255) NOT NULL,
-                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ativo BOOLEAN DEFAULT TRUE,
-                tipo_usuario VARCHAR(20) DEFAULT 'cliente'
-            )
-        `);
+        // Atualizar link ativo na navegação
+        const navLink = document.querySelector(`[onclick*="${sectionId}"]`);
+        if (navLink && navLink.classList.contains('nav-link')) {
+            navLink.classList.add('active');
+        }
         
-        // Corrigir tabela pedidos
-        await corrigirTabelaPedidos();
+        // Ações específicas para cada seção
+        switch(sectionId) {
+            case 'dashboard':
+                if (usuarioLogado) {
+                    atualizarDashboard();
+                } else {
+                    navegarPara('login');
+                }
+                break;
+            case 'pagamento-sucesso':
+                if (carrinho.plano) {
+                    mostrarInstrucoesPagamento();
+                }
+                break;
+            case 'planos':
+                // Limpar seleção
+                sessionStorage.removeItem('servico_selecionado');
+                sessionStorage.removeItem('preco_selecionado');
+                break;
+            case 'checkout':
+                atualizarResumoPedido();
+                break;
+        }
+    }
+    
+    // Scroll para o topo
+    window.scrollTo(0, 0);
+}
+
+// ===== FUNÇÃO NOVA: Verificar e Logar =====
+function verificarELogar(tipo, preco) {
+    console.log('🔐 Verificando login para:', tipo, preco);
+    
+    if (!usuarioLogado) {
+        // Armazenar seleção para depois do login
+        sessionStorage.setItem('servico_selecionado', tipo);
+        sessionStorage.setItem('preco_selecionado', preco);
         
-        // Criar tabela contatos
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS contatos (
-                id SERIAL PRIMARY KEY,
-                nome VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) NOT NULL,
-                email VARCHAR(100),
-                mensagem TEXT NOT NULL,
-                data_contato TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                respondido BOOLEAN DEFAULT FALSE
-            )
-        `);
-        
-        console.log('✅ Banco inicializado!');
-        
-    } catch (error) {
-        console.error('❌ Erro na inicialização:', error.message);
+        mostrarMensagemGlobal('Faça login para continuar com a solicitação', 'info');
+        navegarPara('login');
+    } else {
+        selecionarPlano(tipo, preco);
     }
 }
 
-// Executar inicialização
-inicializarBanco();
-
-const SECRET_KEY = process.env.SECRET_KEY || 'facilitaki_secret_key_2025';
-
-// ===== MIDDLEWARE DE AUTENTICAÇÃO =====
-function autenticarToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+// ===== GERENCIAMENTO DE USUÁRIOS =====
+async function fazerLogin() {
+    const telefone = document.getElementById('loginTelefone').value.trim();
+    const senha = document.getElementById('loginSenha').value;
+    const mensagem = document.getElementById('mensagemLogin');
     
-    if (!token) {
-        return res.status(401).json({ 
-            success: false, 
-            erro: 'Token de acesso necessário' 
-        });
+    if (!telefone || !senha) {
+        mostrarMensagem(mensagem, 'Preencha todos os campos', 'error');
+        return;
     }
     
-    jwt.verify(token, SECRET_KEY, (err, usuario) => {
-        if (err) {
-            return res.status(403).json({ 
-                success: false, 
-                erro: 'Token inválido ou expirado' 
-            });
-        }
-        req.usuario = usuario;
-        next();
-    });
-}
-
-// ===== ROTA PRINCIPAL =====
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
-});
-
-// ===== HEALTH CHECK =====
-app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'OK', 
-        timestamp: new Date().toISOString(),
-        service: 'Facilitaki API'
-    });
-});
-
-// ===== ROTAS DE DIAGNÓSTICO =====
-
-// 1. Status geral
-app.get('/status', async (req, res) => {
-    try {
-        const dbTest = await pool.query('SELECT NOW() as hora');
-        res.json({
-            success: true,
-            mensagem: 'Facilitaki Online',
-            hora: dbTest.rows[0].hora,
-            versao: '5.0',
-            painel_admin: '/admin/pedidos?senha=admin2025'
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
+    // Mostrar loading
+    const btnLogin = document.querySelector('#formLogin button');
+    const originalText = btnLogin ? btnLogin.innerHTML : 'Entrar';
+    if (btnLogin) {
+        btnLogin.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
+        btnLogin.disabled = true;
     }
-});
-
-// 2. Debug do banco
-app.get('/api/debug/db', async (req, res) => {
+    
     try {
-        const hora = await pool.query('SELECT NOW() as hora');
-        const tabelas = await pool.query(`
-            SELECT table_name FROM information_schema.tables 
-            WHERE table_schema = 'public' ORDER BY table_name
-        `);
+        console.log('🔐 Tentando login para:', telefone);
         
-        // Estrutura da tabela pedidos
-        let estruturaPedidos = [];
-        try {
-            estruturaPedidos = await pool.query(`
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = 'pedidos' 
-                ORDER BY ordinal_position
-            `);
-        } catch (e) {
-            estruturaPedidos = { rows: [] };
+        // Testa a conexão
+        const conexaoOk = await testarConexaoAPI();
+        if (!conexaoOk) {
+            mostrarMensagem(mensagem, 'Servidor não disponível', 'error');
+            return;
         }
         
-        // Contagens
-        const usuarios = await pool.query('SELECT COUNT(*) as total FROM usuarios');
-        const pedidos = await pool.query('SELECT COUNT(*) as total FROM pedidos');
-        const contatos = await pool.query('SELECT COUNT(*) as total FROM contatos');
+        // Faz o login
+        const response = await fetch(`${API_URL}/api/login`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ telefone, senha }),
+            mode: 'cors'
+        });
         
-        res.json({
-            success: true,
-            hora: hora.rows[0].hora,
-            tabelas: tabelas.rows,
-            estrutura_pedidos: estruturaPedidos.rows,
-            contagens: {
-                usuarios: parseInt(usuarios.rows[0].total),
-                pedidos: parseInt(pedidos.rows[0].total),
-                contatos: parseInt(contatos.rows[0].total)
+        console.log('📤 Resposta do login:', response.status);
+        
+        if (!response.ok) {
+            // Tenta ler a resposta de erro
+            let errorMessage = 'Erro no servidor';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
+            } catch (e) {
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
             }
-        });
+            
+            console.error('❌ Erro no login:', errorMessage);
+            mostrarMensagem(mensagem, errorMessage, 'error');
+            return;
+        }
+        
+        const data = await response.json();
+        console.log('✅ Login bem-sucedido:', data);
+        
+        if (data.success) {
+            // Guardar a sessão
+            usuarioLogado = data.usuario;
+            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
+            localStorage.setItem('token_facilitaki', data.token);
+            
+            mostrarMensagem(mensagem, data.mensagem || 'Login realizado com sucesso!', 'success');
+            
+            // Atualiza a interface
+            const btnHeader = document.getElementById('btnLoginHeader');
+            if(btnHeader) {
+                btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+                btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
+            }
+            
+            // Verificar se há serviço selecionado
+            const servicoSelecionado = sessionStorage.getItem('servico_selecionado');
+            const precoSelecionado = sessionStorage.getItem('preco_selecionado');
+            
+            if (servicoSelecionado && precoSelecionado) {
+                // Redirecionar para checkout com o serviço selecionado
+                setTimeout(() => {
+                    selecionarPlano(servicoSelecionado, parseFloat(precoSelecionado));
+                    sessionStorage.removeItem('servico_selecionado');
+                    sessionStorage.removeItem('preco_selecionado');
+                }, 1500);
+            } else {
+                setTimeout(() => navegarPara('dashboard'), 1500);
+            }
+        } else {
+            mostrarMensagem(mensagem, data.erro || 'Credenciais inválidas', 'error');
+        }
+        
     } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
+        console.error("❌ Erro na requisição de login:", error);
+        mostrarMensagem(mensagem, 'Erro de conexão com o servidor', 'error');
+        
+    } finally {
+        // Restaurar botão
+        if (btnLogin) {
+            btnLogin.innerHTML = originalText;
+            btnLogin.disabled = false;
+        }
     }
-});
+}
 
-// 3. CORREÇÃO DA TABELA PEDIDOS
-app.get('/api/fix-pedidos', async (req, res) => {
+async function fazerCadastro() {
+    const nome = document.getElementById('cadastroNome').value.trim();
+    const telefone = document.getElementById('cadastroTelefone').value.trim();
+    const senha = document.getElementById('cadastroSenha').value;
+    const confirmarSenha = document.getElementById('cadastroSenhaConfirm').value;
+    const mensagem = document.getElementById('mensagemLogin');
+    
+    if (!nome || !telefone || !senha || !confirmarSenha) {
+        mostrarMensagem(mensagem, 'Preencha todos os campos', 'error');
+        return;
+    }
+    
+    if (senha !== confirmarSenha) {
+        mostrarMensagem(mensagem, 'As senhas não coincidem', 'error');
+        return;
+    }
+
+    if (senha.length < 6) {
+        mostrarMensagem(mensagem, 'A senha deve ter pelo menos 6 caracteres', 'error');
+        return;
+    }
+
+    // Mostrar loading
+    const btnCadastro = document.querySelector('#formCadastro button');
+    const originalText = btnCadastro ? btnCadastro.innerHTML : 'Cadastrar';
+    if (btnCadastro) {
+        btnCadastro.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cadastrando...';
+        btnCadastro.disabled = true;
+    }
+
     try {
-        console.log('🔧 Executando correção da tabela pedidos...');
-        const corrigido = await corrigirTabelaPedidos();
+        console.log('📝 Tentando cadastro para:', telefone);
         
-        // Verificar estrutura após correção
-        const estrutura = await pool.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'pedidos' 
-            ORDER BY ordinal_position
-        `);
+        // Testa conexão primeiro
+        const conexaoOk = await testarConexaoAPI();
+        if (!conexaoOk) {
+            mostrarMensagem(mensagem, 'Servidor não disponível', 'error');
+            return;
+        }
         
-        res.json({
-            success: true,
-            corrigido: corrigido,
-            mensagem: corrigido ? 'Tabela corrigida com sucesso!' : 'Tabela já estava correta',
-            estrutura: estrutura.rows,
-            colunas_totais: estrutura.rows.length,
-            instrucao: 'Agora tente criar um pedido!'
+        // Envia o novo usuário para o servidor
+        const response = await fetch(`${API_URL}/api/cadastrar`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ nome, telefone, senha }),
+            mode: 'cors'
         });
+        
+        console.log('📤 Resposta do cadastro:', response.status);
+        
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            mostrarMensagem(mensagem, data.mensagem || 'Cadastro realizado com sucesso!', 'success');
+            
+            // Login automático
+            usuarioLogado = data.usuario;
+            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
+            localStorage.setItem('token_facilitaki', data.token);
+            
+            console.log('✅ Cadastro e login automático bem-sucedido');
+            
+            // Atualiza a interface
+            const btnHeader = document.getElementById('btnLoginHeader');
+            if(btnHeader) {
+                btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+                btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
+            }
+            
+            setTimeout(() => {
+                mostrarLogin();
+                navegarPara('dashboard');
+            }, 2000);
+        } else {
+            mostrarMensagem(mensagem, data.erro || 'Erro ao cadastrar', 'error');
+        }
     } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            erro: error.message 
-        });
+        console.error("❌ Erro no cadastro:", error);
+        mostrarMensagem(mensagem, 'Erro de conexão com o servidor', 'error');
+    } finally {
+        // Restaurar botão
+        if (btnCadastro) {
+            btnCadastro.innerHTML = originalText;
+            btnCadastro.disabled = false;
+        }
     }
-});
+}
 
-// ===== ROTA DE UPLOAD SIMPLIFICADA (CORRIGIDA) =====
-app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
+async function fazerLogout() {
     try {
-        console.log('📤 Recebendo pedido com upload...');
-        
-        // DEBUG: Log dos dados recebidos
-        console.log('🔍 DEBUG: Body recebido:', req.body);
-        console.log('🔍 DEBUG: Headers:', req.headers);
-        
-        // Extrair dados do corpo
-        const {
-            cliente, telefone, instituicao, curso, cadeira,
-            tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
-        } = req.body;
-        
-        console.log('📝 Dados extraídos:', {
-            cliente, telefone, plano, preco, metodoPagamento
-        });
-        
-        // Validação básica
-        if (!cliente || !telefone || !plano || !preco || !metodoPagamento) {
-            return res.status(400).json({ 
-                success: false,
-                erro: 'Preencha: cliente, telefone, plano, preço e método de pagamento',
-                dados_recebidos: {
-                    cliente: !!cliente,
-                    telefone: !!telefone,
-                    plano: !!plano,
-                    preco: !!preco,
-                    metodoPagamento: !!metodoPagamento,
-                    todos_campos: req.body
+        // Chamar endpoint de logout no servidor
+        const token = localStorage.getItem('token_facilitaki');
+        if (token) {
+            await fetch(`${API_URL}/api/logout`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 }
             });
         }
+    } catch (error) {
+        console.error("❌ Erro ao fazer logout no servidor:", error);
+    }
+    
+    // Limpar dados locais
+    usuarioLogado = null;
+    localStorage.removeItem('usuarioLogado_facilitaki');
+    localStorage.removeItem('token_facilitaki');
+    
+    console.log('👋 Usuário deslogado');
+    
+    // Atualizar cabeçalho
+    const btnHeader = document.getElementById('btnLoginHeader');
+    if(btnHeader) {
+        btnHeader.innerHTML = '<i class="fas fa-user"></i> Área do Cliente';
+        btnHeader.setAttribute('onclick', 'navegarPara(\'login\')');
+    }
+    
+    // Limpar carrinho e sessões
+    carrinho = { plano: null, preco: 0, metodoPagamento: null };
+    arquivoSelecionado = null;
+    sessionStorage.clear();
+    
+    navegarPara('home');
+}
+
+function mostrarCadastro() {
+    document.getElementById('formLogin').style.display = 'none';
+    document.getElementById('formCadastro').style.display = 'block';
+    document.getElementById('mensagemLogin').innerHTML = '';
+}
+
+function mostrarLogin() {
+    document.getElementById('formCadastro').style.display = 'none';
+    document.getElementById('formLogin').style.display = 'block';
+    document.getElementById('mensagemLogin').innerHTML = '';
+}
+
+// ===== FUNÇÕES PARA GESTÃO DE PEDIDOS =====
+async function criarPedido(pedidoData) {
+    console.log('🛒 Tentando criar pedido:', pedidoData);
+    
+    try {
+        const token = localStorage.getItem('token_facilitaki');
+        if (!token) {
+            console.error('❌ Token não encontrado');
+            return { success: false, error: 'Usuário não autenticado. Faça login novamente.' };
+        }
         
-        const telefoneLimpo = telefone.replace(/\D/g, '');
-        const precoNum = parseFloat(preco);
+        console.log('🔑 Token encontrado, enviando para API...');
         
-        // Informações do arquivo
-        const infoArquivo = {
-            nota: 'Arquivo anexado no pedido',
-            data_registro: new Date().toISOString(),
-            nome_arquivo: req.body.arquivoNome || 'arquivo_enviado'
-        };
+        // Limpar telefone no pedidoData
+        if (pedidoData.telefone) {
+            pedidoData.telefone = pedidoData.telefone.replace(/\D/g, '');
+        }
         
-        // Inserir pedido no banco de dados
-        const pedido = await pool.query(
-            `INSERT INTO pedidos (
-                usuario_id, cliente, telefone, instituicao, curso, cadeira, 
-                tema, descricao, prazo, plano, nome_plano, preco, metodo_pagamento,
-                arquivos, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-            RETURNING id, cliente, plano, preco, status, data_pedido`,
-            [
-                req.usuario.id,
-                cliente,
-                telefoneLimpo,
-                instituicao || 'Não informada',
-                curso || 'Não informado',
-                cadeira || 'Não informada',
-                tema || 'Arquivo anexado',
-                descricao || '',
-                prazo || null,
-                plano,
-                nomePlano || plano,
-                precoNum,
-                metodoPagamento,
-                JSON.stringify(infoArquivo),
-                'pendente'
-            ]
-        );
+        // Converter preço para número
+        if (pedidoData.preco) {
+            pedidoData.preco = parseFloat(pedidoData.preco);
+        }
         
-        console.log('✅ Pedido criado! ID:', pedido.rows[0].id);
-        
-        res.json({
-            success: true,
-            mensagem: 'Pedido criado com sucesso!',
-            pedido: pedido.rows[0],
-            instrucao: 'Após pagamento, envie o arquivo para WhatsApp: 86 728 6665'
+        const response = await fetch(`${API_URL}/api/pedidos`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(pedidoData),
+            mode: 'cors'
         });
+        
+        console.log('📤 Resposta do servidor:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            // Tentar ler o erro do servidor
+            let errorMessage = 'Erro ao criar pedido';
+            try {
+                const errorData = await response.json();
+                console.error('❌ Erro do servidor:', errorData);
+                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
+            } catch (e) {
+                console.error('❌ Não foi possível ler resposta de erro:', e);
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
+            }
+            return { success: false, error: errorMessage };
+        }
+        
+        const data = await response.json();
+        console.log('✅ Resposta do servidor:', data);
+        
+        if (data.success) {
+            console.log('🎉 Pedido criado com sucesso! ID:', data.pedido?.id);
+            return { success: true, pedido: data.pedido };
+        } else {
+            console.error('❌ Servidor retornou success: false:', data);
+            return { success: false, error: data.erro || 'Erro ao criar pedido' };
+        }
         
     } catch (error) {
-        console.error('❌ Erro ao criar pedido:', error.message);
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro: ' + error.message 
-        });
+        console.error("🔥 Erro fatal ao criar pedido:", error);
+        
+        let errorMsg = 'Erro de conexão com o servidor';
+        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+            errorMsg = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
+        } else if (error.name === 'SyntaxError') {
+            errorMsg = 'Resposta inválida do servidor.';
+        }
+        
+        return { success: false, error: errorMsg };
     }
-});
+}
 
-// ===== ROTA ADMIN - VER TODOS PEDIDOS =====
-app.get('/admin/pedidos', async (req, res) => {
-    const { senha } = req.query;
+async function buscarPedidosUsuario() {
+    try {
+        const token = localStorage.getItem('token_facilitaki');
+        if (!token) {
+            return { success: false, error: 'Usuário não autenticado' };
+        }
+        
+        console.log('📋 Buscando pedidos do usuário...');
+        
+        const response = await fetch(`${API_URL}/api/meus-pedidos`, {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+            },
+            mode: 'cors'
+        });
+        
+        console.log('📤 Resposta dos pedidos:', response.status);
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                console.log('✅ Pedidos encontrados:', data.pedidos.length);
+                return { success: true, pedidos: data.pedidos };
+            } else {
+                return { success: false, error: data.erro || 'Erro ao buscar pedidos' };
+            }
+        } else {
+            let errorMessage = 'Erro na requisição';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.erro || errorMessage;
+            } catch (e) {
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
+            }
+            return { success: false, error: errorMessage };
+        }
+    } catch (error) {
+        console.error("❌ Erro ao buscar pedidos:", error);
+        return { success: false, error: 'Erro de conexão com o servidor' };
+    }
+}
+
+// ===== UPLOAD DE ARQUIVOS =====
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
     
-    if (senha !== 'admin2025') {
-        return res.status(401).send(`
-            <!DOCTYPE html>
-            <html><head><title>Acesso Negado</title>
-            <style>
-                body { font-family: Arial; padding: 50px; text-align: center; background: #f8fafc; }
-                .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                h1 { color: #ef4444; }
-                .btn { background: #3b82f6; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block; margin-top: 20px; }
-            </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>🔒 Acesso Negado</h1>
-                    <p>Senha de administrador incorreta.</p>
-                    <p><strong>Dica:</strong> Acesse com: ?senha=admin2025</p>
-                    <a href="/admin/pedidos?senha=admin2025" class="btn">Tentar com senha correta</a>
+    // Validar tamanho (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('Arquivo muito grande. O tamanho máximo é 10MB.');
+        return;
+    }
+    
+    // Validar tipo
+    const validTypes = ['.pdf', '.doc', '.docx'];
+    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+    if (!validTypes.includes(fileExt)) {
+        alert('Formato de arquivo não suportado. Use PDF, DOC ou DOCX.');
+        return;
+    }
+    
+    arquivoSelecionado = file;
+    
+    // Mostrar preview
+    const filePreview = document.getElementById('filePreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    
+    if (filePreview && fileName && fileSize) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        filePreview.style.display = 'block';
+    }
+    
+    // Ativar botão de submeter
+    const btnSolicitar = document.getElementById('btnSolicitarServico');
+    if (btnSolicitar) {
+        btnSolicitar.disabled = false;
+    }
+}
+
+function removerArquivo() {
+    arquivoSelecionado = null;
+    const fileInput = document.getElementById('fileInput');
+    const filePreview = document.getElementById('filePreview');
+    
+    if (fileInput) fileInput.value = '';
+    if (filePreview) filePreview.style.display = 'none';
+    
+    const btnSolicitar = document.getElementById('btnSolicitarServico');
+    if (btnSolicitar) {
+        btnSolicitar.disabled = true;
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+async function criarPedidoComArquivo(formData) {
+    console.log('📤 Enviando pedido com arquivo...');
+    
+    try {
+        const token = localStorage.getItem('token_facilitaki');
+        if (!token) {
+            return { success: false, error: 'Usuário não autenticado' };
+        }
+        
+        // DEBUG: Mostrar o que está sendo enviado
+        console.log('🔍 Conteúdo do FormData:');
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + (typeof pair[1] === 'string' ? pair[1] : pair[1].name || 'File'));
+        }
+        
+        // Adicionar nome do arquivo ao FormData para o servidor
+        if (arquivoSelecionado) {
+            formData.append('arquivoNome', arquivoSelecionado.name);
+        }
+        
+        // Enviar para endpoint de upload
+        const response = await fetch(`${API_URL}/api/pedidos/upload`, {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${token}`
+                // NÃO incluir 'Content-Type' quando usar FormData
+                // O browser vai definir automaticamente o content-type correto (multipart/form-data)
+            },
+            body: formData
+        });
+        
+        console.log('📤 Resposta do servidor (upload):', response.status, response.statusText);
+        
+        if (!response.ok) {
+            let errorMessage = 'Erro ao enviar arquivo';
+            try {
+                const errorData = await response.json();
+                console.error('❌ Erro detalhado do servidor:', errorData);
+                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
+            } catch (e) {
+                console.error('❌ Não foi possível ler resposta de erro:', e);
+                errorMessage = `Erro ${response.status}: ${response.statusText}`;
+            }
+            return { success: false, error: errorMessage };
+        }
+        
+        const data = await response.json();
+        console.log('✅ Resposta do servidor:', data);
+        
+        if (data.success) {
+            return { success: true, pedido: data.pedido };
+        } else {
+            return { success: false, error: data.erro || 'Erro ao criar pedido' };
+        }
+        
+    } catch (error) {
+        console.error("🔥 Erro ao enviar arquivo:", error);
+        return { success: false, error: 'Erro de conexão com o servidor' };
+    }
+}
+
+// ===== PLANOS E CHECKOUT =====
+function selecionarPlano(tipo, preco) {
+    console.log('📦 Selecionando plano:', tipo, preco);
+    
+    // Mapear nomes dos planos
+    const nomesPlanos = {
+        'basico': 'Serviços Avulsos',
+        'avancado': 'Trabalho de campo',
+        'premium': 'Monografia/TCC'
+    };
+    
+    // Atualizar carrinho
+    carrinho = {
+        plano: tipo,
+        nomePlano: nomesPlanos[tipo] || tipo,
+        preco: parseFloat(preco),
+        metodoPagamento: null
+    };
+    
+    console.log('🛒 Carrinho atualizado:', carrinho);
+    
+    // Navegar para checkout
+    navegarPara('checkout');
+}
+
+function selecionarMetodo(metodo) {
+    console.log('💳 Selecionando método de pagamento:', metodo);
+    
+    // Remover classe ativa de todos os métodos
+    document.querySelectorAll('.metodo-pagamento').forEach(btn => {
+        btn.classList.remove('ativo');
+    });
+    
+    // Adicionar classe ativa ao método selecionado
+    const btnSelecionado = document.querySelector(`[data-metodo="${metodo}"]`);
+    if (btnSelecionado) {
+        btnSelecionado.classList.add('ativo');
+    }
+    
+    // Atualizar carrinho
+    carrinho.metodoPagamento = metodo;
+    
+    // Habilitar botão de finalizar
+    const btnFinalizar = document.querySelector('#checkout button[onclick="finalizarCompra()"]');
+    if (btnFinalizar) {
+        btnFinalizar.disabled = false;
+        btnFinalizar.innerHTML = '<i class="fas fa-check"></i> Finalizar Compra';
+    }
+}
+
+function atualizarResumoPedido() {
+    const resumoDiv = document.getElementById('resumoPedido');
+    const nomeCliente = document.getElementById('nomeCliente');
+    const telefoneCliente = document.getElementById('telefoneCliente');
+    
+    if (carrinho.plano) {
+        // Preencher dados do usuário se estiver logado
+        if (usuarioLogado) {
+            if (nomeCliente) nomeCliente.value = usuarioLogado.nome || '';
+            if (telefoneCliente) telefoneCliente.value = usuarioLogado.telefone || '';
+        }
+        
+        if (resumoDiv) {
+            resumoDiv.innerHTML = `
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div>
+                            <h4 style="margin: 0; color: #1e40af;">${carrinho.nomePlano}</h4>
+                            <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.9rem;">Serviço selecionado</p>
+                        </div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #1e40af;">
+                            ${carrinho.preco.toLocaleString('pt-MZ')} MT
+                        </div>
+                    </div>
+                    <div style="padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.9rem; color: #6b7280;">
+                        <p style="margin: 0.5rem 0;">
+                            <i class="fas fa-info-circle"></i> O trabalho será iniciado após confirmação do pagamento.
+                        </p>
+                    </div>
                 </div>
-            </body>
-            </html>
-        `);
+            `;
+        }
+    } else {
+        if (resumoDiv) {
+            resumoDiv.innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                    <i class="fas fa-shopping-cart" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                    <p>Nenhum serviço selecionado</p>
+                    <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem;">
+                        Escolher Serviço
+                    </button>
+                </div>
+            `;
+        }
+    }
+}
+
+async function finalizarCompra() {
+    console.log('💰 Iniciando finalização de compra...');
+    
+    const nomeCliente = document.getElementById('nomeCliente')?.value.trim() || usuarioLogado?.nome || '';
+    const telefoneCliente = document.getElementById('telefoneCliente')?.value.trim() || usuarioLogado?.telefone || '';
+    const instituicao = document.getElementById('instituicao')?.value.trim() || '';
+    const curso = document.getElementById('curso')?.value.trim() || '';
+    const cadeira = document.getElementById('cadeira')?.value.trim() || '';
+    const descricao = document.getElementById('descricao')?.value.trim() || '';
+    const mensagemDiv = document.getElementById('mensagemCheckout');
+    
+    // Validações
+    if (!nomeCliente || !telefoneCliente) {
+        mostrarMensagem(mensagemDiv, 'Nome e telefone são obrigatórios', 'error');
+        return;
+    }
+    
+    if (!carrinho.plano) {
+        mostrarMensagem(mensagemDiv, 'Selecione um serviço primeiro', 'error');
+        return;
+    }
+    
+    if (!carrinho.metodoPagamento) {
+        mostrarMensagem(mensagemDiv, 'Selecione um método de pagamento', 'error');
+        return;
+    }
+    
+    // Mostrar loading
+    const btnFinalizar = document.querySelector('#checkout button[onclick="finalizarCompra()"]');
+    const originalText = btnFinalizar ? btnFinalizar.innerHTML : 'Finalizar Compra';
+    if (btnFinalizar) {
+        btnFinalizar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        btnFinalizar.disabled = true;
+    }
+    
+    // Criar pedido para enviar ao servidor
+    const pedidoData = {
+        cliente: nomeCliente,
+        telefone: telefoneCliente,
+        instituicao: instituicao,
+        curso: curso,
+        cadeira: cadeira,
+        descricao: descricao,
+        plano: carrinho.plano,
+        nomePlano: carrinho.nomePlano,
+        preco: carrinho.preco,
+        metodoPagamento: carrinho.metodoPagamento,
+        status: 'pendente'
+    };
+    
+    console.log('📤 Enviando dados do pedido:', pedidoData);
+    
+    // Enviar para o servidor
+    const resultado = await criarPedido(pedidoData);
+    
+    // Restaurar botão
+    if (btnFinalizar) {
+        btnFinalizar.innerHTML = originalText;
+        btnFinalizar.disabled = false;
+    }
+    
+    if (resultado.success) {
+        console.log('✅ Pedido criado com sucesso!');
+        mostrarMensagem(mensagemDiv, 'Pedido registrado com sucesso! Redirecionando...', 'success');
+        
+        // Limpar formulário
+        const campos = ['instituicao', 'curso', 'cadeira', 'descricao'];
+        campos.forEach(campo => {
+            const el = document.getElementById(campo);
+            if (el) el.value = '';
+        });
+        
+        // Mostrar instruções de pagamento
+        setTimeout(() => {
+            navegarPara('pagamento-sucesso');
+        }, 2000);
+    } else {
+        console.error('❌ Erro ao criar pedido:', resultado.error);
+        mostrarMensagem(mensagemDiv, `Erro: ${resultado.error}`, 'error');
+    }
+}
+
+function mostrarInstrucoesPagamento() {
+    console.log('📄 Mostrando instruções de pagamento...');
+    
+    const instrucoesDiv = document.getElementById('instrucoesDetalhadas');
+    const resumoDiv = document.getElementById('resumoPagamento');
+    
+    if (!carrinho.plano || !instrucoesDiv || !resumoDiv) return;
+    
+    // Instruções de pagamento
+    let instrucoes = '';
+    const valorEntrada = Math.ceil(carrinho.preco * 0.5);
+    
+    switch(carrinho.metodoPagamento) {
+        case 'mpesa':
+            instrucoes = `
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                    <i class="fas fa-mobile-alt"></i> Pagamento via M-Pesa
+                </h4>
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                    <p><strong>Passo a passo:</strong></p>
+                    <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
+                        <li>Acesse M-Pesa no seu celular</li>
+                        <li>Selecione "Transferir Dinheiro"</li>
+                        <li>Digite o número: <strong>84 728 6665</strong></li>
+                        <li>Valor: <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong> (entrada de 50%)</li>
+                        <li>Nome: <strong>Aguinaldo Anli</strong></li>
+                        <li>Confirme a transação</li>
+                        <li>Guarde o comprovativo</li>
+                    </ol>
+                    <p style="color: #ef4444; font-weight: bold;">
+                        <i class="fas fa-exclamation-circle"></i> O trabalho só será iniciado após confirmação do pagamento.
+                    </p>
+                </div>
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
+                    <p style="margin: 0; color: #065f46;">
+                        <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665
+                    </p>
+                </div>
+            `;
+            break;
+        case 'emola':
+            instrucoes = `
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                    <i class="fas fa-wallet"></i> Pagamento via e-Mola
+                </h4>
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                    <p><strong>Passo a passo:</strong></p>
+                    <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
+                        <li>Acesse e-Mola no seu celular</li>
+                        <li>Selecione "Transferir Dinheiro"</li>
+                        <li>Digite o número: <strong>86 728 6665</strong></li>
+                        <li>Valor: <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong> (entrada de 50%)</li>
+                        <li>Nome: <strong>Aguinaldo Anli Mahadura</strong></li>
+                        <li>Confirme a transação</li>
+                        <li>Guarde o comprovativo</li>
+                    </ol>
+                </div>
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
+                    <p style="margin: 0; color: #065f46;">
+                        <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665
+                    </p>
+                </div>
+            `;
+            break;
+        case 'deposito':
+            instrucoes = `
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                    <i class="fas fa-university"></i> Depósito Bancário
+                </h4>
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                    <p><strong>Dados bancários:</strong></p>
+                    <div style="margin-bottom: 1rem;">
+                        <p><strong>Banco:</strong> BCI</p>
+                        <p><strong>Conta:</strong> 00080000790534651019</p>
+                        <p><strong>Nome:</strong> Aguinaldo Anli Mahadura</p>
+                        <p><strong>Valor:</strong> <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong> (entrada de 50%)</p>
+                    </div>
+                </div>
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
+                    <p style="margin: 0; color: #065f46;">
+                        <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665 ou 84 728 6665
+                    </p>
+                </div>
+            `;
+            break;
+        default:
+            instrucoes = `<h4>Pagamento via ${carrinho.metodoPagamento ? carrinho.metodoPagamento.toUpperCase() : 'Não selecionado'}</h4>
+                <p>Complete o pagamento conforme o método selecionado.</p>`;
+    }
+    
+    instrucoesDiv.innerHTML = instrucoes;
+    
+    // Relatório do pagamento
+    resumoDiv.innerHTML = `
+        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <h5 style="margin-top: 0; color: #1e40af;">Resumo do Pedido</h5>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Serviço:</span>
+                <strong>${carrinho.nomePlano}</strong>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Valor Total:</span>
+                <strong>${carrinho.preco.toLocaleString('pt-MZ')} MT</strong>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span>Entrada (50%):</span>
+                <strong style="color: #10b981;">${valorEntrada.toLocaleString('pt-MZ')} MT</strong>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                <span>Saldo Restante:</span>
+                <strong>${(carrinho.preco - valorEntrada).toLocaleString('pt-MZ')} MT</strong>
+            </div>
+            
+            <hr style="border-color: #e5e7eb; margin: 1rem 0;">
+            
+            <div style="display: flex; justify-content: space-between;">
+                <span>Método de Pagamento:</span>
+                <strong>${carrinho.metodoPagamento ? carrinho.metodoPagamento.toUpperCase() : 'Não selecionado'}</strong>
+            </div>
+            
+            <div style="margin-top: 1rem; padding: 0.75rem; background: #fef3c7; border-radius: 5px; border: 1px solid #f59e0b;">
+                <p style="margin: 0; color: #92400e; font-size: 0.9rem;">
+                    <i class="fas fa-clock"></i> Prazo de entrega começa após confirmação do pagamento.
+                </p>
+            </div>
+        </div>
+    `;
+}
+
+// ===== MODAL DESCRIÇÃO TRABALHO (SEM TEMA/DISCIPLINA) =====
+function abrirDescricaoTrabalho() {
+    const selectServico = document.getElementById('selectServicoDashboard');
+    const servicoSelecionado = selectServico ? selectServico.value : null;
+    
+    if (!servicoSelecionado) {
+        mostrarMensagemGlobal('Selecione um serviço primeiro', 'error');
+        return;
+    }
+    
+    console.log('📝 Abrindo descrição para serviço:', servicoSelecionado);
+    
+    // Mapear valores dos serviços
+    const servicos = {
+        'basico': { nome: 'Serviços Avulsos', preco: 100 },
+        'avancado': { nome: 'Trabalho de campo', preco: 500 },
+        'premium': { nome: 'Monografia/TCC', preco: 15000 }
+    };
+    
+    const servico = servicos[servicoSelecionado] || { nome: 'Serviço', preco: 0 };
+    
+    // Preencher informações do serviço no modal
+    const nomeServicoModal = document.getElementById('nomeServicoModal');
+    const valorServicoModal = document.getElementById('valorServicoModal');
+    
+    if (nomeServicoModal) nomeServicoModal.textContent = servico.nome;
+    if (valorServicoModal) valorServicoModal.textContent = servico.preco.toLocaleString('pt-MZ') + ' MT';
+    
+    // Armazenar dados do serviço
+    const modal = document.getElementById('modalDescricaoTrabalho');
+    if (modal) {
+        modal.dataset.servicoTipo = servicoSelecionado;
+        modal.dataset.servicoNome = servico.nome;
+        modal.dataset.servicoPreco = servico.preco;
+        
+        // Limpar campos anteriores
+        const descricaoDetalhada = document.getElementById('descricaoDetalhada');
+        const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
+        const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
+        
+        if (descricaoDetalhada) descricaoDetalhada.value = '';
+        if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
+        if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
+        
+        // Limpar arquivo
+        removerArquivo();
+        
+        // Mostrar modal
+        modal.style.display = 'flex';
+        
+        // Focar no campo de arquivo
+        setTimeout(() => {
+            const uploadArea = document.getElementById('uploadArea');
+            if (uploadArea) uploadArea.focus();
+        }, 100);
+    }
+}
+
+function fecharModalDescricao() {
+    const modal = document.getElementById('modalDescricaoTrabalho');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    
+    // Limpar arquivo selecionado
+    arquivoSelecionado = null;
+    removerArquivo();
+    
+    // Limpar outros campos
+    const descricaoDetalhada = document.getElementById('descricaoDetalhada');
+    const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
+    const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
+    
+    if (descricaoDetalhada) descricaoDetalhada.value = '';
+    if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
+    if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
+}
+
+async function solicitarServicoComArquivo() {
+    console.log('🚀 Solicitando serviço com arquivo...');
+    
+    // Coletar dados do modal (SEM TEMA E SEM DISCIPLINA)
+    const descricao = document.getElementById('descricaoDetalhada')?.value.trim() || '';
+    const prazo = document.getElementById('prazoTrabalhoDetalhe')?.value || '';
+    const metodoPagamentoSelect = document.getElementById('metodoPagamentoModal');
+    const metodoPagamento = metodoPagamentoSelect ? metodoPagamentoSelect.value : '';
+    const aceitarTermos = document.getElementById('aceitarTermos')?.checked || false;
+    
+    // Obter dados do serviço do modal
+    const modal = document.getElementById('modalDescricaoTrabalho');
+    const servicoTipo = modal ? modal.dataset.servicoTipo : 'basico';
+    const servicoNome = modal ? modal.dataset.servicoNome : 'Serviço';
+    const servicoPreco = modal ? parseInt(modal.dataset.servicoPreco) || 0 : 0;
+    
+    // Validar campos obrigatórios
+    if (!arquivoSelecionado) {
+        mostrarMensagemGlobal('Selecione um arquivo do trabalho', 'error');
+        return;
+    }
+    
+    if (!metodoPagamento) {
+        mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
+        return;
+    }
+    
+    if (!aceitarTermos) {
+        mostrarMensagemGlobal('Você precisa aceitar os termos de serviço', 'error');
+        return;
+    }
+    
+    // Mostrar loading
+    const btnSolicitar = document.getElementById('btnSolicitarServico');
+    const originalText = btnSolicitar ? btnSolicitar.innerHTML : 'Solicitar Serviço';
+    if (btnSolicitar) {
+        btnSolicitar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando arquivo...';
+        btnSolicitar.disabled = true;
     }
     
     try {
-        console.log('👨‍💼 Acesso admin aos pedidos');
+        // Criar FormData para enviar arquivo
+        const formData = new FormData();
         
-        // Buscar todos pedidos
-        const pedidos = await pool.query(`
-            SELECT 
-                p.*, 
-                u.nome as usuario_nome, 
-                u.telefone as usuario_telefone,
-                u.data_cadastro as usuario_data_cadastro,
-                u.ativo as usuario_ativo
-            FROM pedidos p
-            LEFT JOIN usuarios u ON p.usuario_id = u.id
-            ORDER BY p.data_pedido DESC
-        `);
+        // Adicionar dados do pedido (SIMPLIFICADO - SEM TEMA/DISCIPLINA)
+        formData.append('cliente', usuarioLogado ? usuarioLogado.nome : 'Cliente');
+        formData.append('telefone', usuarioLogado ? usuarioLogado.telefone : '');
+        formData.append('instituicao', 'Não informada');
+        formData.append('curso', 'Não informado');
+        formData.append('cadeira', 'Não informada');
+        formData.append('tema', 'Arquivo anexado: ' + arquivoSelecionado.name);
+        formData.append('descricao', descricao);
+        formData.append('prazo', prazo);
+        formData.append('plano', servicoTipo);
+        formData.append('nomePlano', servicoNome);
+        formData.append('preco', servicoPreco.toString());
+        formData.append('metodoPagamento', metodoPagamento);
         
-        // Buscar todos usuários
-        const usuarios = await pool.query(`
-            SELECT id, nome, telefone, data_cadastro, ativo, tipo_usuario 
-            FROM usuarios 
-            ORDER BY data_cadastro DESC
-        `);
+        // Adicionar arquivo
+        formData.append('arquivo', arquivoSelecionado);
         
-        // Buscar contatos
-        const contatos = await pool.query(`
-            SELECT * FROM contatos ORDER BY data_contato DESC
-        `);
-        
-        // Calcular totais
-        const totais = await pool.query(`
-            SELECT 
-                COUNT(*) as total_pedidos,
-                SUM(preco) as valor_total,
-                AVG(preco) as media_valor
-            FROM pedidos
-        `);
-        
-        // Gerar HTML simples
-        let html = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Admin Facilitaki</title>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { 
-                        font-family: Arial, sans-serif; 
-                        background: #f5f5f5;
-                        color: #333;
-                        padding: 20px;
-                    }
-                    
-                    .container {
-                        max-width: 1200px;
-                        margin: 0 auto;
-                        background: white;
-                        border-radius: 10px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        overflow: hidden;
-                    }
-                    
-                    .header {
-                        background: #1e40af;
-                        color: white;
-                        padding: 20px;
-                        text-align: center;
-                    }
-                    
-                    .header h1 {
-                        font-size: 24px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        gap: 10px;
-                    }
-                    
-                    .tabs {
-                        display: flex;
-                        background: #f1f5f9;
-                        border-bottom: 1px solid #e5e7eb;
-                        flex-wrap: wrap;
-                    }
-                    
-                    .tab {
-                        padding: 12px 20px;
-                        cursor: pointer;
-                        font-weight: 500;
-                        color: #6b7280;
-                        border-bottom: 3px solid transparent;
-                    }
-                    
-                    .tab:hover {
-                        background: #e5e7eb;
-                    }
-                    
-                    .tab.active {
-                        background: white;
-                        color: #1e40af;
-                        border-bottom: 3px solid #3b82f6;
-                    }
-                    
-                    .tab-content {
-                        display: none;
-                        padding: 20px;
-                    }
-                    
-                    .tab-content.active {
-                        display: block;
-                    }
-                    
-                    .stats {
-                        display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                        gap: 15px;
-                        padding: 20px;
-                        background: #f8fafc;
-                        margin-bottom: 20px;
-                    }
-                    
-                    .stat-card {
-                        background: white;
-                        padding: 15px;
-                        border-radius: 8px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                        text-align: center;
-                    }
-                    
-                    .stat-value {
-                        font-size: 24px;
-                        font-weight: bold;
-                        color: #1e40af;
-                        margin: 5px 0;
-                    }
-                    
-                    .stat-label {
-                        color: #6b7280;
-                        font-size: 12px;
-                    }
-                    
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        font-size: 14px;
-                        margin-bottom: 20px;
-                    }
-                    
-                    th {
-                        background: #f1f5f9;
-                        padding: 12px;
-                        text-align: left;
-                        font-weight: 600;
-                        color: #1e40af;
-                        border-bottom: 2px solid #e5e7eb;
-                    }
-                    
-                    td {
-                        padding: 10px;
-                        border-bottom: 1px solid #e5e7eb;
-                    }
-                    
-                    tr:hover {
-                        background: #f8fafc;
-                    }
-                    
-                    .badge {
-                        padding: 4px 8px;
-                        border-radius: 4px;
-                        font-size: 12px;
-                        font-weight: 600;
-                        display: inline-block;
-                    }
-                    
-                    .badge.pendente { background: #fef3c7; color: #92400e; }
-                    .badge.pago { background: #d1fae5; color: #065f46; }
-                    .badge.andamento { background: #dbeafe; color: #1e40af; }
-                    .badge.concluido { background: #ede9fe; color: #5b21b6; }
-                    .badge.cancelado { background: #fee2e2; color: #991b1b; }
-                    
-                    .btn {
-                        display: inline-block;
-                        padding: 6px 12px;
-                        background: #3b82f6;
-                        color: white;
-                        border-radius: 4px;
-                        text-decoration: none;
-                        border: none;
-                        cursor: pointer;
-                        font-size: 12px;
-                        margin: 2px;
-                    }
-                    
-                    .btn:hover { background: #2563eb; }
-                    .btn-danger { background: #ef4444; }
-                    .btn-danger:hover { background: #dc2626; }
-                    .btn-warning { background: #f59e0b; }
-                    .btn-warning:hover { background: #d97706; }
-                    .btn-success { background: #10b981; }
-                    .btn-success:hover { background: #059669; }
-                    
-                    .actions {
-                        display: flex;
-                        gap: 5px;
-                        flex-wrap: wrap;
-                    }
-                    
-                    .search-box {
-                        margin-bottom: 15px;
-                        display: flex;
-                        gap: 10px;
-                    }
-                    
-                    .search-box input {
-                        flex: 1;
-                        padding: 8px 12px;
-                        border: 1px solid #d1d5db;
-                        border-radius: 4px;
-                        font-size: 14px;
-                    }
-                    
-                    .admin-section {
-                        margin-top: 30px;
-                        padding: 20px;
-                        background: #f8fafc;
-                        border-radius: 8px;
-                        border: 1px solid #e5e7eb;
-                    }
-                    
-                    .admin-section h3 {
-                        margin-bottom: 15px;
-                        color: #1e40af;
-                    }
-                    
-                    @media (max-width: 768px) {
-                        .header { padding: 15px; }
-                        .header h1 { font-size: 20px; }
-                        .tab { padding: 10px; flex: 1; text-align: center; }
-                        table { font-size: 12px; }
-                        th, td { padding: 8px; }
-                    }
-                </style>
-                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1><i class="fas fa-chart-line"></i> Painel Administrativo - Facilitaki</h1>
-                    </div>
-                    
-                    <div class="stats">
-                        <div class="stat-card">
-                            <div class="stat-label">Total de Pedidos</div>
-                            <div class="stat-value">${totais.rows[0]?.total_pedidos || 0}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Valor Total</div>
-                            <div class="stat-value">${(totais.rows[0]?.valor_total || 0).toLocaleString('pt-MZ')} MT</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Valor Médio</div>
-                            <div class="stat-value">${Math.round(totais.rows[0]?.media_valor || 0).toLocaleString('pt-MZ')} MT</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Usuários</div>
-                            <div class="stat-value">${usuarios.rows.length}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="tabs">
-                        <div class="tab active" onclick="abrirTab('pedidos')"><i class="fas fa-shopping-cart"></i> Pedidos</div>
-                        <div class="tab" onclick="abrirTab('usuarios')"><i class="fas fa-users"></i> Usuários</div>
-                        <div class="tab" onclick="abrirTab('contatos')"><i class="fas fa-envelope"></i> Contatos</div>
-                    </div>
-                    
-                    <!-- TAB PEDIDOS -->
-                    <div id="tab-pedidos" class="tab-content active">
-                        <div class="search-box">
-                            <input type="text" id="buscarPedido" placeholder="Buscar pedido..." onkeyup="buscarPedidos()">
-                        </div>
-                        
-                        <table id="tabelaPedidos">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Data</th>
-                                    <th>Cliente</th>
-                                    <th>Serviço</th>
-                                    <th>Valor</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-        
-        // Adicionar cada pedido à tabela
-        pedidos.rows.forEach(pedido => {
-            const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
-            const statusClass = pedido.status ? pedido.status.toLowerCase().replace(' ', '-') : 'pendente';
-            
-            html += `
-                <tr>
-                    <td><strong>#${pedido.id}</strong></td>
-                    <td>${dataPedido.toLocaleDateString('pt-MZ')}</td>
-                    <td>
-                        <strong>${pedido.cliente || 'Não informado'}</strong><br>
-                        <small>${pedido.telefone || 'Não informado'}</small>
-                    </td>
-                    <td>${pedido.nome_plano || pedido.plano || 'Serviço'}</td>
-                    <td><strong>${pedido.preco ? pedido.preco.toLocaleString('pt-MZ') : '0'} MT</strong></td>
-                    <td><span class="badge ${statusClass}">${pedido.status || 'pendente'}</span></td>
-                    <td class="actions">
-                        <button onclick="mudarStatus(${pedido.id})" class="btn btn-warning" title="Alterar status">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="excluirPedido(${pedido.id})" class="btn btn-danger" title="Excluir pedido">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>`;
+        console.log('📤 Enviando FormData com:', {
+            cliente: usuarioLogado?.nome,
+            telefone: usuarioLogado?.telefone,
+            plano: servicoTipo,
+            preco: servicoPreco,
+            metodoPagamento: metodoPagamento,
+            arquivo: arquivoSelecionado.name
         });
         
-        html += `
-                            </tbody>
-                        </table>
-                        
-                        ${pedidos.rows.length === 0 ? 
-                            '<div style="text-align: center; padding: 40px; color: #6b7280;"><i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 20px;"></i><h3>Nenhum pedido encontrado</h3></div>' : 
-                            ''
-                        }
-                        
-                        <div class="admin-section">
-                            <h3><i class="fas fa-cog"></i> Ações Rápidas</h3>
-                            <div>
-                                <button onclick="atualizarTodosStatus('concluido')" class="btn btn-success">
-                                    <i class="fas fa-check-circle"></i> Marcar Todos Concluídos
-                                </button>
-                                <button onclick="exportarCSV()" class="btn">
-                                    <i class="fas fa-download"></i> Exportar CSV
-                                </button>
+        // Enviar para o servidor
+        const resultado = await criarPedidoComArquivo(formData);
+        
+        if (resultado.success) {
+            // Fechar modal
+            fecharModalDescricao();
+            
+            // Atualizar carrinho para mostrar instruções de pagamento
+            carrinho = {
+                plano: servicoTipo,
+                nomePlano: servicoNome,
+                preco: servicoPreco,
+                metodoPagamento: metodoPagamento
+            };
+            
+            // Mostrar mensagem de sucesso
+            mostrarMensagemGlobal('Serviço solicitado com sucesso! Arquivo enviado.', 'success');
+            
+            // Ir para instruções de pagamento
+            setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
+        } else {
+            mostrarMensagemGlobal(resultado.error, 'error');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao enviar arquivo:', error);
+        mostrarMensagemGlobal('Erro ao enviar arquivo. Tente novamente.', 'error');
+    } finally {
+        // Restaurar botão
+        if (btnSolicitar) {
+            btnSolicitar.innerHTML = originalText;
+            btnSolicitar.disabled = false;
+        }
+    }
+}
+
+// ===== DASHBOARD =====
+async function atualizarDashboard() {
+    console.log('📊 Atualizando dashboard...');
+    
+    if (!usuarioLogado) {
+        console.log('❌ Usuário não logado, redirecionando para login');
+        navegarPara('login');
+        return;
+    }
+    
+    // Buscar pedidos do servidor
+    const resultado = await buscarPedidosUsuario();
+    
+    if (resultado.success) {
+        const pedidosUsuario = resultado.pedidos || [];
+        
+        // Calcular valor total por pagar (pedidos pendentes)
+        const pedidosPendentes = pedidosUsuario.filter(p => p.status === 'pendente');
+        const valorTotal = pedidosPendentes.reduce((total, pedido) => total + (parseFloat(pedido.preco) || 0), 0);
+        
+        // Atualizar valor total
+        const valorTotalPagar = document.getElementById('valorTotalPagar');
+        if (valorTotalPagar) {
+            valorTotalPagar.textContent = valorTotal.toLocaleString('pt-MZ') + ' MT';
+        }
+        
+        // Atualizar lista de pedidos
+        const listaPedidosDiv = document.getElementById('listaPedidos');
+        if (listaPedidosDiv) {
+            if (pedidosUsuario.length === 0) {
+                listaPedidosDiv.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                        <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                        <p>Nenhum pedido encontrado</p>
+                        <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem;">
+                            Solicitar Serviço
+                        </button>
+                    </div>
+                `;
+            } else {
+                listaPedidosDiv.innerHTML = pedidosUsuario.map(pedido => {
+                    const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
+                    const statusColor = getStatusColor(pedido.status);
+                    const statusText = pedido.status ? pedido.status.replace('_', ' ') : 'pendente';
+                    
+                    return `
+                        <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${statusColor};">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div>
+                                    <strong style="color: #1e40af;">${pedido.nome_plano || pedido.nomePlano || 'Serviço'}</strong>
+                                    <div style="font-size: 0.9rem; color: #6b7280; margin-top: 0.25rem;">
+                                        ${pedido.cadeira || pedido.tema || 'Sem descrição'}
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-weight: bold; color: #1e40af; font-size: 1.1rem;">
+                                        ${(parseFloat(pedido.preco) || 0).toLocaleString('pt-MZ')} MT
+                                    </div>
+                                    <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${statusColor + '20'}; color: ${statusColor};">
+                                        ${statusText}
+                                    </span>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
+                                <i class="far fa-calendar"></i> ${dataPedido.toLocaleDateString('pt-MZ')}
+                                ${pedido.metodo_pagamento ? ` • <i class="fas fa-credit-card"></i> ${pedido.metodo_pagamento.toUpperCase()}` : ''}
+                                ${pedido.arquivos ? ` • <i class="fas fa-file"></i> Arquivo enviado` : ''}
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- TAB USUÁRIOS -->
-                    <div id="tab-usuarios" class="tab-content">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Nome</th>
-                                    <th>Telefone</th>
-                                    <th>Data Cadastro</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
+                    `;
+                }).join('');
+            }
+        }
+    } else {
+        console.error('❌ Erro ao carregar pedidos:', resultado.error);
+        mostrarMensagemGlobal('Erro ao carregar pedidos: ' + resultado.error, 'error');
+    }
+}
+
+function getStatusColor(status) {
+    switch(status) {
+        case 'pendente': return '#f59e0b';
+        case 'pago': return '#10b981';
+        case 'em_andamento': return '#3b82f6';
+        case 'concluido': return '#8b5cf6';
+        case 'cancelado': return '#ef4444';
+        default: return '#6b7280';
+    }
+}
+
+// ===== CONTATO =====
+async function enviarContato() {
+    const nome = document.getElementById('contatoNome')?.value.trim() || '';
+    const telefone = document.getElementById('contatoTelefone')?.value.trim() || '';
+    const mensagemTexto = document.getElementById('contatoMensagem')?.value.trim() || '';
+    const mensagemDiv = document.getElementById('mensagemContato');
+    
+    if (!nome || !telefone || !mensagemTexto) {
+        mostrarMensagem(mensagemDiv, 'Preencha todos os campos obrigatórios', 'error');
+        return;
+    }
+    
+    // Mostrar loading
+    const btnEnviar = document.querySelector('#contato button');
+    const originalText = btnEnviar ? btnEnviar.innerHTML : 'Enviar Mensagem';
+    if (btnEnviar) {
+        btnEnviar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        btnEnviar.disabled = true;
+    }
+    
+    try {
+        console.log('📨 Enviando mensagem de contato...');
         
-        // Adicionar cada usuário à tabela
-        usuarios.rows.forEach(usuario => {
-            const dataCadastro = usuario.data_cadastro ? new Date(usuario.data_cadastro) : new Date();
-            const statusClass = usuario.ativo ? 'ativo' : 'inativo';
-            const statusText = usuario.ativo ? 'Ativo' : 'Inativo';
-            
-            html += `
-                <tr>
-                    <td><strong>#${usuario.id}</strong></td>
-                    <td><strong>${usuario.nome}</strong></td>
-                    <td>${usuario.telefone}</td>
-                    <td>${dataCadastro.toLocaleDateString('pt-MZ')}</td>
-                    <td>${statusText}</td>
-                    <td class="actions">
-                        ${usuario.ativo ? `
-                            <button onclick="desativarUsuario(${usuario.id})" class="btn btn-warning" title="Desativar">
-                                <i class="fas fa-user-slash"></i>
-                            </button>
-                        ` : `
-                            <button onclick="ativarUsuario(${usuario.id})" class="btn btn-success" title="Ativar">
-                                <i class="fas fa-user-check"></i>
-                            </button>
-                        `}
-                        <button onclick="excluirUsuario(${usuario.id})" class="btn btn-danger" title="Excluir">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>`;
-        });
-        
-        html += `
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- TAB CONTATOS -->
-                    <div id="tab-contatos" class="tab-content">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Data</th>
-                                    <th>Nome</th>
-                                    <th>Telefone</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-        
-        // Adicionar cada contato à tabela
-        contatos.rows.forEach(contato => {
-            const dataContato = contato.data_contato ? new Date(contato.data_contato) : new Date();
-            const respondidoClass = contato.respondido ? 'badge concluido' : 'badge pendente';
-            const respondidoText = contato.respondido ? 'Respondido' : 'Pendente';
-            
-            html += `
-                <tr>
-                    <td><strong>#${contato.id}</strong></td>
-                    <td>${dataContato.toLocaleDateString('pt-MZ')}</td>
-                    <td><strong>${contato.nome}</strong></td>
-                    <td>${contato.telefone}</td>
-                    <td><span class="${respondidoClass}">${respondidoText}</span></td>
-                    <td class="actions">
-                        ${!contato.respondido ? `
-                            <button onclick="marcarRespondido(${contato.id})" class="btn btn-success" title="Marcar respondido">
-                                <i class="fas fa-check"></i>
-                            </button>
-                        ` : `
-                            <button onclick="marcarNaoRespondido(${contato.id})" class="btn btn-warning" title="Marcar não respondido">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        `}
-                        <button onclick="excluirContato(${contato.id})" class="btn btn-danger" title="Excluir">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>`;
-        });
-        
-        html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                
-                <script>
-                    function abrirTab(tabName) {
-                        // Esconder todas as tabs
-                        document.querySelectorAll('.tab-content').forEach(tab => {
-                            tab.classList.remove('active');
-                        });
-                        document.querySelectorAll('.tab').forEach(tab => {
-                            tab.classList.remove('active');
-                        });
-                        
-                        // Mostrar a tab selecionada
-                        document.getElementById('tab-' + tabName).classList.add('active');
-                        document.querySelector('.tab[onclick="abrirTab(\\'' + tabName + '\\')"]').classList.add('active');
-                    }
-                    
-                    function buscarPedidos() {
-                        const termo = document.getElementById('buscarPedido').value.toLowerCase();
-                        const linhas = document.querySelectorAll('#tabelaPedidos tbody tr');
-                        
-                        linhas.forEach(linha => {
-                            const texto = linha.textContent.toLowerCase();
-                            if (texto.includes(termo)) {
-                                linha.style.display = '';
-                            } else {
-                                linha.style.display = 'none';
-                            }
-                        });
-                    }
-                    
-                    function mudarStatus(id) {
-                        const novoStatus = prompt('Novo status para pedido #' + id + ':\\n(pendente, pago, em_andamento, concluido, cancelado)');
-                        if (novoStatus) {
-                            fetch('/api/admin/atualizar-status?senha=admin2025&pedido=' + id + '&status=' + encodeURIComponent(novoStatus))
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Status atualizado!');
-                                        location.reload();
-                                    } else {
-                                        alert('Erro: ' + data.erro);
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function excluirPedido(id) {
-                        if (confirm('Excluir pedido #' + id + '?')) {
-                            fetch('/api/admin/excluir-pedido?senha=admin2025&pedido=' + id)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Pedido excluído!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function desativarUsuario(id) {
-                        if (confirm('Desativar usuário?')) {
-                            fetch('/api/admin/desativar-usuario?senha=admin2025&usuario=' + id)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Usuário desativado!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function ativarUsuario(id) {
-                        fetch('/api/admin/ativar-usuario?senha=admin2025&usuario=' + id)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Usuário ativado!');
-                                    location.reload();
-                                }
-                            });
-                    }
-                    
-                    function excluirUsuario(id) {
-                        if (confirm('🚨 ATENÇÃO!\\nExcluir usuário e todos os seus pedidos?')) {
-                            fetch('/api/admin/excluir-usuario?senha=admin2025&usuario=' + id)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Usuário excluído!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function marcarRespondido(id) {
-                        fetch('/api/admin/marcar-respondido?senha=admin2025&contato=' + id)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Marcado como respondido!');
-                                    location.reload();
-                                }
-                            });
-                    }
-                    
-                    function marcarNaoRespondido(id) {
-                        fetch('/api/admin/marcar-nao-respondido?senha=admin2025&contato=' + id)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Marcado como não respondido!');
-                                    location.reload();
-                                }
-                            });
-                    }
-                    
-                    function excluirContato(id) {
-                        if (confirm('Excluir contato?')) {
-                            fetch('/api/admin/excluir-contato?senha=admin2025&contato=' + id)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Contato excluído!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function atualizarTodosStatus(status) {
-                        if (confirm('Atualizar TODOS os pedidos para "' + status + '"?')) {
-                            fetch('/api/admin/atualizar-todos-status?senha=admin2025&status=' + status)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Status atualizados!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function exportarCSV() {
-                        let csv = 'ID;Data;Cliente;Telefone;Serviço;Preço;Status\\n';
-                        document.querySelectorAll('#tabelaPedidos tbody tr').forEach(row => {
-                            const cells = row.querySelectorAll('td');
-                            if (cells.length >= 6) {
-                                csv += [
-                                    cells[0].textContent.replace('#', '').trim(),
-                                    cells[1].textContent.trim(),
-                                    cells[2].querySelector('strong')?.textContent.trim() || '',
-                                    cells[2].querySelector('small')?.textContent.trim() || '',
-                                    cells[3].textContent.trim(),
-                                    cells[4].querySelector('strong')?.textContent.replace('MT', '').trim() || '',
-                                    cells[5].textContent.trim()
-                                ].join(';') + '\\n';
-                            }
-                        });
-                        
-                        const blob = new Blob(['\\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-                        const link = document.createElement('a');
-                        link.href = URL.createObjectURL(blob);
-                        link.download = 'pedidos_facilitaki_' + new Date().toISOString().split('T')[0] + '.csv';
-                        link.click();
-                    }
-                </script>
-            </body>
-            </html>`;
-        
-        res.send(html);
-        
-    } catch (error) {
-        console.error('❌ Erro no admin:', error);
-        res.status(500).send(`
-            <!DOCTYPE html>
-            <html><head><title>Erro</title>
-            <style>body { font-family: Arial; padding: 50px; text-align: center; }
-            .error { color: #ef4444; margin: 20px 0; }
-            </style></head>
-            <body>
-                <h1>❌ Erro no Painel Admin</h1>
-                <div class="error">${error.message}</div>
-                <a href="/admin/pedidos?senha=admin2025">Tentar novamente</a>
-            </body>
-            </html>
-        `);
-    }
-});
-
-// ===== ROTAS ADMIN - AÇÕES =====
-
-app.get('/api/admin/atualizar-status', async (req, res) => {
-    const { senha, pedido, status } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [status, pedido]);
-        res.json({ success: true, mensagem: `Status atualizado` });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/excluir-pedido', async (req, res) => {
-    const { senha, pedido } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('DELETE FROM pedidos WHERE id = $1', [pedido]);
-        res.json({ success: true, mensagem: 'Pedido excluído' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/desativar-usuario', async (req, res) => {
-    const { senha, usuario } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE usuarios SET ativo = false WHERE id = $1', [usuario]);
-        res.json({ success: true, mensagem: 'Usuário desativado' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/ativar-usuario', async (req, res) => {
-    const { senha, usuario } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE usuarios SET ativo = true WHERE id = $1', [usuario]);
-        res.json({ success: true, mensagem: 'Usuário ativado' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/excluir-usuario', async (req, res) => {
-    const { senha, usuario } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('DELETE FROM pedidos WHERE usuario_id = $1', [usuario]);
-        await pool.query('DELETE FROM usuarios WHERE id = $1', [usuario]);
-        res.json({ success: true, mensagem: 'Usuário excluído' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/marcar-respondido', async (req, res) => {
-    const { senha, contato } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE contatos SET respondido = true WHERE id = $1', [contato]);
-        res.json({ success: true, mensagem: 'Marcado como respondido' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/marcar-nao-respondido', async (req, res) => {
-    const { senha, contato } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE contatos SET respondido = false WHERE id = $1', [contato]);
-        res.json({ success: true, mensagem: 'Marcado como não respondido' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/excluir-contato', async (req, res) => {
-    const { senha, contato } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('DELETE FROM contatos WHERE id = $1', [contato]);
-        res.json({ success: true, mensagem: 'Contato excluído' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/atualizar-todos-status', async (req, res) => {
-    const { senha, status } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE pedidos SET status = $1', [status]);
-        res.json({ success: true, mensagem: 'Status atualizados' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-// ===== ROTAS PRINCIPAIS =====
-
-// Cadastro
-app.post('/api/cadastrar', async (req, res) => {
-    try {
-        const { nome, telefone, senha } = req.body;
-        
-        if (!nome || !telefone || !senha) {
-            return res.status(400).json({ 
-                success: false, 
-                erro: 'Preencha todos os campos' 
-            });
+        // Testar conexão primeiro
+        const conexaoOk = await testarConexaoAPI();
+        if (!conexaoOk) {
+            mostrarMensagem(mensagemDiv, 'Servidor não disponível', 'error');
+            return;
         }
         
-        const telefoneLimpo = telefone.replace(/\D/g, '');
-        
-        // Verificar se já existe
-        const existe = await pool.query(
-            'SELECT id FROM usuarios WHERE telefone = $1',
-            [telefoneLimpo]
-        );
-        
-        if (existe.rows.length > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                erro: 'Telefone já cadastrado' 
-            });
-        }
-        
-        // Criptografar senha
-        const senhaHash = await bcrypt.hash(senha, 10);
-        
-        // Inserir usuário
-        const usuario = await pool.query(
-            `INSERT INTO usuarios (nome, telefone, senha) 
-             VALUES ($1, $2, $3) 
-             RETURNING id, nome, telefone`,
-            [nome, telefoneLimpo, senhaHash]
-        );
-        
-        // Gerar token
-        const token = jwt.sign(
-            { 
-                id: usuario.rows[0].id,
-                nome: nome,
-                telefone: telefoneLimpo
+        // Enviar mensagem para o servidor
+        const response = await fetch(`${API_URL}/api/contato`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
-            SECRET_KEY,
-            { expiresIn: '30d' }
-        );
-        
-        res.json({
-            success: true,
-            mensagem: 'Cadastro realizado!',
-            token: token,
-            usuario: usuario.rows[0]
+            body: JSON.stringify({ nome, telefone, mensagem: mensagemTexto }),
+            mode: 'cors'
         });
         
-    } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro: ' + error.message 
-        });
-    }
-});
+        console.log('📤 Resposta do contato:', response.status);
 
-// Login
-app.post('/api/login', async (req, res) => {
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            mostrarMensagem(mensagemDiv, data.mensagem || 'Mensagem enviada com sucesso!', 'success');
+            
+            // Limpar formulário
+            if (document.getElementById('contatoNome')) document.getElementById('contatoNome').value = '';
+            if (document.getElementById('contatoTelefone')) document.getElementById('contatoTelefone').value = '';
+            if (document.getElementById('contatoMensagem')) document.getElementById('contatoMensagem').value = '';
+        } else {
+            mostrarMensagem(mensagemDiv, data.erro || 'Erro ao enviar mensagem', 'error');
+        }
+    } catch (error) {
+        console.error("❌ Erro ao enviar contato:", error);
+        mostrarMensagem(mensagemDiv, 'Erro de conexão', 'error');
+    } finally {
+        // Restaurar botão
+        if (btnEnviar) {
+            btnEnviar.innerHTML = originalText;
+            btnEnviar.disabled = false;
+        }
+    }
+}
+
+// ===== FUNÇÕES AUXILIARES =====
+function mostrarMensagem(elemento, texto, tipo) {
+    if (!elemento) return;
+    
+    elemento.textContent = texto;
+    elemento.className = `message ${tipo}`;
+    elemento.style.display = 'block';
+    
+    // Auto-esconder após 5 segundos
+    setTimeout(() => {
+        elemento.style.display = 'none';
+    }, 5000);
+}
+
+function mostrarMensagemGlobal(texto, tipo) {
+    // Criar elemento de mensagem global
+    const mensagemDiv = document.createElement('div');
+    mensagemDiv.className = `message ${tipo}`;
+    mensagemDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 3000;
+        max-width: 300px;
+        padding: 15px;
+        border-radius: 8px;
+        animation: slideInRight 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    `;
+    
+    // Cores baseadas no tipo
+    if (tipo === 'success') {
+        mensagemDiv.style.background = '#10b981';
+        mensagemDiv.style.color = 'white';
+        mensagemDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${texto}`;
+    } else if (tipo === 'error') {
+        mensagemDiv.style.background = '#ef4444';
+        mensagemDiv.style.color = 'white';
+        mensagemDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${texto}`;
+    } else if (tipo === 'info') {
+        mensagemDiv.style.background = '#3b82f6';
+        mensagemDiv.style.color = 'white';
+        mensagemDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${texto}`;
+    }
+    
+    document.body.appendChild(mensagemDiv);
+    
+    // Remover após 5 segundos
+    setTimeout(() => {
+        mensagemDiv.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => {
+            if (mensagemDiv.parentNode) {
+                mensagemDiv.parentNode.removeChild(mensagemDiv);
+            }
+        }, 300);
+    }, 5000);
+}
+
+// ===== INICIALIZAÇÃO =====
+async function verificarToken() {
     try {
-        const { telefone, senha } = req.body;
+        const token = localStorage.getItem('token_facilitaki');
+        if (!token) return false;
         
-        if (!telefone || !senha) {
-            return res.status(400).json({ 
-                success: false,
-                erro: 'Preencha todos os campos' 
-            });
-        }
-        
-        const telefoneLimpo = telefone.replace(/\D/g, '');
-        
-        // Buscar usuário
-        const usuario = await pool.query(
-            'SELECT * FROM usuarios WHERE telefone = $1',
-            [telefoneLimpo]
-        );
-        
-        if (usuario.rows.length === 0) {
-            return res.status(401).json({ 
-                success: false,
-                erro: 'Telefone ou senha incorretos' 
-            });
-        }
-        
-        // Verificar se usuário está ativo
-        if (!usuario.rows[0].ativo) {
-            return res.status(401).json({ 
-                success: false,
-                erro: 'Sua conta está desativada. Contate o administrador.' 
-            });
-        }
-        
-        // Verificar senha
-        const senhaValida = await bcrypt.compare(senha, usuario.rows[0].senha);
-        
-        if (!senhaValida) {
-            return res.status(401).json({ 
-                success: false,
-                erro: 'Telefone ou senha incorretos' 
-            });
-        }
-        
-        // Gerar token
-        const token = jwt.sign(
-            { 
-                id: usuario.rows[0].id,
-                nome: usuario.rows[0].nome,
-                telefone: usuario.rows[0].telefone
-            },
-            SECRET_KEY,
-            { expiresIn: '30d' }
-        );
-        
-        res.json({
-            success: true,
-            mensagem: 'Login realizado!',
-            token: token,
-            usuario: {
-                id: usuario.rows[0].id,
-                nome: usuario.rows[0].nome,
-                telefone: usuario.rows[0].telefone
+        const response = await fetch(`${API_URL}/api/verificar-token`, {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             }
         });
         
+        if (response.ok) {
+            const data = await response.json();
+            return data.success && data.valido;
+        }
+        return false;
     } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro: ' + error.message 
-        });
+        console.error("❌ Erro ao verificar token:", error);
+        return false;
     }
-});
+}
 
-// Criar pedido (rota original sem upload)
-app.post('/api/pedidos', autenticarToken, async (req, res) => {
+function inicializarApp() {
+    console.log('🚀 Inicializando Facilitaki...');
+    console.log('🌐 URL da API:', API_URL);
+    
+    // Verificar se há usuário logado
+    const usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
+    const tokenSalvo = localStorage.getItem('token_facilitaki');
+    
+    if (usuarioSalvo && tokenSalvo) {
+        try {
+            usuarioLogado = JSON.parse(usuarioSalvo);
+            console.log('👤 Usuário recuperado do localStorage:', usuarioLogado);
+            
+            const btnHeader = document.getElementById('btnLoginHeader');
+            if(btnHeader) {
+                btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+                btnHeader.setAttribute('onclick', 'navegarPara(\'dashboard\')');
+            }
+            
+            // Verificar se o token ainda é válido
+            setTimeout(async () => {
+                const tokenValido = await verificarToken();
+                if (!tokenValido) {
+                    console.log('❌ Token inválido, fazendo logout...');
+                    fazerLogout();
+                }
+            }, 1000);
+        } catch (e) {
+            console.error('❌ Erro ao parsear usuário:', e);
+            localStorage.removeItem('usuarioLogado_facilitaki');
+            localStorage.removeItem('token_facilitaki');
+        }
+    }
+    
+    // Configurar data mínima para campos de data
+    const hoje = new Date().toISOString().split('T')[0];
+    const campoPrazo = document.getElementById('prazoTrabalhoDetalhe');
+    if (campoPrazo) {
+        campoPrazo.min = hoje;
+    }
+    
+    // Configurar máscara para telefones
+    const camposTelefone = document.querySelectorAll('input[type="tel"]');
+    camposTelefone.forEach(campo => {
+        campo.addEventListener('input', function(e) {
+            let valor = e.target.value.replace(/\D/g, '');
+            if (valor.length > 0) {
+                valor = valor.substring(0, 9);
+                valor = valor.replace(/^(\d{2})(\d{3})(\d{4})$/, '$1 $2 $3');
+            }
+            e.target.value = valor;
+        });
+    });
+    
+    // Fechar modais ao clicar fora
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+    
+    // Adicionar CSS para animação
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOutRight {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Testar conexão com API
+    setTimeout(() => {
+        testarConexaoAPI();
+    }, 2000);
+    
+    console.log('✅ Facilitaki inicializado!');
+}
+
+// ===== FUNÇÕES DE DEBUG =====
+async function testarEndpoint(endpoint, data = null) {
     try {
-        console.log('📦 Criando pedido para usuário:', req.usuario.id);
+        const options = {
+            method: data ? 'POST' : 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        };
         
-        const {
-            cliente, telefone, instituicao, curso, cadeira,
-            tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
-        } = req.body;
-        
-        // Validação básica
-        if (!cliente || !telefone || !plano || !preco) {
-            return res.status(400).json({ 
-                success: false,
-                erro: 'Preencha: cliente, telefone, plano e preço' 
-            });
+        if (data) {
+            options.body = JSON.stringify(data);
         }
         
-        const telefoneLimpo = telefone.replace(/\D/g, '');
-        const precoNum = parseFloat(preco);
+        const response = await fetch(`${API_URL}${endpoint}`, options);
+        console.log(`🔗 ${endpoint}:`, response.status);
         
-        // Inserir pedido
-        const pedido = await pool.query(
-            `INSERT INTO pedidos (
-                usuario_id, cliente, telefone, instituicao, curso, cadeira, 
-                tema, descricao, prazo, plano, nome_plano, preco, metodo_pagamento
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING id, cliente, plano, preco, status, data_pedido`,
-            [
-                req.usuario.id,
-                cliente,
-                telefoneLimpo,
-                instituicao || null,
-                curso || null,
-                cadeira || null,
-                tema || null,
-                descricao || null,
-                prazo || null,
-                plano,
-                nomePlano || plano,
-                precoNum,
-                metodoPagamento || 'mpesa'
-            ]
-        );
-        
-        console.log('✅ Pedido criado! ID:', pedido.rows[0].id);
-        
-        res.json({
-            success: true,
-            mensagem: 'Pedido criado com sucesso!',
-            pedido: pedido.rows[0]
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro ao criar pedido:', error.message);
-        
-        if (error.message.includes('column')) {
-            return res.json({
-                success: false,
-                erro: 'Problema na tabela. Execute a correção:',
-                correcao_url: '/api/fix-pedidos'
-            });
+        if (response.ok) {
+            const result = await response.json();
+            console.log(`✅ ${endpoint} OK:`, result);
+            return { success: true, data: result };
+        } else {
+            console.error(`❌ ${endpoint} ERRO:`, response.status);
+            return { success: false, status: response.status };
         }
-        
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro: ' + error.message 
-        });
-    }
-});
-
-// Meus pedidos
-app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
-    try {
-        console.log('📋 Buscando pedidos do usuário:', req.usuario.id);
-        
-        const pedidos = await pool.query(
-            'SELECT * FROM pedidos WHERE usuario_id = $1 ORDER BY data_pedido DESC',
-            [req.usuario.id]
-        );
-        
-        console.log(`✅ Encontrados ${pedidos.rows.length} pedidos`);
-        
-        res.json({
-            success: true,
-            pedidos: pedidos.rows,
-            total: pedidos.rows.length
-        });
     } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro: ' + error.message 
+        console.error(`❌ ${endpoint} FALHA:`, error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+function debugAPI() {
+    console.log('🔧 DEBUG DA API:');
+    console.log('URL da API:', API_URL);
+    console.log('Usuário logado:', usuarioLogado);
+    console.log('Token:', localStorage.getItem('token_facilitaki'));
+    console.log('Carrinho:', carrinho);
+    
+    // Testa cada endpoint
+    console.log('🧪 Testando endpoints...');
+    testarEndpoint('/status');
+    
+    return 'Debug iniciado! Verifique o console.';
+}
+
+async function testarCriarPedido() {
+    console.log('🧪 Testando criação de pedido...');
+    
+    // Dados de teste
+    const pedidoTeste = {
+        cliente: "João Silva",
+        telefone: "841234567",
+        instituicao: "Universidade Teste",
+        curso: "Engenharia",
+        cadeira: "Matemática",
+        descricao: "Pedido de teste",
+        plano: "basico",
+        nomePlano: "Serviços Avulsos",
+        preco: 100,
+        metodoPagamento: "mpesa",
+        status: "pendente"
+    };
+    
+    console.log('📤 Enviando pedido de teste:', pedidoTeste);
+    
+    const resultado = await criarPedido(pedidoTeste);
+    
+    if (resultado.success) {
+        console.log('✅ Teste PASSADO! Pedido criado com ID:', resultado.pedido?.id);
+        mostrarMensagemGlobal('Teste: Pedido criado com sucesso!', 'success');
+    } else {
+        console.error('❌ Teste FALHOU:', resultado.error);
+        mostrarMensagemGlobal(`Teste falhou: ${resultado.error}`, 'error');
+    }
+    
+    return resultado;
+}
+
+// ===== INICIALIZAR QUANDO O DOCUMENTO CARREGAR =====
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM carregado, inicializando app...');
+    inicializarApp();
+    
+    // Adicionar evento de envio para formulários
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('📝 Formulário submetido:', this.id || this.className);
+        });
+    });
+    
+    // Adicionar eventos de drag & drop para upload
+    const uploadArea = document.getElementById('uploadArea');
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = '#e0f2fe';
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.background = '#f8fafc';
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = '#f8fafc';
+            
+            if (e.dataTransfer.files.length) {
+                document.getElementById('fileInput').files = e.dataTransfer.files;
+                handleFileSelect({ target: { files: e.dataTransfer.files } });
+            }
         });
     }
+    
+    console.log('✅ Tudo pronto!');
 });
 
-// Contato
-app.post('/api/contato', async (req, res) => {
-    try {
-        const { nome, telefone, email, mensagem } = req.body;
-        
-        if (!nome || !telefone || !mensagem) {
-            return res.status(400).json({ 
-                success: false,
-                erro: 'Preencha: nome, telefone e mensagem' 
-            });
-        }
-        
-        const telefoneLimpo = telefone.replace(/\D/g, '');
-        
-        await pool.query(
-            `INSERT INTO contatos (nome, telefone, email, mensagem)
-             VALUES ($1, $2, $3, $4)`,
-            [nome, telefoneLimpo, email || null, mensagem]
-        );
-        
-        console.log(`📨 Mensagem de contato recebida de: ${nome} (${telefoneLimpo})`);
-        
-        res.json({
-            success: true,
-            mensagem: 'Mensagem enviada!'
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro: ' + error.message 
-        });
+// ===== FUNÇÕES ADICIONAIS PARA MODAIS =====
+function mostrarTermos() {
+    alert('TERMOS DE SERVIÇO\n\n1. O serviço será iniciado após confirmação do pagamento de 50%.\n2. O prazo começa a contar após pagamento e envio de materiais.\n3. Garantimos 99,9% de taxa de aprovação.\n4. Sua privacidade é respeitada conforme a lei.');
+}
+
+function mostrarPrivacidade() {
+    alert('POLÍTICA DE PRIVACIDADE\n\n1. Seus dados são usados apenas para processar seu pedido.\n2. Não compartilhamos suas informações com terceiros.\n3. Você pode solicitar exclusão de seus dados a qualquer momento.\n4. Usamos criptografia para proteger suas informações.');
+}
+
+function fecharRecarga() {
+    const modal = document.getElementById('modalRecarga');
+    if (modal) {
+        modal.style.display = 'none';
     }
-});
+}
 
-// Verificar token
-app.get('/api/verificar-token', autenticarToken, (req, res) => {
-    res.json({
-        success: true,
-        valido: true,
-        usuario: req.usuario
-    });
-});
-
-// Usuário atual
-app.get('/api/usuario', autenticarToken, async (req, res) => {
-    try {
-        const result = await pool.query(
-            'SELECT id, nome, telefone, data_cadastro FROM usuarios WHERE id = $1',
-            [req.usuario.id]
-        );
-        
-        if (result.rows.length === 0) {
-            return res.status(404).json({ 
-                success: false,
-                erro: 'Usuário não encontrado' 
-            });
-        }
-        
-        res.json({
-            success: true,
-            usuario: result.rows[0]
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro ao buscar usuário:', error);
-        res.status(500).json({ 
-            success: false,
-            erro: 'Erro ao buscar usuário: ' + error.message 
-        });
+function processarRecarga() {
+    const valorInput = document.getElementById('valorRecarga');
+    const metodoSelect = document.getElementById('metodoRecarga');
+    
+    const valor = valorInput ? valorInput.value : 0;
+    const metodo = metodoSelect ? metodoSelect.value : '';
+    
+    if (valor < 50) {
+        mostrarMensagemGlobal('O valor mínimo para recarga é 50 MT', 'error');
+        return;
     }
-});
+    
+    if (!metodo) {
+        mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
+        return;
+    }
+    
+    mostrarMensagemGlobal(`Recarga de ${valor} MT via ${metodo.toUpperCase()} solicitada!`, 'success');
+    fecharRecarga();
+}
 
-// Logout
-app.post('/api/logout', autenticarToken, (req, res) => {
-    console.log(`👋 Usuário ${req.usuario.nome} fez logout`);
-    res.json({
-        success: true,
-        mensagem: 'Logout realizado com sucesso'
-    });
-});
+// ===== EXPORTAR FUNÇÕES PARA USO GLOBAL =====
+window.fazerLogin = fazerLogin;
+window.fazerCadastro = fazerCadastro;
+window.fazerLogout = fazerLogout;
+window.mostrarCadastro = mostrarCadastro;
+window.mostrarLogin = mostrarLogin;
+window.navegarPara = navegarPara;
+window.verificarELogar = verificarELogar;
+window.selecionarPlano = selecionarPlano;
+window.selecionarMetodo = selecionarMetodo;
+window.finalizarCompra = finalizarCompra;
+window.abrirDescricaoTrabalho = abrirDescricaoTrabalho;
+window.fecharModalDescricao = fecharModalDescricao;
+window.solicitarServicoComArquivo = solicitarServicoComArquivo;
+window.atualizarDashboard = atualizarDashboard;
+window.enviarContato = enviarContato;
+window.mostrarTermos = mostrarTermos;
+window.mostrarPrivacidade = mostrarPrivacidade;
+window.fecharRecarga = fecharRecarga;
+window.processarRecarga = processarRecarga;
+window.debugAPI = debugAPI;
+window.testarConexaoAPI = testarConexaoAPI;
+window.testarCriarPedido = testarCriarPedido;
+window.handleFileSelect = handleFileSelect;
+window.removerArquivo = removerArquivo;
 
-// ===== ROTAS PARA ARQUIVOS ESTÁTICOS =====
-app.get('/index.html', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
-});
-
-app.get('/style.css', (req, res) => {
-    res.sendFile(__dirname + '/style.css');
-});
-
-app.get('/script.js', (req, res) => {
-    res.sendFile(__dirname + '/script.js');
-});
-
-// ===== ROTA 404 =====
-app.use('*', (req, res) => {
-    res.status(404).json({
-        success: false,
-        erro: 'Rota não encontrada'
-    });
-});
-
-// ===== MIDDLEWARE DE ERROS =====
-app.use((err, req, res, next) => {
-    console.error('❌ ERRO INTERNO:', err.message);
-    console.error(err.stack);
-    res.status(500).json({
-        success: false,
-        erro: 'Erro interno do servidor'
-    });
-});
-
-// ===== INICIAR SERVIDOR =====
-const PORT = process.env.PORT || 10000;
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`
-    ╔═══════════════════════════════════════╗
-    ║       FACILITAKI - RENDER DEPLOY      ║
-    ╚═══════════════════════════════════════╝
-    📍 Porta: ${PORT}
-    🌐 URL: https://facilitaki.onrender.com
-    🚀 Versão: 6.0 - Funcional
-    ✅ Status: ONLINE
-    💾 Banco: PostgreSQL (Render) - CONECTADO
-    👨‍💼 Admin: /admin/pedidos?senha=admin2025
-    🏥 Health: /health
-    📤 Sistema: Pronto para uso!
-    `);
-});
-
-// Capturar erros não tratados
-process.on('uncaughtException', (error) => {
-    console.error('❌ Uncaught Exception:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-});
+console.log('🎯 Facilitaki carregado! API_URL:', API_URL);
+console.log('🛠️  Comandos disponíveis no console:');
+console.log('   • debugAPI() - Testar endpoints');
+console.log('   • testarCriarPedido() - Testar criação de pedido');
