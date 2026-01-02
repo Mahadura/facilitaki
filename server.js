@@ -23,12 +23,69 @@ app.use(cors({
 app.use(express.static(__dirname));
 
 // ===== CONFIGURAÇÃO DO BANCO DE DADOS RENDER =====
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-cu85gekf0os73f7ubm90-a.oregon-postgres.render.com/facilitaki_db';
 
 const pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
+
+// ===== FUNÇÃO PARA CORRIGIR TABELA USUARIOS =====
+async function corrigirTabelaUsuarios() {
+    try {
+        console.log('🛠️  Verificando tabela usuarios...');
+        
+        // Verificar se a tabela existe
+        const existe = await pool.query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'usuarios'
+            ) as existe
+        `);
+        
+        if (!existe.rows[0].existe) {
+            console.log('📦 Criando tabela usuarios completa...');
+            await pool.query(`
+                CREATE TABLE usuarios (
+                    id SERIAL PRIMARY KEY,
+                    nome VARCHAR(100) NOT NULL,
+                    telefone VARCHAR(20) UNIQUE NOT NULL,
+                    senha VARCHAR(255) NOT NULL,
+                    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ativo BOOLEAN DEFAULT TRUE,
+                    tipo_usuario VARCHAR(20) DEFAULT 'cliente'
+                )
+            `);
+            console.log('✅ Tabela usuarios criada!');
+            return true;
+        }
+        
+        // Verificar se a coluna tipo_usuario existe
+        const colunas = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'usuarios'
+        `);
+        
+        const colunasExistentes = colunas.rows.map(c => c.column_name);
+        
+        // Adicionar coluna tipo_usuario se não existir
+        if (!colunasExistentes.includes('tipo_usuario')) {
+            console.log('➕ Adicionando coluna tipo_usuario...');
+            await pool.query(`ALTER TABLE usuarios ADD COLUMN tipo_usuario VARCHAR(20) DEFAULT 'cliente'`);
+            console.log('✅ Coluna tipo_usuario adicionada!');
+            return true;
+        }
+        
+        console.log('✅ Tabela usuarios já está correta');
+        return false;
+        
+    } catch (error) {
+        console.error('❌ Erro ao corrigir tabela usuarios:', error.message);
+        return false;
+    }
+}
 
 // ===== FUNÇÃO PARA CORRIGIR TABELA PEDIDOS =====
 async function corrigirTabelaPedidos() {
@@ -142,18 +199,8 @@ async function inicializarBanco() {
     try {
         console.log('🔧 Inicializando banco de dados...');
         
-        // Criar tabela usuarios
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                nome VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) UNIQUE NOT NULL,
-                senha VARCHAR(255) NOT NULL,
-                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ativo BOOLEAN DEFAULT TRUE,
-                tipo_usuario VARCHAR(20) DEFAULT 'cliente'
-            )
-        `);
+        // Corrigir tabela usuarios
+        await corrigirTabelaUsuarios();
         
         // Corrigir tabela pedidos
         await corrigirTabelaPedidos();
@@ -312,6 +359,35 @@ app.get('/api/fix-pedidos', async (req, res) => {
     }
 });
 
+// 4. CORREÇÃO DA TABELA USUARIOS
+app.get('/api/fix-usuarios', async (req, res) => {
+    try {
+        console.log('🔧 Executando correção da tabela usuarios...');
+        const corrigido = await corrigirTabelaUsuarios();
+        
+        // Verificar estrutura após correção
+        const estrutura = await pool.query(`
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'usuarios' 
+            ORDER BY ordinal_position
+        `);
+        
+        res.json({
+            success: true,
+            corrigido: corrigido,
+            mensagem: corrigido ? 'Tabela corrigida com sucesso!' : 'Tabela já estava correta',
+            estrutura: estrutura.rows,
+            colunas_totais: estrutura.rows.length
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            erro: error.message 
+        });
+    }
+});
+
 // ===== ROTA SIMPLIFICADA PARA UPLOAD (SÓ REGISTRA PEDIDO) =====
 app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
     try {
@@ -445,12 +521,40 @@ app.get('/admin/pedidos', async (req, res) => {
             ORDER BY p.data_pedido DESC
         `);
         
-        // Buscar todos usuários
-        const usuarios = await pool.query(`
-            SELECT id, nome, telefone, data_cadastro, ativo, tipo_usuario 
-            FROM usuarios 
-            ORDER BY data_cadastro DESC
-        `);
+        // Buscar todos usuários (com tipo_usuario se existir)
+        let usuarios;
+        try {
+            // Verificar se a coluna tipo_usuario existe
+            const verificarColuna = await pool.query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'usuarios' 
+                AND column_name = 'tipo_usuario'
+            `);
+            
+            if (verificarColuna.rows.length > 0) {
+                // Coluna existe, incluir na consulta
+                usuarios = await pool.query(`
+                    SELECT id, nome, telefone, data_cadastro, ativo, tipo_usuario 
+                    FROM usuarios 
+                    ORDER BY data_cadastro DESC
+                `);
+            } else {
+                // Coluna não existe, consulta sem ela
+                usuarios = await pool.query(`
+                    SELECT id, nome, telefone, data_cadastro, ativo 
+                    FROM usuarios 
+                    ORDER BY data_cadastro DESC
+                `);
+            }
+        } catch (e) {
+            // Em caso de erro, usar consulta básica
+            usuarios = await pool.query(`
+                SELECT id, nome, telefone, data_cadastro, ativo 
+                FROM usuarios 
+                ORDER BY data_cadastro DESC
+            `);
+        }
         
         // Buscar contatos
         const contatos = await pool.query(`
@@ -1561,11 +1665,14 @@ app.listen(PORT, '0.0.0.0', () => {
     ╚═══════════════════════════════════════╝
     📍 Porta: ${PORT}
     🌐 URL: https://facilitaki.onrender.com
-    🚀 Versão: 7.0 - Testada e Funcional
+    🚀 Versão: 7.1 - Com correção de tabelas
     ✅ Status: ONLINE
     💾 Banco: PostgreSQL (Render) - CONECTADO
     👨‍💼 Admin: /admin/pedidos?senha=admin2025
     🏥 Health: /health
+    🛠️  Correções: 
+        • /api/fix-usuarios
+        • /api/fix-pedidos
     📤 Sistema: Pronto para uso!
     `);
 });
