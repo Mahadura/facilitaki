@@ -4,9 +4,51 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
+
+// Configurar uploads
+const UPLOADS_DIR = 'uploads';
+if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Configuração do multer para upload de arquivos
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, UPLOADS_DIR);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, 'pedido-' + uniqueSuffix + ext);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: function (req, file, cb) {
+        const allowedTypes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain',
+            'image/jpeg',
+            'image/png',
+            'image/gif'
+        ];
+        
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Tipo de arquivo não suportado. Use PDF, DOC, DOCX, TXT, JPG, PNG.'));
+        }
+    }
+});
 
 // Middlewares essenciais
 app.use(express.json());
@@ -21,6 +63,7 @@ app.use(cors({
 
 // Servir arquivos estáticos
 app.use(express.static(__dirname));
+app.use('/uploads', express.static('uploads'));
 
 // ===== CONFIGURAÇÃO DO BANCO DE DADOS RENDER =====
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-cu85gekf0os73f7ubm90-a.oregon-postgres.render.com/facilitaki_db';
@@ -35,7 +78,6 @@ async function corrigirTabelaUsuarios() {
     try {
         console.log('🛠️  Verificando tabela usuarios...');
         
-        // Verificar se a tabela existe
         const existe = await pool.query(`
             SELECT EXISTS (
                 SELECT 1 FROM information_schema.tables 
@@ -61,7 +103,6 @@ async function corrigirTabelaUsuarios() {
             return true;
         }
         
-        // Verificar se a coluna tipo_usuario existe
         const colunas = await pool.query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -70,7 +111,6 @@ async function corrigirTabelaUsuarios() {
         
         const colunasExistentes = colunas.rows.map(c => c.column_name);
         
-        // Adicionar coluna tipo_usuario se não existir
         if (!colunasExistentes.includes('tipo_usuario')) {
             console.log('➕ Adicionando coluna tipo_usuario...');
             await pool.query(`ALTER TABLE usuarios ADD COLUMN tipo_usuario VARCHAR(20) DEFAULT 'cliente'`);
@@ -92,7 +132,6 @@ async function corrigirTabelaPedidos() {
     try {
         console.log('🛠️  Verificando tabela pedidos...');
         
-        // Verificar se a tabela existe
         const existe = await pool.query(`
             SELECT EXISTS (
                 SELECT 1 FROM information_schema.tables 
@@ -121,7 +160,10 @@ async function corrigirTabelaPedidos() {
                     metodo_pagamento VARCHAR(50),
                     status VARCHAR(20) DEFAULT 'pendente',
                     data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    arquivos TEXT,
+                    arquivo_nome VARCHAR(255),
+                    arquivo_caminho VARCHAR(500),
+                    arquivo_tamanho INTEGER,
+                    arquivo_tipo VARCHAR(100),
                     observacoes_admin TEXT
                 )
             `);
@@ -129,7 +171,6 @@ async function corrigirTabelaPedidos() {
             return true;
         }
         
-        // Verificar colunas faltantes
         const colunas = await pool.query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -141,12 +182,11 @@ async function corrigirTabelaPedidos() {
             'id', 'usuario_id', 'cliente', 'telefone', 'instituicao', 
             'curso', 'cadeira', 'tema', 'descricao', 'prazo', 'plano', 
             'nome_plano', 'preco', 'metodo_pagamento', 'status', 'data_pedido',
-            'arquivos', 'observacoes_admin'
+            'arquivo_nome', 'arquivo_caminho', 'arquivo_tamanho', 'arquivo_tipo', 'observacoes_admin'
         ];
         
         let corrigido = false;
         
-        // Adicionar colunas faltantes
         for (const coluna of colunasNecessarias) {
             if (!colunasExistentes.includes(coluna)) {
                 console.log(`➕ Adicionando coluna ${coluna}...`);
@@ -163,12 +203,14 @@ async function corrigirTabelaPedidos() {
                 if (coluna === 'metodo_pagamento') tipo = 'VARCHAR(50)';
                 if (coluna === 'status') tipo = 'VARCHAR(20)';
                 if (coluna === 'data_pedido') tipo = 'TIMESTAMP';
-                if (coluna === 'arquivos') tipo = 'TEXT';
+                if (coluna === 'arquivo_nome') tipo = 'VARCHAR(255)';
+                if (coluna === 'arquivo_caminho') tipo = 'VARCHAR(500)';
+                if (coluna === 'arquivo_tamanho') tipo = 'INTEGER';
+                if (coluna === 'arquivo_tipo') tipo = 'VARCHAR(100)';
                 if (coluna === 'observacoes_admin') tipo = 'TEXT';
                 
                 await pool.query(`ALTER TABLE pedidos ADD COLUMN ${coluna} ${tipo}`);
                 
-                // Adicionar defaults
                 if (coluna === 'status') {
                     await pool.query(`ALTER TABLE pedidos ALTER COLUMN status SET DEFAULT 'pendente'`);
                 }
@@ -199,13 +241,9 @@ async function inicializarBanco() {
     try {
         console.log('🔧 Inicializando banco de dados...');
         
-        // Corrigir tabela usuarios
         await corrigirTabelaUsuarios();
-        
-        // Corrigir tabela pedidos
         await corrigirTabelaPedidos();
         
-        // Criar tabela contatos
         await pool.query(`
             CREATE TABLE IF NOT EXISTS contatos (
                 id SERIAL PRIMARY KEY,
@@ -269,8 +307,6 @@ app.get('/health', (req, res) => {
 });
 
 // ===== ROTAS DE DIAGNÓSTICO =====
-
-// 1. Status geral
 app.get('/status', async (req, res) => {
     try {
         const dbTest = await pool.query('SELECT NOW() as hora');
@@ -278,7 +314,7 @@ app.get('/status', async (req, res) => {
             success: true,
             mensagem: 'Facilitaki Online',
             hora: dbTest.rows[0].hora,
-            versao: '7.2',
+            versao: '8.0',
             painel_admin: '/admin/pedidos?senha=admin2025'
         });
     } catch (error) {
@@ -286,161 +322,44 @@ app.get('/status', async (req, res) => {
     }
 });
 
-// 2. Debug do banco
-app.get('/api/debug/db', async (req, res) => {
+// ===== ROTA PARA UPLOAD DE ARQUIVO REAL =====
+app.post('/api/pedidos/upload-completo', autenticarToken, upload.single('arquivo'), async (req, res) => {
     try {
-        const hora = await pool.query('SELECT NOW() as hora');
-        const tabelas = await pool.query(`
-            SELECT table_name FROM information_schema.tables 
-            WHERE table_schema = 'public' ORDER BY table_name
-        `);
+        console.log('📤 Recebendo pedido completo com arquivo...');
         
-        // Estrutura da tabela pedidos
-        let estruturaPedidos = [];
-        try {
-            estruturaPedidos = await pool.query(`
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = 'pedidos' 
-                ORDER BY ordinal_position
-            `);
-        } catch (e) {
-            estruturaPedidos = { rows: [] };
-        }
-        
-        // Contagens
-        const usuarios = await pool.query('SELECT COUNT(*) as total FROM usuarios');
-        const pedidos = await pool.query('SELECT COUNT(*) as total FROM pedidos');
-        const contatos = await pool.query('SELECT COUNT(*) as total FROM contatos');
-        
-        res.json({
-            success: true,
-            hora: hora.rows[0].hora,
-            tabelas: tabelas.rows,
-            estrutura_pedidos: estruturaPedidos.rows,
-            contagens: {
-                usuarios: parseInt(usuarios.rows[0].total),
-                pedidos: parseInt(pedidos.rows[0].total),
-                contatos: parseInt(contatos.rows[0].total)
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
-    }
-});
-
-// 3. CORREÇÃO DA TABELA PEDIDOS
-app.get('/api/fix-pedidos', async (req, res) => {
-    try {
-        console.log('🔧 Executando correção da tabela pedidos...');
-        const corrigido = await corrigirTabelaPedidos();
-        
-        // Verificar estrutura após correção
-        const estrutura = await pool.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'pedidos' 
-            ORDER BY ordinal_position
-        `);
-        
-        res.json({
-            success: true,
-            corrigido: corrigido,
-            mensagem: corrigido ? 'Tabela corrigida com sucesso!' : 'Tabela já estava correta',
-            estrutura: estrutura.rows,
-            colunas_totais: estrutura.rows.length,
-            instrucao: 'Agora tente criar um pedido!'
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// 4. CORREÇÃO DA TABELA USUARIOS
-app.get('/api/fix-usuarios', async (req, res) => {
-    try {
-        console.log('🔧 Executando correção da tabela usuarios...');
-        const corrigido = await corrigirTabelaUsuarios();
-        
-        // Verificar estrutura após correção
-        const estrutura = await pool.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'usuarios' 
-            ORDER BY ordinal_position
-        `);
-        
-        res.json({
-            success: true,
-            corrigido: corrigido,
-            mensagem: corrigido ? 'Tabela corrigida com sucesso!' : 'Tabela já estava correta',
-            estrutura: estrutura.rows,
-            colunas_totais: estrutura.rows.length
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            erro: error.message 
-        });
-    }
-});
-
-// ===== ROTA SIMPLIFICADA PARA UPLOAD (SÓ REGISTRA PEDIDO) =====
-app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
-    try {
-        console.log('📤 Recebendo pedido simplificado...');
-        
-        // Extrair dados do corpo JSON
         const {
             cliente, telefone, instituicao, curso, cadeira,
             tema, descricao, prazo, plano, nomePlano, preco, metodoPagamento
         } = req.body;
         
-        console.log('📝 Dados recebidos:', {
-            cliente: !!cliente,
-            telefone: !!telefone,
-            plano: !!plano,
-            preco: !!preco,
-            metodoPagamento: !!metodoPagamento,
-            todos: req.body
-        });
-        
-        // Validação básica
         if (!cliente || !telefone || !plano || !preco || !metodoPagamento) {
+            if (req.file) {
+                fs.unlinkSync(req.file.path);
+            }
             return res.status(400).json({ 
                 success: false,
-                erro: 'Preencha: cliente, telefone, plano, preço e método de pagamento',
-                debug: {
-                    cliente: cliente,
-                    telefone: telefone,
-                    plano: plano,
-                    preco: preco,
-                    metodoPagamento: metodoPagamento
-                }
+                erro: 'Preencha: cliente, telefone, plano, preço e método de pagamento'
+            });
+        }
+        
+        if (!req.file) {
+            return res.status(400).json({ 
+                success: false,
+                erro: 'Arquivo é obrigatório' 
             });
         }
         
         const telefoneLimpo = telefone.replace(/\D/g, '');
         const precoNum = parseFloat(preco);
         
-        // Informações do arquivo (simulado)
-        const infoArquivo = {
-            nota: 'Arquivo será enviado por WhatsApp após pagamento',
-            data_registro: new Date().toISOString(),
-            status: 'pendente_upload'
-        };
-        
-        // Inserir pedido no banco de dados
+        // Inserir pedido com arquivo
         const pedido = await pool.query(
             `INSERT INTO pedidos (
                 usuario_id, cliente, telefone, instituicao, curso, cadeira, 
                 tema, descricao, prazo, plano, nome_plano, preco, metodo_pagamento,
-                arquivos, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-            RETURNING id, cliente, plano, preco, status, data_pedido`,
+                arquivo_nome, arquivo_caminho, arquivo_tamanho, arquivo_tipo, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            RETURNING id, cliente, plano, preco, status, data_pedido, arquivo_nome`,
             [
                 req.usuario.id,
                 cliente,
@@ -455,22 +374,33 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
                 nomePlano || plano,
                 precoNum,
                 metodoPagamento,
-                JSON.stringify(infoArquivo),
+                req.file.originalname,
+                req.file.path,
+                req.file.size,
+                req.file.mimetype,
                 'pendente'
             ]
         );
         
-        console.log('✅ Pedido criado com sucesso! ID:', pedido.rows[0].id);
+        console.log('✅ Pedido criado com arquivo! ID:', pedido.rows[0].id);
         
         res.json({
             success: true,
-            mensagem: 'Pedido criado com sucesso!',
+            mensagem: 'Pedido criado com arquivo!',
             pedido: pedido.rows[0],
-            instrucao: 'Após pagamento, envie o arquivo para WhatsApp: 86 728 6665'
+            arquivo: {
+                nome: req.file.originalname,
+                tamanho: req.file.size,
+                tipo: req.file.mimetype
+            },
+            instrucao: 'Após pagamento, envie comprovativo para WhatsApp: 86 728 6665'
         });
         
     } catch (error) {
-        console.error('❌ Erro ao criar pedido:', error.message);
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        console.error('❌ Erro ao criar pedido com arquivo:', error.message);
         res.status(500).json({ 
             success: false,
             erro: 'Erro: ' + error.message 
@@ -478,7 +408,162 @@ app.post('/api/pedidos/upload', autenticarToken, async (req, res) => {
     }
 });
 
-// ===== ROTA ADMIN - VER TODOS PEDIDOS =====
+// ===== ROTA PARA BAIXAR ARQUIVO (USUÁRIO) =====
+app.get('/api/pedidos/download/:pedidoId', autenticarToken, async (req, res) => {
+    try {
+        const { pedidoId } = req.params;
+        
+        const resultado = await pool.query(
+            'SELECT arquivo_nome, arquivo_caminho, arquivo_tipo FROM pedidos WHERE id = $1 AND usuario_id = $2',
+            [pedidoId, req.usuario.id]
+        );
+        
+        if (resultado.rows.length === 0) {
+            return res.status(404).json({ success: false, erro: 'Pedido não encontrado' });
+        }
+        
+        const arquivo = resultado.rows[0];
+        
+        if (!arquivo.arquivo_caminho || !fs.existsSync(arquivo.arquivo_caminho)) {
+            return res.status(404).json({ success: false, erro: 'Arquivo não encontrado' });
+        }
+        
+        res.download(arquivo.arquivo_caminho, arquivo.arquivo_nome);
+        
+    } catch (error) {
+        res.status(500).json({ success: false, erro: error.message });
+    }
+});
+
+// ===== ROTA ADMIN - BAIXAR ARQUIVO =====
+app.get('/api/admin/download-arquivo', async (req, res) => {
+    const { senha, pedido } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.status(401).json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        const resultado = await pool.query(
+            'SELECT arquivo_nome, arquivo_caminho FROM pedidos WHERE id = $1',
+            [pedido]
+        );
+        
+        if (resultado.rows.length === 0) {
+            return res.status(404).json({ success: false, erro: 'Pedido não encontrado' });
+        }
+        
+        const arquivo = resultado.rows[0];
+        
+        if (!arquivo.arquivo_caminho || !fs.existsSync(arquivo.arquivo_caminho)) {
+            return res.status(404).json({ success: false, erro: 'Arquivo físico não encontrado' });
+        }
+        
+        res.download(arquivo.arquivo_caminho, arquivo.arquivo_nome);
+        
+    } catch (error) {
+        res.status(500).json({ success: false, erro: error.message });
+    }
+});
+
+// ===== ROTA ADMIN - VISUALIZAR ARQUIVO =====
+app.get('/api/admin/visualizar-arquivo', async (req, res) => {
+    const { senha, pedido } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.status(401).json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        const resultado = await pool.query(
+            'SELECT arquivo_nome, arquivo_caminho, arquivo_tipo FROM pedidos WHERE id = $1',
+            [pedido]
+        );
+        
+        if (resultado.rows.length === 0) {
+            return res.status(404).json({ success: false, erro: 'Pedido não encontrado' });
+        }
+        
+        const arquivo = resultado.rows[0];
+        
+        if (!arquivo.arquivo_caminho || !fs.existsSync(arquivo.arquivo_caminho)) {
+            return res.status(404).json({ success: false, erro: 'Arquivo físico não encontrado' });
+        }
+        
+        // Determinar tipo de conteúdo
+        let contentType = 'application/octet-stream';
+        if (arquivo.arquivo_tipo) {
+            contentType = arquivo.arquivo_tipo;
+        } else if (arquivo.arquivo_nome) {
+            const ext = path.extname(arquivo.arquivo_nome).toLowerCase();
+            if (ext === '.pdf') contentType = 'application/pdf';
+            if (ext === '.doc') contentType = 'application/msword';
+            if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            if (ext === '.txt') contentType = 'text/plain';
+            if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+            if (ext === '.png') contentType = 'image/png';
+        }
+        
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${arquivo.arquivo_nome}"`);
+        
+        const fileStream = fs.createReadStream(arquivo.arquivo_caminho);
+        fileStream.pipe(res);
+        
+    } catch (error) {
+        res.status(500).json({ success: false, erro: error.message });
+    }
+});
+
+// ===== ROTA ADMIN - EXCLUIR APENAS ARQUIVO =====
+app.get('/api/admin/excluir-arquivo', async (req, res) => {
+    const { senha, pedido } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        // Buscar informações do arquivo
+        const resultado = await pool.query(
+            'SELECT arquivo_caminho FROM pedidos WHERE id = $1', 
+            [pedido]
+        );
+        
+        if (resultado.rows.length === 0) {
+            return res.json({ success: false, erro: 'Pedido não encontrado' });
+        }
+        
+        const caminhoArquivo = resultado.rows[0].arquivo_caminho;
+        
+        if (caminhoArquivo && fs.existsSync(caminhoArquivo)) {
+            // Excluir arquivo físico
+            fs.unlinkSync(caminhoArquivo);
+            console.log('🗑️  Arquivo excluído:', caminhoArquivo);
+        }
+        
+        // Limpar campos do arquivo no banco
+        await pool.query(
+            `UPDATE pedidos SET 
+                arquivo_nome = NULL,
+                arquivo_caminho = NULL,
+                arquivo_tamanho = NULL,
+                arquivo_tipo = NULL
+            WHERE id = $1`,
+            [pedido]
+        );
+        
+        res.json({ 
+            success: true, 
+            mensagem: 'Arquivo excluído (pedido mantido)' 
+        });
+        
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+// ===== ROTA ADMIN - VER TODOS PEDIDOS (ATUALIZADA) =====
 app.get('/admin/pedidos', async (req, res) => {
     const { senha } = req.query;
     
@@ -513,48 +598,10 @@ app.get('/admin/pedidos', async (req, res) => {
             SELECT 
                 p.*, 
                 u.nome as usuario_nome, 
-                u.telefone as usuario_telefone,
-                u.data_cadastro as usuario_data_cadastro,
-                u.ativo as usuario_ativo
+                u.telefone as usuario_telefone
             FROM pedidos p
             LEFT JOIN usuarios u ON p.usuario_id = u.id
             ORDER BY p.data_pedido DESC
-        `);
-        
-        // Buscar todos usuários (com tipo_usuario se existir)
-        let usuarios;
-        try {
-            const verificarColuna = await pool.query(`
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'usuarios' 
-                AND column_name = 'tipo_usuario'
-            `);
-            
-            if (verificarColuna.rows.length > 0) {
-                usuarios = await pool.query(`
-                    SELECT id, nome, telefone, data_cadastro, ativo, tipo_usuario 
-                    FROM usuarios 
-                    ORDER BY data_cadastro DESC
-                `);
-            } else {
-                usuarios = await pool.query(`
-                    SELECT id, nome, telefone, data_cadastro, ativo 
-                    FROM usuarios 
-                    ORDER BY data_cadastro DESC
-                `);
-            }
-        } catch (e) {
-            usuarios = await pool.query(`
-                SELECT id, nome, telefone, data_cadastro, ativo 
-                FROM usuarios 
-                ORDER BY data_cadastro DESC
-            `);
-        }
-        
-        // Buscar contatos
-        const contatos = await pool.query(`
-            SELECT * FROM contatos ORDER BY data_contato DESC
         `);
         
         // Calcular totais
@@ -562,23 +609,17 @@ app.get('/admin/pedidos', async (req, res) => {
             SELECT 
                 COUNT(*) as total_pedidos,
                 SUM(preco) as valor_total,
-                AVG(preco) as media_valor
+                AVG(preco) as media_valor,
+                COUNT(CASE WHEN arquivo_nome IS NOT NULL THEN 1 END) as total_com_arquivos
             FROM pedidos
         `);
         
-        // Contar pedidos com arquivos
-        const pedidosComArquivos = await pool.query(`
-            SELECT COUNT(*) as total 
-            FROM pedidos 
-            WHERE arquivos IS NOT NULL AND arquivos != 'null' AND arquivos != ''
-        `);
-        
-        // Gerar HTML simples
+        // Gerar HTML
         let html = `
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Admin Facilitaki</title>
+                <title>Admin Facilitaki - Gestão de Arquivos</title>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
@@ -591,7 +632,7 @@ app.get('/admin/pedidos', async (req, res) => {
                     }
                     
                     .container {
-                        max-width: 1200px;
+                        max-width: 1400px;
                         margin: 0 auto;
                         background: white;
                         border-radius: 10px;
@@ -614,47 +655,12 @@ app.get('/admin/pedidos', async (req, res) => {
                         gap: 10px;
                     }
                     
-                    .tabs {
-                        display: flex;
-                        background: #f1f5f9;
-                        border-bottom: 1px solid #e5e7eb;
-                        flex-wrap: wrap;
-                    }
-                    
-                    .tab {
-                        padding: 12px 20px;
-                        cursor: pointer;
-                        font-weight: 500;
-                        color: #6b7280;
-                        border-bottom: 3px solid transparent;
-                    }
-                    
-                    .tab:hover {
-                        background: #e5e7eb;
-                    }
-                    
-                    .tab.active {
-                        background: white;
-                        color: #1e40af;
-                        border-bottom: 3px solid #3b82f6;
-                    }
-                    
-                    .tab-content {
-                        display: none;
-                        padding: 20px;
-                    }
-                    
-                    .tab-content.active {
-                        display: block;
-                    }
-                    
                     .stats {
                         display: grid;
                         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
                         gap: 15px;
                         padding: 20px;
                         background: #f8fafc;
-                        margin-bottom: 20px;
                     }
                     
                     .stat-card {
@@ -681,7 +687,6 @@ app.get('/admin/pedidos', async (req, res) => {
                         width: 100%;
                         border-collapse: collapse;
                         font-size: 14px;
-                        margin-bottom: 20px;
                     }
                     
                     th {
@@ -696,6 +701,7 @@ app.get('/admin/pedidos', async (req, res) => {
                     td {
                         padding: 10px;
                         border-bottom: 1px solid #e5e7eb;
+                        vertical-align: middle;
                     }
                     
                     tr:hover {
@@ -715,7 +721,6 @@ app.get('/admin/pedidos', async (req, res) => {
                     .badge.andamento { background: #dbeafe; color: #1e40af; }
                     .badge.concluido { background: #ede9fe; color: #5b21b6; }
                     .badge.cancelado { background: #fee2e2; color: #991b1b; }
-                    .badge.arquivo { background: #dbeafe; color: #1e40af; }
                     
                     .btn {
                         display: inline-block;
@@ -728,6 +733,7 @@ app.get('/admin/pedidos', async (req, res) => {
                         cursor: pointer;
                         font-size: 12px;
                         margin: 2px;
+                        text-align: center;
                     }
                     
                     .btn:hover { background: #2563eb; }
@@ -742,14 +748,43 @@ app.get('/admin/pedidos', async (req, res) => {
                     .btn-file { background: #8b5cf6; }
                     .btn-file:hover { background: #7c3aed; }
                     
-                    .actions {
+                    .arquivo-actions {
                         display: flex;
                         gap: 5px;
                         flex-wrap: wrap;
                     }
                     
+                    .file-preview {
+                        background: #f8fafc;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 6px;
+                        padding: 10px;
+                        margin: 5px 0;
+                        font-size: 12px;
+                    }
+                    
+                    .file-preview .file-name {
+                        font-weight: bold;
+                        color: #1e40af;
+                        margin-bottom: 3px;
+                        word-break: break-all;
+                    }
+                    
+                    .file-preview .file-details {
+                        color: #6b7280;
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 10px;
+                    }
+                    
+                    .file-preview .file-details span {
+                        display: flex;
+                        align-items: center;
+                        gap: 3px;
+                    }
+                    
                     .search-box {
-                        margin-bottom: 15px;
+                        margin: 20px;
                         display: flex;
                         gap: 10px;
                     }
@@ -762,66 +797,13 @@ app.get('/admin/pedidos', async (req, res) => {
                         font-size: 14px;
                     }
                     
-                    .admin-section {
-                        margin-top: 30px;
-                        padding: 20px;
-                        background: #f8fafc;
-                        border-radius: 8px;
-                        border: 1px solid #e5e7eb;
-                    }
-                    
-                    .admin-section h3 {
-                        margin-bottom: 15px;
-                        color: #1e40af;
-                    }
-                    
-                    /* Modal para visualizar arquivos */
-                    .modal-arquivo {
-                        display: none;
-                        position: fixed;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(0,0,0,0.8);
-                        z-index: 3000;
-                        align-items: center;
-                        justify-content: center;
-                    }
-                    
-                    .modal-arquivo-content {
-                        background: white;
-                        border-radius: 10px;
-                        padding: 30px;
-                        max-width: 600px;
-                        width: 90%;
-                        max-height: 80vh;
-                        overflow-y: auto;
-                    }
-                    
-                    .arquivo-info {
-                        background: #f0f9ff;
-                        padding: 15px;
-                        border-radius: 8px;
-                        margin: 15px 0;
-                        border: 1px solid #bfdbfe;
-                    }
-                    
-                    .arquivo-detalhes h4 {
-                        color: #1e40af;
-                        margin-bottom: 10px;
-                        display: flex;
-                        align-items: center;
-                        gap: 10px;
-                    }
-                    
                     @media (max-width: 768px) {
                         .header { padding: 15px; }
                         .header h1 { font-size: 20px; }
-                        .tab { padding: 10px; flex: 1; text-align: center; }
                         table { font-size: 12px; }
                         th, td { padding: 8px; }
-                        .actions { flex-direction: column; }
+                        .arquivo-actions { flex-direction: column; }
+                        .btn { width: 100%; margin: 2px 0; }
                     }
                 </style>
                 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -829,7 +811,7 @@ app.get('/admin/pedidos', async (req, res) => {
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1><i class="fas fa-chart-line"></i> Painel Administrativo - Facilitaki</h1>
+                        <h1><i class="fas fa-file-alt"></i> Painel Administrativo - Gestão de Arquivos</h1>
                     </div>
                     
                     <div class="stats">
@@ -842,28 +824,20 @@ app.get('/admin/pedidos', async (req, res) => {
                             <div class="stat-value">${(totais.rows[0]?.valor_total || 0).toLocaleString('pt-MZ')} MT</div>
                         </div>
                         <div class="stat-card">
+                            <div class="stat-label">Com Arquivos</div>
+                            <div class="stat-value">${totais.rows[0]?.total_com_arquivos || 0}</div>
+                        </div>
+                        <div class="stat-card">
                             <div class="stat-label">Valor Médio</div>
                             <div class="stat-value">${Math.round(totais.rows[0]?.media_valor || 0).toLocaleString('pt-MZ')} MT</div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Com Arquivos</div>
-                            <div class="stat-value">${pedidosComArquivos.rows[0]?.total || 0}</div>
-                        </div>
                     </div>
                     
-                    <div class="tabs">
-                        <div class="tab active" onclick="abrirTab('pedidos')"><i class="fas fa-shopping-cart"></i> Pedidos</div>
-                        <div class="tab" onclick="abrirTab('usuarios')"><i class="fas fa-users"></i> Usuários</div>
-                        <div class="tab" onclick="abrirTab('contatos')"><i class="fas fa-envelope"></i> Contatos</div>
-                        <div class="tab" onclick="abrirTab('arquivos')"><i class="fas fa-file"></i> Arquivos</div>
+                    <div class="search-box">
+                        <input type="text" id="buscarPedido" placeholder="Buscar por cliente, telefone, serviço..." onkeyup="buscarPedidos()">
                     </div>
                     
-                    <!-- TAB PEDIDOS -->
-                    <div id="tab-pedidos" class="tab-content active">
-                        <div class="search-box">
-                            <input type="text" id="buscarPedido" placeholder="Buscar pedido..." onkeyup="buscarPedidos()">
-                        </div>
-                        
+                    <div style="overflow-x: auto;">
                         <table id="tabelaPedidos">
                             <thead>
                                 <tr>
@@ -879,122 +853,70 @@ app.get('/admin/pedidos', async (req, res) => {
                             </thead>
                             <tbody>`;
         
+        // Função para formatar tamanho
+        function formatarTamanho(bytes) {
+            if (!bytes) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
         // Adicionar cada pedido à tabela
         pedidos.rows.forEach(pedido => {
             const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
             const statusClass = pedido.status ? pedido.status.toLowerCase().replace(' ', '-') : 'pendente';
-            
-            // Verificar se tem arquivo
-            const temArquivo = pedido.arquivos && pedido.arquivos !== 'null' && pedido.arquivos !== '';
-            let arquivoInfo = {};
-            
-            if (temArquivo) {
-                try {
-                    arquivoInfo = JSON.parse(pedido.arquivos);
-                } catch (e) {
-                    arquivoInfo = { nota: 'Arquivo anexado' };
-                }
-            }
+            const temArquivo = pedido.arquivo_nome && pedido.arquivo_caminho;
             
             html += `
                 <tr>
                     <td><strong>#${pedido.id}</strong></td>
-                    <td>${dataPedido.toLocaleDateString('pt-MZ')}</td>
+                    <td>${dataPedido.toLocaleDateString('pt-MZ')}<br>
+                        <small>${dataPedido.toLocaleTimeString('pt-MZ')}</small>
+                    </td>
                     <td>
                         <strong>${pedido.cliente || 'Não informado'}</strong><br>
                         <small>${pedido.telefone || 'Não informado'}</small>
+                        ${pedido.usuario_nome ? `<br><small><i class="fas fa-user"></i> ${pedido.usuario_nome}</small>` : ''}
                     </td>
                     <td>${pedido.nome_plano || pedido.plano || 'Serviço'}</td>
                     <td><strong>${pedido.preco ? pedido.preco.toLocaleString('pt-MZ') : '0'} MT</strong></td>
                     <td><span class="badge ${statusClass}">${pedido.status || 'pendente'}</span></td>
                     <td>
                         ${temArquivo ? 
-                            `<button onclick="visualizarArquivo(${pedido.id}, '${pedido.cliente || ''}', '${pedido.nome_plano || pedido.plano || ''}')" class="btn btn-file">
-                                <i class="fas fa-file"></i> Ver Arquivo
-                            </button>` 
-                            : '<span style="color: #9ca3af;">Nenhum</span>'
+                            `<div class="file-preview">
+                                <div class="file-name">
+                                    <i class="fas fa-file"></i> ${pedido.arquivo_nome}
+                                </div>
+                                <div class="file-details">
+                                    <span><i class="fas fa-hdd"></i> ${formatarTamanho(pedido.arquivo_tamanho)}</span>
+                                    <span><i class="fas fa-file-alt"></i> ${pedido.arquivo_tipo || 'Tipo desconhecido'}</span>
+                                </div>
+                            </div>` 
+                            : '<span style="color: #9ca3af; font-style: italic;">Sem arquivo</span>'
                         }
                     </td>
-                    <td class="actions">
-                        <button onclick="mudarStatus(${pedido.id})" class="btn btn-warning" title="Alterar status">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        ${temArquivo ? 
-                            `<button onclick="removerArquivoPedido(${pedido.id})" class="btn btn-danger" title="Remover arquivo">
-                                <i class="fas fa-trash"></i>
-                            </button>` 
-                            : ''
-                        }
-                        <button onclick="excluirPedido(${pedido.id})" class="btn btn-danger" title="Excluir pedido">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </td>
-                </tr>`;
-        });
-        
-        html += `
-                            </tbody>
-                        </table>
-                        
-                        ${pedidos.rows.length === 0 ? 
-                            '<div style="text-align: center; padding: 40px; color: #6b7280;"><i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 20px;"></i><h3>Nenhum pedido encontrado</h3></div>' : 
-                            ''
-                        }
-                        
-                        <div class="admin-section">
-                            <h3><i class="fas fa-cog"></i> Ações Rápidas</h3>
-                            <div>
-                                <button onclick="atualizarTodosStatus('concluido')" class="btn btn-success">
-                                    <i class="fas fa-check-circle"></i> Marcar Todos Concluídos
+                    <td>
+                        <div class="arquivo-actions">
+                            ${temArquivo ? 
+                                `<button onclick="visualizarArquivo(${pedido.id})" class="btn btn-file" title="Visualizar no navegador">
+                                    <i class="fas fa-eye"></i> Visualizar
                                 </button>
-                                <button onclick="exportarCSV()" class="btn">
-                                    <i class="fas fa-download"></i> Exportar CSV
+                                <button onclick="baixarArquivo(${pedido.id})" class="btn btn-success" title="Baixar arquivo">
+                                    <i class="fas fa-download"></i> Baixar
                                 </button>
-                            </div>
+                                <button onclick="excluirArquivo(${pedido.id})" class="btn btn-danger" title="Excluir apenas o arquivo">
+                                    <i class="fas fa-trash"></i> Arquivo
+                                </button>` 
+                                : ''
+                            }
+                            <button onclick="mudarStatus(${pedido.id})" class="btn btn-warning" title="Alterar status">
+                                <i class="fas fa-edit"></i> Status
+                            </button>
+                            <button onclick="excluirPedido(${pedido.id})" class="btn btn-danger" title="Excluir pedido completo">
+                                <i class="fas fa-trash-alt"></i> Pedido
+                            </button>
                         </div>
-                    </div>
-                    
-                    <!-- TAB USUÁRIOS -->
-                    <div id="tab-usuarios" class="tab-content">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Nome</th>
-                                    <th>Telefone</th>
-                                    <th>Data Cadastro</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-        
-        // Adicionar cada usuário à tabela
-        usuarios.rows.forEach(usuario => {
-            const dataCadastro = usuario.data_cadastro ? new Date(usuario.data_cadastro) : new Date();
-            const statusClass = usuario.ativo ? 'ativo' : 'inativo';
-            const statusText = usuario.ativo ? 'Ativo' : 'Inativo';
-            
-            html += `
-                <tr>
-                    <td><strong>#${usuario.id}</strong></td>
-                    <td><strong>${usuario.nome}</strong></td>
-                    <td>${usuario.telefone}</td>
-                    <td>${dataCadastro.toLocaleDateString('pt-MZ')}</td>
-                    <td>${statusText}</td>
-                    <td class="actions">
-                        ${usuario.ativo ? `
-                            <button onclick="desativarUsuario(${usuario.id})" class="btn btn-warning" title="Desativar">
-                                <i class="fas fa-user-slash"></i>
-                            </button>
-                        ` : `
-                            <button onclick="ativarUsuario(${usuario.id})" class="btn btn-success" title="Ativar">
-                                <i class="fas fa-user-check"></i>
-                            </button>
-                        `}
-                        <button onclick="excluirUsuario(${usuario.id})" class="btn btn-danger" title="Excluir">
-                            <i class="fas fa-trash"></i>
-                        </button>
                     </td>
                 </tr>`;
         });
@@ -1004,157 +926,30 @@ app.get('/admin/pedidos', async (req, res) => {
                         </table>
                     </div>
                     
-                    <!-- TAB CONTATOS -->
-                    <div id="tab-contatos" class="tab-content">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Data</th>
-                                    <th>Nome</th>
-                                    <th>Telefone</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-        
-        // Adicionar cada contato à tabela
-        contatos.rows.forEach(contato => {
-            const dataContato = contato.data_contato ? new Date(contato.data_contato) : new Date();
-            const respondidoClass = contato.respondido ? 'badge concluido' : 'badge pendente';
-            const respondidoText = contato.respondido ? 'Respondido' : 'Pendente';
-            
-            html += `
-                <tr>
-                    <td><strong>#${contato.id}</strong></td>
-                    <td>${dataContato.toLocaleDateString('pt-MZ')}</td>
-                    <td><strong>${contato.nome}</strong></td>
-                    <td>${contato.telefone}</td>
-                    <td><span class="${respondidoClass}">${respondidoText}</span></td>
-                    <td class="actions">
-                        ${!contato.respondido ? `
-                            <button onclick="marcarRespondido(${contato.id})" class="btn btn-success" title="Marcar respondido">
-                                <i class="fas fa-check"></i>
-                            </button>
-                        ` : `
-                            <button onclick="marcarNaoRespondido(${contato.id})" class="btn btn-warning" title="Marcar não respondido">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        `}
-                        <button onclick="excluirContato(${contato.id})" class="btn btn-danger" title="Excluir">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>`;
-        });
-        
-        html += `
-                            </tbody>
-                        </table>
-                    </div>
+                    ${pedidos.rows.length === 0 ? 
+                        '<div style="text-align: center; padding: 40px; color: #6b7280;"><i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 20px;"></i><h3>Nenhum pedido encontrado</h3></div>' : 
+                        ''
+                    }
                     
-                    <!-- TAB ARQUIVOS -->
-                    <div id="tab-arquivos" class="tab-content">
-                        <h3><i class="fas fa-file"></i> Arquivos Anexados</h3>
-                        <p style="color: #6b7280; margin-bottom: 20px;">Lista de todos os pedidos com arquivos anexados</p>
-                        
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID Pedido</th>
-                                    <th>Cliente</th>
-                                    <th>Serviço</th>
-                                    <th>Data</th>
-                                    <th>Status</th>
-                                    <th>Arquivo</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-        
-        // Filtrar pedidos com arquivos
-        const pedidosComArquivosLista = pedidos.rows.filter(pedido => {
-            return pedido.arquivos && pedido.arquivos !== 'null' && pedido.arquivos !== '';
-        });
-        
-        if (pedidosComArquivosLista.length === 0) {
-            html += `
-                <tr>
-                    <td colspan="6" style="text-align: center; padding: 40px; color: #6b7280;">
-                        <i class="fas fa-file" style="font-size: 48px; margin-bottom: 20px;"></i>
-                        <h3>Nenhum arquivo encontrado</h3>
-                    </td>
-                </tr>`;
-        } else {
-            pedidosComArquivosLista.forEach(pedido => {
-                const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
-                const statusClass = pedido.status ? pedido.status.toLowerCase().replace(' ', '-') : 'pendente';
-                
-                html += `
-                    <tr>
-                        <td><strong>#${pedido.id}</strong></td>
-                        <td><strong>${pedido.cliente || 'Não informado'}</strong></td>
-                        <td>${pedido.nome_plano || pedido.plano || 'Serviço'}</td>
-                        <td>${dataPedido.toLocaleDateString('pt-MZ')}</td>
-                        <td><span class="badge ${statusClass}">${pedido.status || 'pendente'}</span></td>
-                        <td>
-                            <button onclick="visualizarArquivo(${pedido.id}, '${pedido.cliente || ''}', '${pedido.nome_plano || pedido.plano || ''}')" class="btn btn-file">
-                                <i class="fas fa-eye"></i> Ver Detalhes
-                            </button>
-                        </td>
-                    </tr>`;
-            });
-        }
-        
-        html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                
-                <!-- Modal para visualizar arquivos -->
-                <div id="modalArquivo" class="modal-arquivo">
-                    <div class="modal-arquivo-content">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h3 style="color: #1e40af; margin: 0;">
-                                <i class="fas fa-file-alt"></i> Informações do Arquivo
-                            </h3>
-                            <button onclick="fecharModalArquivo()" style="background: none; border: none; font-size: 24px; color: #6b7280; cursor: pointer;">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        
-                        <div class="arquivo-info">
-                            <h4 id="modalArquivoTitulo"></h4>
-                            <div id="modalArquivoConteudo">
-                                <!-- O conteúdo será preenchido pelo JavaScript -->
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; gap: 10px; margin-top: 20px;">
-                            <button onclick="fecharModalArquivo()" class="btn btn-secondary" style="flex: 1;">
-                                <i class="fas fa-times"></i> Fechar
-                            </button>
-                            <button onclick="fecharModalArquivo()" class="btn btn-primary" style="flex: 1;">
-                                <i class="fas fa-check"></i> OK
-                            </button>
-                        </div>
+                    <div style="padding: 20px; background: #f8fafc; border-top: 1px solid #e5e7eb;">
+                        <h3><i class="fas fa-info-circle"></i> Instruções:</h3>
+                        <ul style="color: #6b7280; margin-top: 10px;">
+                            <li><strong>Visualizar:</strong> Abre o arquivo diretamente no navegador (PDF, imagens, texto)</li>
+                            <li><strong>Baixar:</strong> Faz download do arquivo original para seu computador</li>
+                            <li><strong>Arquivo (lixeira):</strong> Exclui apenas o arquivo, mantendo o pedido</li>
+                            <li><strong>Pedido (lixeira):</strong> Exclui o pedido completo com seu arquivo</li>
+                            <li>Os arquivos são armazenados fisicamente na pasta /uploads do servidor</li>
+                        </ul>
                     </div>
                 </div>
                 
                 <script>
-                    function abrirTab(tabName) {
-                        // Esconder todas as tabs
-                        document.querySelectorAll('.tab-content').forEach(tab => {
-                            tab.classList.remove('active');
-                        });
-                        document.querySelectorAll('.tab').forEach(tab => {
-                            tab.classList.remove('active');
-                        });
-                        
-                        // Mostrar a tab selecionada
-                        document.getElementById('tab-' + tabName).classList.add('active');
-                        document.querySelector('.tab[onclick="abrirTab(\\'' + tabName + '\\')"]').classList.add('active');
+                    function formatarTamanho(bytes) {
+                        if (!bytes) return '0 Bytes';
+                        const k = 1024;
+                        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                        const i = Math.floor(Math.log(bytes) / Math.log(k));
+                        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
                     }
                     
                     function buscarPedidos() {
@@ -1171,77 +966,21 @@ app.get('/admin/pedidos', async (req, res) => {
                         });
                     }
                     
-                    function visualizarArquivo(pedidoId, cliente, servico) {
-                        // Buscar informações do arquivo via API
-                        fetch('/api/admin/obter-arquivo?senha=admin2025&pedido=' + pedidoId)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    const modal = document.getElementById('modalArquivo');
-                                    const titulo = document.getElementById('modalArquivoTitulo');
-                                    const conteudo = document.getElementById('modalArquivoConteudo');
-                                    
-                                    titulo.textContent = \`Pedido #\${pedidoId} - \${cliente}\`;
-                                    
-                                    let html = \`
-                                        <div style="margin-bottom: 15px;">
-                                            <p><strong>Serviço:</strong> \${servico}</p>
-                                            <p><strong>Cliente:</strong> \${cliente}</p>
-                                            <p><strong>ID Pedido:</strong> #\${pedidoId}</p>
-                                        </div>
-                                        <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb;">
-                                            <h5 style="color: #1e40af; margin-top: 0; margin-bottom: 10px;">
-                                                <i class="fas fa-info-circle"></i> Informações do Arquivo
-                                            </h5>
-                                    \`;
-                                    
-                                    if (data.arquivo) {
-                                        try {
-                                            const arquivoInfo = JSON.parse(data.arquivo);
-                                            html += \`
-                                                <p><strong>Status:</strong> \${arquivoInfo.status || 'Não informado'}</p>
-                                                <p><strong>Nota:</strong> \${arquivoInfo.nota || 'Arquivo será enviado por WhatsApp após pagamento'}</p>
-                                                <p><strong>Data Registro:</strong> \${arquivoInfo.data_registro ? new Date(arquivoInfo.data_registro).toLocaleString('pt-MZ') : 'Não informada'}</p>
-                                            \`;
-                                        } catch (e) {
-                                            html += \`<p><strong>Informações:</strong> \${data.arquivo}</p>\`;
-                                        }
-                                    } else {
-                                        html += \`<p style="color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Arquivo não encontrado no banco de dados</p>\`;
-                                    }
-                                    
-                                    html += \`
-                                        </div>
-                                        <div style="margin-top: 20px; padding: 10px; background: #f0f9ff; border-radius: 5px; border: 1px solid #bfdbfe;">
-                                            <p style="margin: 0; color: #1e40af;">
-                                                <i class="fas fa-info-circle"></i> O arquivo físico deve ser enviado via WhatsApp: 86 728 6665
-                                            </p>
-                                        </div>
-                                    \`;
-                                    
-                                    conteudo.innerHTML = html;
-                                    modal.style.display = 'flex';
-                                } else {
-                                    alert('Erro ao buscar arquivo: ' + (data.erro || 'Erro desconhecido'));
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Erro:', error);
-                                alert('Erro ao buscar informações do arquivo');
-                            });
+                    function visualizarArquivo(pedidoId) {
+                        window.open('/api/admin/visualizar-arquivo?senha=admin2025&pedido=' + pedidoId, '_blank');
                     }
                     
-                    function fecharModalArquivo() {
-                        document.getElementById('modalArquivo').style.display = 'none';
+                    function baixarArquivo(pedidoId) {
+                        window.open('/api/admin/download-arquivo?senha=admin2025&pedido=' + pedidoId, '_blank');
                     }
                     
-                    function removerArquivoPedido(pedidoId) {
-                        if (confirm('Tem certeza que deseja remover o arquivo deste pedido?\\n\\nEsta ação não pode ser desfeita.')) {
-                            fetch('/api/admin/remover-arquivo?senha=admin2025&pedido=' + pedidoId)
+                    function excluirArquivo(pedidoId) {
+                        if (confirm('Excluir apenas o arquivo deste pedido?\\n\\nO pedido permanecerá no sistema.')) {
+                            fetch('/api/admin/excluir-arquivo?senha=admin2025&pedido=' + pedidoId)
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.success) {
-                                        alert('Arquivo removido com sucesso!');
+                                        alert('Arquivo excluído!');
                                         location.reload();
                                     } else {
                                         alert('Erro: ' + data.erro);
@@ -1267,7 +1006,7 @@ app.get('/admin/pedidos', async (req, res) => {
                     }
                     
                     function excluirPedido(id) {
-                        if (confirm('Excluir pedido #' + id + '?')) {
+                        if (confirm('🚨 ATENÇÃO!\\n\\nExcluir pedido #' + id + ' e seu arquivo?\\n\\nEsta ação NÃO pode ser desfeita.')) {
                             fetch('/api/admin/excluir-pedido?senha=admin2025&pedido=' + id)
                                 .then(response => response.json())
                                 .then(data => {
@@ -1278,124 +1017,6 @@ app.get('/admin/pedidos', async (req, res) => {
                                 });
                         }
                     }
-                    
-                    function desativarUsuario(id) {
-                        if (confirm('Desativar usuário?')) {
-                            fetch('/api/admin/desativar-usuario?senha=admin2025&usuario=' + id)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Usuário desativado!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function ativarUsuario(id) {
-                        fetch('/api/admin/ativar-usuario?senha=admin2025&usuario=' + id)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Usuário ativado!');
-                                    location.reload();
-                                }
-                            });
-                    }
-                    
-                    function excluirUsuario(id) {
-                        if (confirm('🚨 ATENÇÃO!\\nExcluir usuário e todos os seus pedidos?')) {
-                            fetch('/api/admin/excluir-usuario?senha=admin2025&usuario=' + id)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Usuário excluído!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function marcarRespondido(id) {
-                        fetch('/api/admin/marcar-respondido?senha=admin2025&contato=' + id)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Marcado como respondido!');
-                                    location.reload();
-                                }
-                            });
-                    }
-                    
-                    function marcarNaoRespondido(id) {
-                        fetch('/api/admin/marcar-nao-respondido?senha=admin2025&contato=' + id)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Marcado como não respondido!');
-                                    location.reload();
-                                }
-                            });
-                    }
-                    
-                    function excluirContato(id) {
-                        if (confirm('Excluir contato?')) {
-                            fetch('/api/admin/excluir-contato?senha=admin2025&contato=' + id)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Contato excluído!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function atualizarTodosStatus(status) {
-                        if (confirm('Atualizar TODOS os pedidos para "' + status + '"?')) {
-                            fetch('/api/admin/atualizar-todos-status?senha=admin2025&status=' + status)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        alert('Status atualizados!');
-                                        location.reload();
-                                    }
-                                });
-                        }
-                    }
-                    
-                    function exportarCSV() {
-                        let csv = 'ID;Data;Cliente;Telefone;Serviço;Preço;Status;Arquivo\\n';
-                        document.querySelectorAll('#tabelaPedidos tbody tr').forEach(row => {
-                            const cells = row.querySelectorAll('td');
-                            if (cells.length >= 7) {
-                                const temArquivo = cells[6].querySelector('button') ? 'Sim' : 'Não';
-                                csv += [
-                                    cells[0].textContent.replace('#', '').trim(),
-                                    cells[1].textContent.trim(),
-                                    cells[2].querySelector('strong')?.textContent.trim() || '',
-                                    cells[2].querySelector('small')?.textContent.trim() || '',
-                                    cells[3].textContent.trim(),
-                                    cells[4].querySelector('strong')?.textContent.replace('MT', '').trim() || '',
-                                    cells[5].textContent.trim(),
-                                    temArquivo
-                                ].join(';') + '\\n';
-                            }
-                        });
-                        
-                        const blob = new Blob(['\\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-                        const link = document.createElement('a');
-                        link.href = URL.createObjectURL(blob);
-                        link.download = 'pedidos_facilitaki_' + new Date().toISOString().split('T')[0] + '.csv';
-                        link.click();
-                    }
-                    
-                    // Fechar modal ao clicar fora
-                    document.getElementById('modalArquivo').addEventListener('click', function(e) {
-                        if (e.target === this) {
-                            fecharModalArquivo();
-                        }
-                    });
                 </script>
             </body>
             </html>`;
@@ -1404,39 +1025,11 @@ app.get('/admin/pedidos', async (req, res) => {
         
     } catch (error) {
         console.error('❌ Erro no admin:', error);
-        res.status(500).send(`
-            <!DOCTYPE html>
-            <html><head><title>Erro</title>
-            <style>body { font-family: Arial; padding: 50px; text-align: center; }
-            .error { color: #ef4444; margin: 20px 0; }
-            </style></head>
-            <body>
-                <h1>❌ Erro no Painel Admin</h1>
-                <div class="error">${error.message}</div>
-                <a href="/admin/pedidos?senha=admin2025">Tentar novamente</a>
-            </body>
-            </html>
-        `);
+        res.status(500).send(`Erro: ${error.message}`);
     }
 });
 
-// ===== ROTAS ADMIN - AÇÕES =====
-
-app.get('/api/admin/atualizar-status', async (req, res) => {
-    const { senha, pedido, status } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [status, pedido]);
-        res.json({ success: true, mensagem: `Status atualizado` });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
+// ===== ROTA ADMIN - EXCLUIR PEDIDO COM ARQUIVO =====
 app.get('/api/admin/excluir-pedido', async (req, res) => {
     const { senha, pedido } = req.query;
     
@@ -1445,161 +1038,28 @@ app.get('/api/admin/excluir-pedido', async (req, res) => {
     }
     
     try {
-        await pool.query('DELETE FROM pedidos WHERE id = $1', [pedido]);
-        res.json({ success: true, mensagem: 'Pedido excluído' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/desativar-usuario', async (req, res) => {
-    const { senha, usuario } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE usuarios SET ativo = false WHERE id = $1', [usuario]);
-        res.json({ success: true, mensagem: 'Usuário desativado' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/ativar-usuario', async (req, res) => {
-    const { senha, usuario } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE usuarios SET ativo = true WHERE id = $1', [usuario]);
-        res.json({ success: true, mensagem: 'Usuário ativado' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/excluir-usuario', async (req, res) => {
-    const { senha, usuario } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('DELETE FROM pedidos WHERE usuario_id = $1', [usuario]);
-        await pool.query('DELETE FROM usuarios WHERE id = $1', [usuario]);
-        res.json({ success: true, mensagem: 'Usuário excluído' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/marcar-respondido', async (req, res) => {
-    const { senha, contato } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE contatos SET respondido = true WHERE id = $1', [contato]);
-        res.json({ success: true, mensagem: 'Marcado como respondido' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/marcar-nao-respondido', async (req, res) => {
-    const { senha, contato } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE contatos SET respondido = false WHERE id = $1', [contato]);
-        res.json({ success: true, mensagem: 'Marcado como não respondido' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/excluir-contato', async (req, res) => {
-    const { senha, contato } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('DELETE FROM contatos WHERE id = $1', [contato]);
-        res.json({ success: true, mensagem: 'Contato excluído' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/admin/atualizar-todos-status', async (req, res) => {
-    const { senha, status } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE pedidos SET status = $1', [status]);
-        res.json({ success: true, mensagem: 'Status atualizados' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-// ===== ROTAS ADMIN - ARQUIVOS =====
-
-app.get('/api/admin/obter-arquivo', async (req, res) => {
-    const { senha, pedido } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        const resultado = await pool.query('SELECT arquivos FROM pedidos WHERE id = $1', [pedido]);
+        // Buscar informações do arquivo
+        const resultado = await pool.query('SELECT arquivo_caminho FROM pedidos WHERE id = $1', [pedido]);
         
-        if (resultado.rows.length === 0) {
-            return res.json({ success: false, erro: 'Pedido não encontrado' });
+        if (resultado.rows.length > 0 && resultado.rows[0].arquivo_caminho) {
+            const caminhoArquivo = resultado.rows[0].arquivo_caminho;
+            // Excluir arquivo físico
+            if (fs.existsSync(caminhoArquivo)) {
+                fs.unlinkSync(caminhoArquivo);
+                console.log('🗑️  Arquivo excluído:', caminhoArquivo);
+            }
         }
         
-        res.json({
-            success: true,
-            arquivo: resultado.rows[0].arquivos,
-            mensagem: 'Informações do arquivo obtidas'
-        });
+        // Excluir do banco
+        await pool.query('DELETE FROM pedidos WHERE id = $1', [pedido]);
+        
+        res.json({ success: true, mensagem: 'Pedido e arquivo excluídos' });
     } catch (error) {
         res.json({ success: false, erro: error.message });
     }
 });
 
-app.get('/api/admin/remover-arquivo', async (req, res) => {
-    const { senha, pedido } = req.query;
-    
-    if (senha !== 'admin2025') {
-        return res.json({ success: false, erro: 'Acesso negado' });
-    }
-    
-    try {
-        await pool.query('UPDATE pedidos SET arquivos = NULL WHERE id = $1', [pedido]);
-        res.json({ success: true, mensagem: 'Arquivo removido do pedido' });
-    } catch (error) {
-        res.json({ success: false, erro: error.message });
-    }
-});
-
-// ===== ROTAS PRINCIPAIS =====
+// ===== ROTAS EXISTENTES =====
 
 // Cadastro
 app.post('/api/cadastrar', async (req, res) => {
@@ -1917,17 +1377,127 @@ app.post('/api/logout', autenticarToken, (req, res) => {
     });
 });
 
-// ===== ROTAS PARA ARQUIVOS ESTÁTICOS =====
-app.get('/index.html', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
+// ===== ROTAS ADMIN - AÇÕES =====
+
+app.get('/api/admin/atualizar-status', async (req, res) => {
+    const { senha, pedido, status } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [status, pedido]);
+        res.json({ success: true, mensagem: `Status atualizado` });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
 });
 
-app.get('/style.css', (req, res) => {
-    res.sendFile(__dirname + '/style.css');
+app.get('/api/admin/desativar-usuario', async (req, res) => {
+    const { senha, usuario } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('UPDATE usuarios SET ativo = false WHERE id = $1', [usuario]);
+        res.json({ success: true, mensagem: 'Usuário desativado' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
 });
 
-app.get('/script.js', (req, res) => {
-    res.sendFile(__dirname + '/script.js');
+app.get('/api/admin/ativar-usuario', async (req, res) => {
+    const { senha, usuario } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('UPDATE usuarios SET ativo = true WHERE id = $1', [usuario]);
+        res.json({ success: true, mensagem: 'Usuário ativado' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+app.get('/api/admin/excluir-usuario', async (req, res) => {
+    const { senha, usuario } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('DELETE FROM pedidos WHERE usuario_id = $1', [usuario]);
+        await pool.query('DELETE FROM usuarios WHERE id = $1', [usuario]);
+        res.json({ success: true, mensagem: 'Usuário excluído' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+app.get('/api/admin/marcar-respondido', async (req, res) => {
+    const { senha, contato } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('UPDATE contatos SET respondido = true WHERE id = $1', [contato]);
+        res.json({ success: true, mensagem: 'Marcado como respondido' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+app.get('/api/admin/marcar-nao-respondido', async (req, res) => {
+    const { senha, contato } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('UPDATE contatos SET respondido = false WHERE id = $1', [contato]);
+        res.json({ success: true, mensagem: 'Marcado como não respondido' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+app.get('/api/admin/excluir-contato', async (req, res) => {
+    const { senha, contato } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('DELETE FROM contatos WHERE id = $1', [contato]);
+        res.json({ success: true, mensagem: 'Contato excluído' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
+});
+
+app.get('/api/admin/atualizar-todos-status', async (req, res) => {
+    const { senha, status } = req.query;
+    
+    if (senha !== 'admin2025') {
+        return res.json({ success: false, erro: 'Acesso negado' });
+    }
+    
+    try {
+        await pool.query('UPDATE pedidos SET status = $1', [status]);
+        res.json({ success: true, mensagem: 'Status atualizados' });
+    } catch (error) {
+        res.json({ success: false, erro: error.message });
+    }
 });
 
 // ===== ROTA 404 =====
@@ -1954,24 +1524,20 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`
     ╔═══════════════════════════════════════╗
-    ║       FACILITAKI - RENDER DEPLOY      ║
+    ║       FACILITAKI - VERSÃO 8.0         ║
+    ║       COM UPLOAD REAL DE ARQUIVOS     ║
     ╚═══════════════════════════════════════╝
     📍 Porta: ${PORT}
     🌐 URL: https://facilitaki.onrender.com
-    🚀 Versão: 7.2 - Com visualização de arquivos
+    🚀 Versão: 8.0 - Upload real de arquivos
     ✅ Status: ONLINE
     💾 Banco: PostgreSQL (Render) - CONECTADO
+    📁 Uploads: Pasta /uploads criada
     👨‍💼 Admin: /admin/pedidos?senha=admin2025
-    🏥 Health: /health
-    🛠️  Correções: 
-        • /api/fix-usuarios
-        • /api/fix-pedidos
-    📁 Arquivos: Nova aba no painel admin
-    📤 Sistema: Pronto para uso!
+    📤 Sistema: Pronto para upload de arquivos reais!
     `);
 });
 
-// Capturar erros não tratados
 process.on('uncaughtException', (error) => {
     console.error('❌ Uncaught Exception:', error);
 });
