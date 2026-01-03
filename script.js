@@ -1,10 +1,11 @@
 // script.js - Facilitaki - Sistema Completo COM UPLOAD REAL
-// Atualizado para o novo HTML organizado
+// Atualizado para corrigir valores e nomes de serviços
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = null;
 let carrinho = {
     plano: null,
+    nomePlano: '',
     preco: 0,
     metodoPagamento: null
 };
@@ -80,7 +81,7 @@ function navegarPara(sectionId) {
                 atualizarResumoPedido();
                 break;
             case 'login':
-                mostrarLogin(); // Garantir que o formulário de login esteja visível
+                mostrarLogin();
                 break;
         }
     }
@@ -93,15 +94,27 @@ function navegarPara(sectionId) {
 function verificarELogar(tipo, preco) {
     console.log('🔐 Verificando login para:', tipo, preco);
     
+    // Mapear tipo para os valores corretos
+    const valoresCorretos = {
+        'formatacao': 100,
+        'basico': 100,
+        'trabalho-campo': 350,
+        'avancado': 350,
+        'monografia': 10000,
+        'premium': 10000
+    };
+    
+    const valorCorreto = valoresCorretos[tipo] || parseFloat(preco);
+    
     if (!usuarioLogado) {
         // Salvar seleção para continuar após login
         sessionStorage.setItem('servico_selecionado', tipo);
-        sessionStorage.setItem('preco_selecionado', preco);
+        sessionStorage.setItem('preco_selecionado', valorCorreto);
         
         mostrarMensagemGlobal('Faça login para continuar com a solicitação', 'info');
         navegarPara('login');
     } else {
-        selecionarPlano(tipo, preco);
+        selecionarPlano(tipo, valorCorreto);
     }
 }
 
@@ -318,7 +331,7 @@ async function fazerLogout() {
         btnHeader.setAttribute('onclick', 'navegarPara(\'login\')');
     }
     
-    carrinho = { plano: null, preco: 0, metodoPagamento: null };
+    carrinho = { plano: null, nomePlano: '', preco: 0, metodoPagamento: null };
     arquivoSelecionado = null;
     sessionStorage.clear();
     
@@ -401,20 +414,44 @@ function removerArquivo() {
     }
 }
 
-// ===== PLANOS E CHECKOUT =====
+// ===== PLANOS E CHECKOUT - CORRIGIDO =====
 function selecionarPlano(tipo, preco) {
     console.log('📦 Selecionando plano:', tipo, preco);
     
-    const nomesPlanos = {
-        'basico': 'Serviços Avulsos',
-        'avancado': 'Trabalho de campo',
-        'premium': 'Monografia/TCC'
+    // Mapear tipo para nome correto com valores corretos
+    const planosInfo = {
+        'formatacao': { 
+            nome: 'Formatação de trabalhos', 
+            preco: 100 
+        },
+        'basico': { 
+            nome: 'Serviços Avulsos', 
+            preco: 100 
+        },
+        'trabalho-campo': { 
+            nome: 'Trabalho de campo (pesquisa)', 
+            preco: 350 
+        },
+        'avancado': { 
+            nome: 'Trabalho de campo', 
+            preco: 350 
+        },
+        'monografia': { 
+            nome: 'Monografia/TCC', 
+            preco: 10000 
+        },
+        'premium': { 
+            nome: 'Monografia/TCC', 
+            preco: 10000 
+        }
     };
+    
+    const plano = planosInfo[tipo] || { nome: 'Serviço', preco: parseFloat(preco) };
     
     carrinho = {
         plano: tipo,
-        nomePlano: nomesPlanos[tipo] || tipo,
-        preco: parseFloat(preco),
+        nomePlano: plano.nome,
+        preco: plano.preco,
         metodoPagamento: null
     };
     
@@ -449,20 +486,20 @@ function selecionarMetodo(metodo) {
 function atualizarResumoPedido() {
     const resumoDiv = document.getElementById('resumoPedido');
     
-    if (carrinho.plano) {
+    if (carrinho.plano && carrinho.preco > 0) {
         if (resumoDiv) {
             resumoDiv.innerHTML = `
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                         <div>
-                            <h4 style="margin: 0; color: #1e40af;">${carrinho.nomePlano}</h4>
-                            <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.9rem;">Serviço selecionado</p>
+                            <h4 style="margin: 0; color: var(--primary-dark);">${carrinho.nomePlano}</h4>
+                            <p style="margin: 0.25rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">Serviço selecionado</p>
                         </div>
-                        <div style="font-size: 1.5rem; font-weight: bold; color: #1e40af;">
+                        <div style="font-size: 1.5rem; font-weight: bold; color: var(--primary-dark);">
                             ${carrinho.preco.toLocaleString('pt-MZ')} MT
                         </div>
                     </div>
-                    <div style="padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.9rem; color: #6b7280;">
+                    <div style="padding-top: 1rem; border-top: 1px solid var(--border-color); font-size: 0.9rem; color: var(--text-secondary);">
                         <p style="margin: 0.5rem 0;">
                             <i class="fas fa-info-circle"></i> Após o login, você poderá enviar o arquivo
                         </p>
@@ -473,10 +510,10 @@ function atualizarResumoPedido() {
     } else {
         if (resumoDiv) {
             resumoDiv.innerHTML = `
-                <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
                     <i class="fas fa-shopping-cart" style="font-size: 2rem; margin-bottom: 1rem;"></i>
                     <p>Nenhum serviço selecionado</p>
-                    <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem;">
+                    <button onclick="navegarPara('planos')" style="background: var(--primary-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: var(--radius-md); margin-top: 1rem; cursor: pointer;">
                         Escolher Serviço
                     </button>
                 </div>
@@ -498,9 +535,15 @@ function finalizarCompra() {
         return;
     }
     
-    // Redirecionar para área do cliente para upload do arquivo
-    mostrarMensagemGlobal('Faça login para enviar o arquivo e completar a solicitação', 'info');
-    navegarPara('login');
+    // Verificar se o usuário está logado
+    if (!usuarioLogado) {
+        mostrarMensagemGlobal('Faça login para enviar o arquivo e completar a solicitação', 'info');
+        navegarPara('login');
+        return;
+    }
+    
+    // Se estiver logado, redirecionar para pagamento-sucesso
+    navegarPara('pagamento-sucesso');
 }
 
 function mostrarInstrucoesPagamento() {
@@ -509,18 +552,24 @@ function mostrarInstrucoesPagamento() {
     const instrucoesDiv = document.getElementById('instrucoesDetalhadas');
     const resumoDiv = document.getElementById('resumoPagamento');
     
-    if (!carrinho.plano || !instrucoesDiv || !resumoDiv) return;
+    if (!carrinho.plano || !instrucoesDiv || !resumoDiv) {
+        console.error('❌ Dados do carrinho incompletos:', carrinho);
+        return;
+    }
     
     let instrucoes = '';
-    const valorEntrada = Math.ceil(carrinho.preco * 0.5);
+    const valorTotal = carrinho.preco || 0;
+    const valorEntrada = Math.ceil(valorTotal * 0.5);
+    
+    console.log('💰 Valores calculados:', { valorTotal, valorEntrada });
     
     switch(carrinho.metodoPagamento) {
         case 'mpesa':
             instrucoes = `
-                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                <h4 style="color: var(--primary-dark); margin-bottom: 1rem;">
                     <i class="fas fa-mobile-alt"></i> Pagamento via M-Pesa
                 </h4>
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
                     <p><strong>Passo a passo:</strong></p>
                     <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
                         <li>Acesse M-Pesa no seu celular</li>
@@ -532,7 +581,7 @@ function mostrarInstrucoesPagamento() {
                         <li>Guarde o comprovativo</li>
                     </ol>
                 </div>
-                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid var(--success-color);">
                     <p style="margin: 0; color: #065f46;">
                         <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665
                     </p>
@@ -541,10 +590,10 @@ function mostrarInstrucoesPagamento() {
             break;
         case 'emola':
             instrucoes = `
-                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                <h4 style="color: var(--primary-dark); margin-bottom: 1rem;">
                     <i class="fas fa-wallet"></i> Pagamento via e-Mola
                 </h4>
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
                     <p><strong>Passo a passo:</strong></p>
                     <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
                         <li>Acesse e-Mola no seu celular</li>
@@ -559,10 +608,10 @@ function mostrarInstrucoesPagamento() {
             break;
         case 'deposito':
             instrucoes = `
-                <h4 style="color: #1e40af; margin-bottom: 1rem;">
+                <h4 style="color: var(--primary-dark); margin-bottom: 1rem;">
                     <i class="fas fa-university"></i> Depósito Bancário
                 </h4>
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
                     <p><strong>Dados bancários:</strong></p>
                     <div style="margin-bottom: 1rem;">
                         <p><strong>Banco:</strong> BCI</p>
@@ -579,31 +628,32 @@ function mostrarInstrucoesPagamento() {
     
     instrucoesDiv.innerHTML = instrucoes;
     
+    // Atualizar resumo com valores calculados
     resumoDiv.innerHTML = `
-        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
-            <h5 style="margin-top: 0; color: #1e40af;">Resumo do Pedido</h5>
+        <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <h5 style="margin-top: 0; color: var(--primary-dark);">Resumo do Pedido</h5>
             
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Serviço:</span>
-                <strong>${carrinho.nomePlano}</strong>
+                <strong>${carrinho.nomePlano || carrinho.plano}</strong>
             </div>
             
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Valor Total:</span>
-                <strong>${carrinho.preco.toLocaleString('pt-MZ')} MT</strong>
+                <strong>${valorTotal.toLocaleString('pt-MZ')} MT</strong>
             </div>
             
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Entrada (50%):</span>
-                <strong style="color: #10b981;">${valorEntrada.toLocaleString('pt-MZ')} MT</strong>
+                <strong style="color: var(--success-color);">${valorEntrada.toLocaleString('pt-MZ')} MT</strong>
             </div>
             
             <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
                 <span>Saldo Restante:</span>
-                <strong>${(carrinho.preco - valorEntrada).toLocaleString('pt-MZ')} MT</strong>
+                <strong>${(valorTotal - valorEntrada).toLocaleString('pt-MZ')} MT</strong>
             </div>
             
-            <hr style="border-color: #e5e7eb; margin: 1rem 0;">
+            <hr style="border-color: var(--border-color); margin: 1rem 0;">
             
             <div style="display: flex; justify-content: space-between;">
                 <span>Método de Pagamento:</span>
@@ -611,6 +661,8 @@ function mostrarInstrucoesPagamento() {
             </div>
         </div>
     `;
+    
+    console.log('✅ Instruções de pagamento atualizadas:', carrinho);
 }
 
 // ===== MODAL PARA ENVIO DE ARQUIVO REAL =====
@@ -626,9 +678,12 @@ function abrirDescricaoTrabalho() {
     console.log('📝 Abrindo descrição para serviço:', servicoSelecionado);
     
     const servicos = {
+        'formatacao': { nome: 'Formatação de trabalhos', preco: 100 },
         'basico': { nome: 'Serviços Avulsos', preco: 100 },
-        'avancado': { nome: 'Trabalho de campo', preco: 550 },
-        'premium': { nome: 'Monografia/TCC', preco: 10.000 }
+        'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 },
+        'avancado': { nome: 'Trabalho de campo', preco: 350 },
+        'monografia': { nome: 'Monografia/TCC', preco: 10000 },
+        'premium': { nome: 'Monografia/TCC', preco: 10000 }
     };
     
     const servico = servicos[servicoSelecionado] || { nome: 'Serviço', preco: 0 };
@@ -717,6 +772,16 @@ async function solicitarServicoComArquivo() {
         return;
     }
     
+    // Atualizar carrinho com os dados do pedido ANTES de enviar
+    carrinho = {
+        plano: servicoTipo,
+        nomePlano: servicoNome,
+        preco: servicoPreco,
+        metodoPagamento: metodoPagamento
+    };
+    
+    console.log('🛒 Carrinho atualizado antes do envio:', carrinho);
+    
     const btnSolicitar = document.getElementById('btnSolicitarServico');
     const originalText = btnSolicitar ? btnSolicitar.innerHTML : 'Enviar Arquivo';
     if (btnSolicitar) {
@@ -749,12 +814,10 @@ async function solicitarServicoComArquivo() {
         
         console.log('📤 Enviando arquivo:', arquivoSelecionado.name);
         
-        // Note: A rota /api/pedidos/upload está definida no server.js
         const response = await fetch(`${API_URL}/api/pedidos/upload`, {
             method: 'POST',
             headers: { 
                 'Authorization': `Bearer ${token}`
-                // Não definir Content-Type para FormData, o browser faz automaticamente
             },
             body: formData,
             mode: 'cors'
@@ -778,14 +841,6 @@ async function solicitarServicoComArquivo() {
         
         if (data.success) {
             fecharModalDescricao();
-            
-            // Atualizar carrinho com os dados do pedido
-            carrinho = {
-                plano: servicoTipo,
-                nomePlano: servicoNome,
-                preco: servicoPreco,
-                metodoPagamento: metodoPagamento
-            };
             
             mostrarMensagemGlobal('Arquivo enviado com sucesso!', 'success');
             
@@ -855,10 +910,10 @@ async function atualizarDashboard() {
                 if (listaPedidosDiv) {
                     if (pedidosUsuario.length === 0) {
                         listaPedidosDiv.innerHTML = `
-                            <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                            <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
                                 <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem;"></i>
                                 <p>Nenhum pedido encontrado</p>
-                                <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem;">
+                                <button onclick="navegarPara('planos')" style="background: var(--primary-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem; cursor: pointer;">
                                     Solicitar Serviço
                                 </button>
                             </div>
@@ -871,25 +926,25 @@ async function atualizarDashboard() {
                             const temArquivo = pedido.arquivo_path;
                             
                             return `
-                                <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${statusColor};">
+                                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${statusColor};">
                                     <div style="display: flex; justify-content: space-between; align-items: start;">
                                         <div>
-                                            <strong style="color: #1e40af;">${pedido.nome_plano || 'Serviço'}</strong>
-                                            <div style="font-size: 0.9rem; color: #6b7280; margin-top: 0.25rem;">
+                                            <strong style="color: var(--primary-dark);">${pedido.nome_plano || 'Serviço'}</strong>
+                                            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">
                                                 ${pedido.tema || pedido.descricao || 'Sem descrição'}
                                                 ${temArquivo ? `<br><small><i class="fas fa-file"></i> Arquivo anexado</small>` : ''}
                                             </div>
                                         </div>
                                         <div style="text-align: right;">
-                                            <div style="font-weight: bold; color: #1e40af; font-size: 1.1rem;">
+                                            <div style="font-weight: bold; color: var(--primary-dark); font-size: 1.1rem;">
                                                 ${(parseFloat(pedido.preco) || 0).toLocaleString('pt-MZ')} MT
                                             </div>
-                                            <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${statusColor + '20'}; color: ${statusColor};">
+                                            <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${statusColor}20; color: ${statusColor};">
                                                 ${statusText}
                                             </span>
                                         </div>
                                     </div>
-                                    <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
+                                    <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem;">
                                         <i class="far fa-calendar"></i> ${dataPedido.toLocaleDateString('pt-MZ')}
                                         ${pedido.metodo_pagamento ? ` • <i class="fas fa-credit-card"></i> ${pedido.metodo_pagamento.toUpperCase()}` : ''}
                                     </div>
@@ -911,12 +966,12 @@ async function atualizarDashboard() {
 
 function getStatusColor(status) {
     switch(status) {
-        case 'pendente': return '#f59e0b';
-        case 'pago': return '#10b981';
-        case 'em_andamento': return '#3b82f6';
-        case 'concluido': return '#8b5cf6';
-        case 'cancelado': return '#ef4444';
-        default: return '#6b7280';
+        case 'pendente': return 'var(--warning-color)';
+        case 'pago': return 'var(--success-color)';
+        case 'em_andamento': return 'var(--info-color)';
+        case 'concluido': return 'var(--accent-color)';
+        case 'cancelado': return 'var(--danger-color)';
+        default: return 'var(--text-secondary)';
     }
 }
 
@@ -1012,15 +1067,15 @@ function mostrarMensagemGlobal(texto, tipo) {
     `;
     
     if (tipo === 'success') {
-        mensagemDiv.style.background = '#10b981';
+        mensagemDiv.style.background = 'var(--success-color)';
         mensagemDiv.style.color = 'white';
         mensagemDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${texto}`;
     } else if (tipo === 'error') {
-        mensagemDiv.style.background = '#ef4444';
+        mensagemDiv.style.background = 'var(--danger-color)';
         mensagemDiv.style.color = 'white';
         mensagemDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${texto}`;
     } else if (tipo === 'info') {
-        mensagemDiv.style.background = '#3b82f6';
+        mensagemDiv.style.background = 'var(--info-color)';
         mensagemDiv.style.color = 'white';
         mensagemDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${texto}`;
     }
@@ -1219,4 +1274,3 @@ window.removerArquivo = removerArquivo;
 console.log('🎯 Facilitaki com upload real carregado!');
 console.log('📁 Arquivos físicos são enviados para o servidor');
 console.log('👨‍💼 Preview apenas no painel administrativo');
-
