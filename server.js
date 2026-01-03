@@ -41,12 +41,12 @@ const upload = multer({
     storage: storage,
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: function (req, file, cb) {
-        const allowedTypes = ['.pdf', '.doc', '.docx'];
+        const allowedTypes = ['.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png'];
         const ext = path.extname(file.originalname).toLowerCase();
         if (allowedTypes.includes(ext)) {
             cb(null, true);
         } else {
-            cb(new Error('Tipo de arquivo não suportado. Use PDF, DOC ou DOCX.'));
+            cb(new Error('Tipo de arquivo não suportado. Use PDF, DOC, DOCX, TXT, JPG, PNG.'));
         }
     }
 });
@@ -141,6 +141,57 @@ async function initDatabase() {
         console.log('✅ Banco de dados inicializado com sucesso!');
     } catch (error) {
         console.error('❌ Erro ao inicializar banco de dados:', error);
+    }
+}
+
+// Função para verificar e atualizar estrutura do banco
+async function verificarEAtualizarEstrutura() {
+    try {
+        console.log('🔍 Verificando estrutura do banco de dados...');
+        
+        // Verificar se todas as colunas necessárias existem na tabela pedidos
+        const colunasNecessarias = [
+            'arquivo_path',
+            'tema',
+            'prazo',
+            'instituicao',
+            'curso',
+            'cadeira'
+        ];
+        
+        for (const coluna of colunasNecessarias) {
+            try {
+                // Verificar se a coluna existe
+                await pool.query(`
+                    SELECT ${coluna} FROM pedidos LIMIT 1
+                `);
+                console.log(`✅ Coluna ${coluna} já existe na tabela pedidos`);
+            } catch (error) {
+                // Se der erro, a coluna não existe
+                console.log(`➕ Adicionando coluna ${coluna} à tabela pedidos...`);
+                
+                // Determinar o tipo da coluna
+                let tipoColuna = 'VARCHAR(255)';
+                if (coluna === 'tema' || coluna === 'descricao') {
+                    tipoColuna = 'TEXT';
+                } else if (coluna === 'prazo') {
+                    tipoColuna = 'DATE';
+                } else if (coluna === 'instituicao' || coluna === 'curso' || coluna === 'cadeira') {
+                    tipoColuna = 'VARCHAR(100)';
+                }
+                
+                await pool.query(`
+                    ALTER TABLE pedidos 
+                    ADD COLUMN ${coluna} ${tipoColuna}
+                `);
+                
+                console.log(`✅ Coluna ${coluna} adicionada com sucesso!`);
+            }
+        }
+        
+        console.log('✅ Estrutura do banco de dados verificada e atualizada!');
+    } catch (error) {
+        console.error('❌ Erro ao verificar/atualizar estrutura:', error);
     }
 }
 
@@ -347,13 +398,21 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), asy
             arquivoPath = req.file.path;
         }
 
+        // Validar campos obrigatórios
+        if (!cliente || !telefone || !plano || !nomePlano || !preco || !metodoPagamento) {
+            return res.status(400).json({
+                success: false,
+                erro: 'Preencha todos os campos obrigatórios: cliente, telefone, plano, nomePlano, preco, metodoPagamento'
+            });
+        }
+
         // Inserir pedido
         const result = await pool.query(
             `INSERT INTO pedidos (
                 usuario_id, cliente, telefone, instituicao, curso, cadeira,
                 tema, descricao, prazo, plano, nome_plano, preco, 
-                metodo_pagamento, arquivo_path
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                metodo_pagamento, arquivo_path, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'pendente')
             RETURNING *`,
             [
                 req.user.id, cliente, telefone, instituicao, curso, cadeira,
@@ -370,6 +429,16 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), asy
 
     } catch (error) {
         console.error('Erro ao criar pedido com arquivo:', error);
+        
+        // Se houver erro de coluna faltante, informar ao usuário
+        if (error.message && error.message.includes('column') && error.message.includes('does not exist')) {
+            return res.status(500).json({
+                success: false,
+                erro: 'Erro no banco de dados. Contate o administrador do sistema.',
+                detalhes: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
             erro: error.message || 'Erro ao criar pedido'
@@ -921,16 +990,31 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Rota para teste de upload
+app.get('/api/teste-upload', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Rota de upload está funcionando',
+        endpoint: '/api/pedidos/upload',
+        method: 'POST',
+        headers: 'Authorization: Bearer <token>',
+        body: 'FormData com arquivo e campos'
+    });
+});
+
 // Inicializar servidor
 async function startServer() {
     try {
         await initDatabase();
+        await verificarEAtualizarEstrutura();
         
         app.listen(PORT, () => {
             console.log(`🚀 Servidor rodando na porta ${PORT}`);
             console.log(`🌐 Site: http://localhost:${PORT}`);
             console.log(`🔧 Admin: http://localhost:${PORT}/admin/pedidos?senha=admin2025`);
             console.log(`📊 Status: http://localhost:${PORT}/status`);
+            console.log(`📤 Upload: POST http://localhost:${PORT}/api/pedidos/upload`);
+            console.log(`🧪 Teste: GET http://localhost:${PORT}/api/teste-upload`);
         });
     } catch (error) {
         console.error('❌ Falha ao iniciar servidor:', error);
