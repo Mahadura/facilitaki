@@ -627,8 +627,8 @@ function abrirDescricaoTrabalho() {
     
     const servicos = {
         'basico': { nome: 'Serviços Avulsos', preco: 100 },
-        'avancado': { nome: 'Trabalho de campo', preco: 500 },
-        'premium': { nome: 'Monografia/TCC', preco: 15000 }
+        'avancado': { nome: 'Trabalho de campo', preco: 550 },
+        'premium': { nome: 'Monografia/TCC', preco: 10.000 }
     };
     
     const servico = servicos[servicoSelecionado] || { nome: 'Serviço', preco: 0 };
@@ -1219,3 +1219,4 @@ window.removerArquivo = removerArquivo;
 console.log('🎯 Facilitaki com upload real carregado!');
 console.log('📁 Arquivos físicos são enviados para o servidor');
 console.log('👨‍💼 Preview apenas no painel administrativo');
+
