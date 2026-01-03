@@ -1,4 +1,4 @@
-// server.js - Backend completo para Facilitaki
+// server.js - Backend completo para Facilitaki (VERSÃO CORRIGIDA)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -474,7 +474,8 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
             ORDER BY created_at DESC
         `);
 
-        res.send(`
+        // Construir HTML do painel administrativo
+        let html = `
             <!DOCTYPE html>
             <html lang="pt">
             <head>
@@ -660,41 +661,48 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                ${pedidosResult.rows.map(pedido => `
-                                    <tr>
-                                        <td>${pedido.id}</td>
-                                        <td>
-                                            <strong>${pedido.cliente}</strong><br>
-                                            <small>${pedido.telefone}</small>
-                                        </td>
-                                        <td>${pedido.nome_plano}</td>
-                                        <td>${parseFloat(pedido.preco).toLocaleString('pt-MZ')} MT</td>
-                                        <td>
-                                            <span class="status-badge status-${pedido.status}">
-                                                ${pedido.status.replace('_', ' ')}
-                                            </span>
-                                        </td>
-                                        <td>${new Date(pedido.data_pedido).toLocaleDateString('pt-MZ')}</td>
-                                        <td>
-                                            ${pedido.arquivo_path ? 
-                                                `<a href="/${pedido.arquivo_path}" target="_blank" class="file-link">
-                                                    <i class="fas fa-file"></i> Ver arquivo
-                                                </a>` : 
-                                                'Sem arquivo'}
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-view" onclick="verDetalhes(${pedido.id})">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <button class="btn btn-update" onclick="atualizarStatus(${pedido.id})">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button class="btn btn-delete" onclick="excluirPedido(${pedido.id})">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
+        `;
+
+        // Adicionar linhas da tabela de pedidos
+        pedidosResult.rows.forEach(pedido => {
+            const arquivoLink = pedido.arquivo_path ? 
+                `<a href="/${pedido.arquivo_path}" target="_blank" class="file-link">
+                    <i class="fas fa-file"></i> Ver arquivo
+                </a>` : 
+                'Sem arquivo';
+
+            html += `
+                <tr>
+                    <td>${pedido.id}</td>
+                    <td>
+                        <strong>${pedido.cliente}</strong><br>
+                        <small>${pedido.telefone}</small>
+                    </td>
+                    <td>${pedido.nome_plano}</td>
+                    <td>${parseFloat(pedido.preco).toLocaleString('pt-MZ')} MT</td>
+                    <td>
+                        <span class="status-badge status-${pedido.status}">
+                            ${pedido.status.replace('_', ' ')}
+                        </span>
+                    </td>
+                    <td>${new Date(pedido.data_pedido).toLocaleDateString('pt-MZ')}</td>
+                    <td>${arquivoLink}</td>
+                    <td>
+                        <button class="btn btn-view" onclick="verDetalhes(${pedido.id})">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-update" onclick="atualizarStatus(${pedido.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-delete" onclick="excluirPedido(${pedido.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
                             </tbody>
                         </table>
                     </div>
@@ -713,23 +721,30 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                ${usuariosResult.rows.map(usuario => `
-                                    <tr>
-                                        <td>${usuario.id}</td>
-                                        <td>${usuario.nome}</td>
-                                        <td>${usuario.telefone}</td>
-                                        <td>${new Date(usuario.created_at).toLocaleDateString('pt-MZ')}</td>
-                                        <td>${usuario.total_pedidos}</td>
-                                        <td>
-                                            <button class="btn btn-view" onclick="verUsuario(${usuario.id})">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <button class="btn btn-delete" onclick="excluirUsuario(${usuario.id})">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
+        `;
+
+        // Adicionar linhas da tabela de usuários
+        usuariosResult.rows.forEach(usuario => {
+            html += `
+                <tr>
+                    <td>${usuario.id}</td>
+                    <td>${usuario.nome}</td>
+                    <td>${usuario.telefone}</td>
+                    <td>${new Date(usuario.created_at).toLocaleDateString('pt-MZ')}</td>
+                    <td>${usuario.total_pedidos}</td>
+                    <td>
+                        <button class="btn btn-view" onclick="verUsuario(${usuario.id})">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-delete" onclick="excluirUsuario(${usuario.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
                             </tbody>
                         </table>
                     </div>
@@ -748,25 +763,32 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                ${contatosResult.rows.map(contato => `
-                                    <tr>
-                                        <td>${contato.id}</td>
-                                        <td>${contato.nome}</td>
-                                        <td>${contato.telefone}</td>
-                                        <td style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                            ${contato.mensagem}
-                                        </td>
-                                        <td>${new Date(contato.data_envio).toLocaleDateString('pt-MZ')}</td>
-                                        <td>
-                                            <button class="btn btn-view" onclick="verMensagem(${contato.id})">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <button class="btn btn-delete" onclick="excluirContato(${contato.id})">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
+        `;
+
+        // Adicionar linhas da tabela de contatos
+        contatosResult.rows.forEach(contato => {
+            html += `
+                <tr>
+                    <td>${contato.id}</td>
+                    <td>${contato.nome}</td>
+                    <td>${contato.telefone}</td>
+                    <td style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${contato.mensagem}
+                    </td>
+                    <td>${new Date(contato.data_envio).toLocaleDateString('pt-MZ')}</td>
+                    <td>
+                        <button class="btn btn-view" onclick="verMensagem(${contato.id})">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-delete" onclick="excluirContato(${contato.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
                             </tbody>
                         </table>
                     </div>
@@ -815,8 +837,14 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                         });
                         
                         // Adicionar classe active à tab e conteúdo selecionados
-                        document.querySelector(`.tab[onclick="showTab('${tabName}')"]`).classList.add('active');
-                        document.getElementById(`tab-${tabName}`).classList.add('active');
+                        const tabButtons = document.querySelectorAll('.tab');
+                        for (let tab of tabButtons) {
+                            if (tab.onclick && tab.onclick.toString().includes("showTab('" + tabName + "')")) {
+                                tab.classList.add('active');
+                                break;
+                            }
+                        }
+                        document.getElementById('tab-' + tabName).classList.add('active');
                     }
 
                     function verDetalhes(pedidoId) {
@@ -827,45 +855,37 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                                     const pedido = data.pedido;
                                     pedidoAtual = pedido;
                                     
-                                    let html = \`
-                                        <h2>Detalhes do Pedido #\${pedido.id}</h2>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
-                                            <div>
-                                                <h4>Informações do Cliente</h4>
-                                                <p><strong>Nome:</strong> \${pedido.cliente}</p>
-                                                <p><strong>Telefone:</strong> \${pedido.telefone}</p>
-                                                <p><strong>Instituição:</strong> \${pedido.instituicao || 'Não informada'}</p>
-                                                <p><strong>Curso:</strong> \${pedido.curso || 'Não informado'}</p>
-                                                <p><strong>Cadeira:</strong> \${pedido.cadeira || 'Não informada'}</p>
-                                            </div>
-                                            <div>
-                                                <h4>Informações do Serviço</h4>
-                                                <p><strong>Serviço:</strong> \${pedido.nome_plano}</p>
-                                                <p><strong>Plano:</strong> \${pedido.plano}</p>
-                                                <p><strong>Valor:</strong> \${parseFloat(pedido.preco).toLocaleString('pt-MZ')} MT</p>
-                                                <p><strong>Método de Pagamento:</strong> \${pedido.metodo_pagamento}</p>
-                                                <p><strong>Status:</strong> <span class="status-badge status-\${pedido.status}">\${pedido.status.replace('_', ' ')}</span></p>
-                                            </div>
-                                        </div>
-                                        <div style="margin-top: 20px;">
-                                            <h4>Descrição/Tema</h4>
-                                            <p>\${pedido.descricao || pedido.tema || 'Sem descrição'}</p>
-                                        </div>
-                                        \${pedido.arquivo_path ? \`
-                                            <div style="margin-top: 20px;">
-                                                <h4>Arquivo Anexado</h4>
-                                                <a href="/\${pedido.arquivo_path}" target="_blank" style="display: inline-flex; align-items: center; gap: 10px; padding: 10px; background: #3b82f6; color: white; border-radius: 5px; text-decoration: none;">
-                                                    <i class="fas fa-download"></i> Baixar Arquivo
-                                                </a>
-                                            </div>
-                                        \` : ''}
-                                        <div style="margin-top: 20px;">
-                                            <h4>Datas</h4>
-                                            <p><strong>Data do Pedido:</strong> \${new Date(pedido.data_pedido).toLocaleString('pt-MZ')}</p>
-                                            \${pedido.prazo ? \`<p><strong>Prazo Solicitado:</strong> \${new Date(pedido.prazo).toLocaleDateString('pt-MZ')}</p>\` : ''}
-                                            <p><strong>Última Atualização:</strong> \${new Date(pedido.updated_at).toLocaleString('pt-MZ')}</p>
-                                        </div>
-                                    \`;
+                                    let html = '<h2>Detalhes do Pedido #' + pedido.id + '</h2>';
+                                    html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">';
+                                    html += '<div><h4>Informações do Cliente</h4>';
+                                    html += '<p><strong>Nome:</strong> ' + pedido.cliente + '</p>';
+                                    html += '<p><strong>Telefone:</strong> ' + pedido.telefone + '</p>';
+                                    html += '<p><strong>Instituição:</strong> ' + (pedido.instituicao || 'Não informada') + '</p>';
+                                    html += '<p><strong>Curso:</strong> ' + (pedido.curso || 'Não informado') + '</p>';
+                                    html += '<p><strong>Cadeira:</strong> ' + (pedido.cadeira || 'Não informada') + '</p>';
+                                    html += '</div>';
+                                    html += '<div><h4>Informações do Serviço</h4>';
+                                    html += '<p><strong>Serviço:</strong> ' + pedido.nome_plano + '</p>';
+                                    html += '<p><strong>Plano:</strong> ' + pedido.plano + '</p>';
+                                    html += '<p><strong>Valor:</strong> ' + parseFloat(pedido.preco).toLocaleString('pt-MZ') + ' MT</p>';
+                                    html += '<p><strong>Método de Pagamento:</strong> ' + pedido.metodo_pagamento + '</p>';
+                                    html += '<p><strong>Status:</strong> <span class="status-badge status-' + pedido.status + '">' + pedido.status.replace('_', ' ') + '</span></p>';
+                                    html += '</div></div>';
+                                    html += '<div style="margin-top: 20px;"><h4>Descrição/Tema</h4>';
+                                    html += '<p>' + (pedido.descricao || pedido.tema || 'Sem descrição') + '</p></div>';
+                                    
+                                    if (pedido.arquivo_path) {
+                                        html += '<div style="margin-top: 20px;"><h4>Arquivo Anexado</h4>';
+                                        html += '<a href="/' + pedido.arquivo_path + '" target="_blank" style="display: inline-flex; align-items: center; gap: 10px; padding: 10px; background: #3b82f6; color: white; border-radius: 5px; text-decoration: none;">';
+                                        html += '<i class="fas fa-download"></i> Baixar Arquivo</a></div>';
+                                    }
+                                    
+                                    html += '<div style="margin-top: 20px;"><h4>Datas</h4>';
+                                    html += '<p><strong>Data do Pedido:</strong> ' + new Date(pedido.data_pedido).toLocaleString('pt-MZ') + '</p>';
+                                    if (pedido.prazo) {
+                                        html += '<p><strong>Prazo Solicitado:</strong> ' + new Date(pedido.prazo).toLocaleDateString('pt-MZ') + '</p>';
+                                    }
+                                    html += '<p><strong>Última Atualização:</strong> ' + new Date(pedido.updated_at).toLocaleString('pt-MZ') + '</p></div>';
                                     
                                     document.getElementById('modalContent').innerHTML = html;
                                     document.getElementById('modalDetalhes').style.display = 'flex';
@@ -883,48 +903,34 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                             .then(data => {
                                 if (data.success) {
                                     const usuario = data.usuario;
-                                    let html = \`
-                                        <h2>Detalhes do Usuário #\${usuario.id}</h2>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
-                                            <div>
-                                                <h4>Informações Pessoais</h4>
-                                                <p><strong>Nome:</strong> \${usuario.nome}</p>
-                                                <p><strong>Telefone:</strong> \${usuario.telefone}</p>
-                                                <p><strong>Data de Cadastro:</strong> \${new Date(usuario.created_at).toLocaleString('pt-MZ')}</p>
-                                            </div>
-                                            <div>
-                                                <h4>Estatísticas</h4>
-                                                <p><strong>Total de Pedidos:</strong> \${usuario.total_pedidos || 0}</p>
-                                            </div>
-                                        </div>
-                                        \${usuario.pedidos && usuario.pedidos.length > 0 ? \`
-                                            <div style="margin-top: 20px;">
-                                                <h4>Últimos Pedidos</h4>
-                                                <table style="width: 100%; margin-top: 10px;">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>ID</th>
-                                                            <th>Serviço</th>
-                                                            <th>Valor</th>
-                                                            <th>Status</th>
-                                                            <th>Data</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        \${usuario.pedidos.map(pedido => \`
-                                                            <tr>
-                                                                <td>\${pedido.id}</td>
-                                                                <td>\${pedido.nome_plano}</td>
-                                                                <td>\${parseFloat(pedido.preco).toLocaleString('pt-MZ')} MT</td>
-                                                                <td><span class="status-badge status-\${pedido.status}">\${pedido.status.replace('_', ' ')}</span></td>
-                                                                <td>\${new Date(pedido.data_pedido).toLocaleDateString('pt-MZ')}</td>
-                                                            </tr>
-                                                        \`).join('')}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        \` : '<p>Este usuário ainda não fez pedidos.</p>'}
-                                    \`;
+                                    let html = '<h2>Detalhes do Usuário #' + usuario.id + '</h2>';
+                                    html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">';
+                                    html += '<div><h4>Informações Pessoais</h4>';
+                                    html += '<p><strong>Nome:</strong> ' + usuario.nome + '</p>';
+                                    html += '<p><strong>Telefone:</strong> ' + usuario.telefone + '</p>';
+                                    html += '<p><strong>Data de Cadastro:</strong> ' + new Date(usuario.created_at).toLocaleString('pt-MZ') + '</p>';
+                                    html += '</div>';
+                                    html += '<div><h4>Estatísticas</h4>';
+                                    html += '<p><strong>Total de Pedidos:</strong> ' + (usuario.total_pedidos || 0) + '</p>';
+                                    html += '</div></div>';
+                                    
+                                    if (usuario.pedidos && usuario.pedidos.length > 0) {
+                                        html += '<div style="margin-top: 20px;"><h4>Últimos Pedidos</h4>';
+                                        html += '<table style="width: 100%; margin-top: 10px;">';
+                                        html += '<thead><tr><th>ID</th><th>Serviço</th><th>Valor</th><th>Status</th><th>Data</th></tr></thead><tbody>';
+                                        usuario.pedidos.forEach(pedido => {
+                                            html += '<tr>';
+                                            html += '<td>' + pedido.id + '</td>';
+                                            html += '<td>' + pedido.nome_plano + '</td>';
+                                            html += '<td>' + parseFloat(pedido.preco).toLocaleString('pt-MZ') + ' MT</td>';
+                                            html += '<td><span class="status-badge status-' + pedido.status + '">' + pedido.status.replace('_', ' ') + '</span></td>';
+                                            html += '<td>' + new Date(pedido.data_pedido).toLocaleDateString('pt-MZ') + '</td>';
+                                            html += '</tr>';
+                                        });
+                                        html += '</tbody></table></div>';
+                                    } else {
+                                        html += '<p>Este usuário ainda não fez pedidos.</p>';
+                                    }
                                     
                                     document.getElementById('modalContent').innerHTML = html;
                                     document.getElementById('modalDetalhes').style.display = 'flex';
@@ -942,20 +948,15 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                             .then(data => {
                                 if (data.success) {
                                     const contato = data.contato;
-                                    let html = \`
-                                        <h2>Mensagem de Contato #\${contato.id}</h2>
-                                        <div style="margin-top: 20px;">
-                                            <p><strong>Nome:</strong> \${contato.nome}</p>
-                                            <p><strong>Telefone:</strong> \${contato.telefone}</p>
-                                            <p><strong>Data de Envio:</strong> \${new Date(contato.data_envio).toLocaleString('pt-MZ')}</p>
-                                        </div>
-                                        <div style="margin-top: 20px;">
-                                            <h4>Mensagem</h4>
-                                            <div style="background: #f8fafc; padding: 15px; border-radius: 5px; border-left: 4px solid #3b82f6;">
-                                                \${contato.mensagem}
-                                            </div>
-                                        </div>
-                                    \`;
+                                    let html = '<h2>Mensagem de Contato #' + contato.id + '</h2>';
+                                    html += '<div style="margin-top: 20px;">';
+                                    html += '<p><strong>Nome:</strong> ' + contato.nome + '</p>';
+                                    html += '<p><strong>Telefone:</strong> ' + contato.telefone + '</p>';
+                                    html += '<p><strong>Data de Envio:</strong> ' + new Date(contato.data_envio).toLocaleString('pt-MZ') + '</p>';
+                                    html += '</div>';
+                                    html += '<div style="margin-top: 20px;"><h4>Mensagem</h4>';
+                                    html += '<div style="background: #f8fafc; padding: 15px; border-radius: 5px; border-left: 4px solid #3b82f6;">';
+                                    html += contato.mensagem + '</div></div>';
                                     
                                     document.getElementById('modalContent').innerHTML = html;
                                     document.getElementById('modalDetalhes').style.display = 'flex';
@@ -1083,7 +1084,9 @@ app.get('/admin/pedidos', authenticateAdmin, async (req, res) => {
                 </script>
             </body>
             </html>
-        `);
+        `;
+
+        res.send(html);
     } catch (error) {
         console.error('❌ Erro no painel admin:', error);
         res.status(500).send('Erro ao carregar painel administrativo');
@@ -1324,8 +1327,8 @@ app.delete('/api/admin/contatos/:id', authenticateAdmin, async (req, res) => {
     }
 });
 
-// Servir arquivos HTML
-app.get('*', (req, res) => {
+// Servir arquivos estáticos para o frontend
+app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
