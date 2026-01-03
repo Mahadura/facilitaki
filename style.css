@@ -1,4 +1,4 @@
-/* style.css - Estilos completos para o Facilitaki */
+/* style.css - Estilos completos para o Facilitaki (Versão Atualizada e Completa) */
 
 /* ===== RESET E BASE ===== */
 :root {
@@ -516,6 +516,8 @@ a:hover {
     padding: 0.35rem;
     border-radius: 50%;
     font-size: 0.85rem;
+    flex-shrink: 0;
+    margin-top: 0.2rem;
 }
 
 .plano-features li i.fa-times {
@@ -524,6 +526,8 @@ a:hover {
     padding: 0.35rem;
     border-radius: 50%;
     font-size: 0.85rem;
+    flex-shrink: 0;
+    margin-top: 0.2rem;
 }
 
 /* ===== BUTTONS ===== */
@@ -604,10 +608,20 @@ a:hover {
     font-size: 1.1rem;
     width: 100%;
     margin-top: auto;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
 }
 
 .btn-comprar:hover {
     background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
 }
 
 .btn-comprar.recomendado {
@@ -802,38 +816,32 @@ a:hover {
     margin: 1rem 0;
     border-left: 4px solid;
     animation: slideInRight 0.3s ease-out;
-}
-
-@keyframes slideInRight {
-    from {
-        opacity: 0;
-        transform: translateX(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    display: none;
 }
 
 .message.success {
+    display: block;
     background: rgba(16, 185, 129, 0.1);
     color: var(--secondary-dark);
     border-left-color: var(--success-color);
 }
 
 .message.error {
+    display: block;
     background: rgba(239, 68, 68, 0.1);
     color: #991b1b;
     border-left-color: var(--danger-color);
 }
 
 .message.info {
+    display: block;
     background: rgba(59, 130, 246, 0.1);
     color: var(--primary-dark);
     border-left-color: var(--info-color);
 }
 
 .message.warning {
+    display: block;
     background: rgba(245, 158, 11, 0.1);
     color: #92400e;
     border-left-color: var(--warning-color);
@@ -854,6 +862,10 @@ a:hover {
     padding: 1rem;
     backdrop-filter: blur(4px);
     animation: fadeIn 0.3s ease-out;
+}
+
+.modal.active {
+    display: flex;
 }
 
 .modal-content {
@@ -900,25 +912,41 @@ a:hover {
     gap: 0.75rem;
 }
 
-/* Responsividade para o modal */
-@media (max-width: 576px) {
-    .modal-content {
-        max-width: 95%;
-        padding: 1.5rem;
-        max-height: 90vh;
-        margin: 0.5rem;
-    }
+/* ===== UPLOAD AREA SPECIFIC STYLES ===== */
+#uploadArea {
+    border: 2px dashed var(--primary-color);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    text-align: center;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    margin-bottom: 1rem;
 }
 
-@media (max-width: 480px) {
-    .modal-content > div:last-child {
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-    
-    .modal-content .btn {
-        width: 100%;
-    }
+#uploadArea:hover {
+    background: var(--bg-secondary);
+    border-color: var(--primary-dark);
+}
+
+#filePreview {
+    background: rgba(37, 99, 235, 0.05);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    margin-top: 1rem;
+}
+
+#filePreview > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+#filePreview i {
+    font-size: 1.5rem;
+    color: var(--primary-color);
 }
 
 /* ===== HOW IT WORKS ===== */
@@ -979,6 +1007,16 @@ a:hover {
     line-height: 1.7;
 }
 
+.step-content ul {
+    margin-left: 1.5rem;
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.step-content li {
+    margin-bottom: 0.5rem;
+}
+
 /* ===== CONTACT ===== */
 .contact-info {
     display: grid;
@@ -1037,22 +1075,17 @@ footer {
     margin-bottom: 3rem;
 }
 
+/* CORREÇÃO: Os h4 devem ser BRANCOS, não azuis */
+.footer-content h4,
+footer h4,
 .footer-section h4 {
-    color: var(--primary-light);
+    color: white !important; /* Força cor branca */
     margin-bottom: 1.5rem;
     font-size: 1.25rem;
+    font-weight: 600;
     position: relative;
     padding-bottom: 0.75rem;
-}
-
-.footer-section h4::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 50px;
-    height: 2px;
-    background: var(--primary-color);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .footer-links {
@@ -1069,6 +1102,7 @@ footer {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    text-decoration: none;
 }
 
 .footer-links a:hover {
@@ -1085,6 +1119,7 @@ footer {
     display: flex;
     gap: 1rem;
     margin-top: 1.5rem;
+    justify-content: center; /* Centraliza os ícones sociais */
 }
 
 .social-links a {
@@ -1097,11 +1132,14 @@ footer {
     border-radius: 50%;
     color: white;
     transition: all var(--transition-normal);
+    font-size: 1.2rem;
 }
 
 .social-links a:hover {
-    background: var(--primary-color);
+    background: white;
+    color: #1f2937;
     transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .footer-bottom {
@@ -1110,6 +1148,31 @@ footer {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     color: #9ca3af;
     font-size: 0.9rem;
+}
+
+/* Estilos específicos para o texto "FacilitAki" no footer */
+.footer-content > div:first-child h4 {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+}
+
+.footer-content > div:first-child p {
+    color: #d1d5db;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+/* Item "100% dentro da legalidade" */
+.footer-content > div:first-child p:last-child {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #9ca3af;
+    font-size: 1.1rem;
+}
+
+.footer-content > div:first-child p:last-child i {
+    color: var(--success-color);
 }
 
 /* ===== RESPONSIVE DESIGN ===== */
@@ -1192,6 +1255,13 @@ footer {
     .social-links {
         justify-content: center;
     }
+    
+    .modal-content {
+        max-width: 95%;
+        padding: 1.5rem;
+        max-height: 90vh;
+        margin: 0.5rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1228,69 +1298,16 @@ footer {
     .modal-content {
         padding: 1.5rem;
     }
+    
+    .modal-content > div:last-child {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .modal-content .btn {
+        width: 100%;
+    }
 }
-
-/* ===== UTILITY CLASSES ===== */
-.mt-1 { margin-top: 0.5rem; }
-.mt-2 { margin-top: 1rem; }
-.mt-3 { margin-top: 1.5rem; }
-.mt-4 { margin-top: 2rem; }
-.mt-5 { margin-top: 3rem; }
-
-.mb-1 { margin-bottom: 0.5rem; }
-.mb-2 { margin-bottom: 1rem; }
-.mb-3 { margin-bottom: 1.5rem; }
-.mb-4 { margin-bottom: 2rem; }
-.mb-5 { margin-bottom: 3rem; }
-
-.py-1 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-.py-2 { padding-top: 1rem; padding-bottom: 1rem; }
-.py-3 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
-.py-4 { padding-top: 2rem; padding-bottom: 2rem; }
-.py-5 { padding-top: 3rem; padding-bottom: 3rem; }
-
-.shadow-1 { box-shadow: var(--shadow-sm); }
-.shadow-2 { box-shadow: var(--shadow-md); }
-.shadow-3 { box-shadow: var(--shadow-lg); }
-.shadow-4 { box-shadow: var(--shadow-xl); }
-
-.rounded-sm { border-radius: var(--radius-sm); }
-.rounded-md { border-radius: var(--radius-md); }
-.rounded-lg { border-radius: var(--radius-lg); }
-.rounded-xl { border-radius: var(--radius-xl); }
-.rounded-full { border-radius: var(--radius-full); }
-
-.bg-primary { background-color: var(--primary-color); color: white; }
-.bg-secondary { background-color: var(--bg-secondary); }
-.bg-white { background-color: white; }
-
-.text-primary { color: var(--primary-color); }
-.text-success { color: var(--success-color); }
-.text-danger { color: var(--danger-color); }
-.text-warning { color: var(--warning-color); }
-.text-info { color: var(--info-color); }
-
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.items-center { align-items: center; }
-.justify-center { justify-content: center; }
-.justify-between { justify-content: space-between; }
-.gap-1 { gap: 0.5rem; }
-.gap-2 { gap: 1rem; }
-.gap-3 { gap: 1.5rem; }
-.gap-4 { gap: 2rem; }
-
-.grid { display: grid; }
-.grid-cols-1 { grid-template-columns: 1fr; }
-.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
-.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
-.grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
-
-.w-full { width: 100%; }
-.h-full { height: 100%; }
-
-.hidden { display: none; }
-.block { display: block; }
 
 /* ===== ANIMATIONS ===== */
 @keyframes pulse {
@@ -1385,5 +1402,485 @@ footer {
         break-inside: avoid;
         box-shadow: none !important;
         border: 1px solid #ddd !important;
+    }
+}
+
+/* ===== STYLES SPECIFIC FOR SCRIPT FUNCTIONALITY ===== */
+/* Estilos para a seção home */
+#home .section-header p {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* Estilos para botões inline na home */
+#home button {
+    font-size: 1.1rem;
+    padding: 1rem 2.5rem;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    font-weight: 600;
+}
+
+/* Estilos para cards de estatísticas na home */
+#home > .container > div:nth-child(3) {
+    margin-top: 3rem;
+}
+
+/* Estilos para as instruções de pagamento */
+#instrucoesDetalhadas h4 {
+    color: var(--primary-dark);
+    margin-bottom: 1rem;
+}
+
+/* Estilos para o resumo do pedido no modal */
+#nomeServicoModal, #valorServicoModal {
+    font-weight: 700;
+}
+
+/* Estilos para campos de entrada de telefone */
+input[type="tel"] {
+    font-family: monospace;
+    letter-spacing: 1px;
+}
+
+/* Estilos para o botão de logout */
+#dashboard > .container > div:last-child button {
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    padding: 0.8rem 2rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#dashboard > .container > div:last-child button:hover {
+    background: #dc2626;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Estilos para os ícones de status nos pedidos */
+#listaPedidos span i {
+    margin-right: 0.25rem;
+}
+
+/* Estilos para os checkboxes */
+input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin-right: 0.5rem;
+    cursor: pointer;
+}
+
+/* Estilos para o botão do modal que está desabilitado */
+#btnSolicitarServico:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+#btnSolicitarServico:disabled:hover {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    box-shadow: var(--shadow-md);
+}
+
+/* Estilos para o botão de remover arquivo */
+button[onclick="removerArquivo()"] {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    cursor: pointer;
+    padding: 0.5rem;
+    font-size: 1.2rem;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+}
+
+button[onclick="removerArquivo()"]:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* Estilos para as mensagens de erro/sucesso globais */
+.message-global {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 3000;
+    max-width: 300px;
+    padding: 15px;
+    border-radius: var(--radius-md);
+    animation: slideInRight 0.3s ease-out;
+    box-shadow: var(--shadow-lg);
+}
+
+/* Estilos para os botões de navegação nas seções */
+.btn-voltar, .btn-proximo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+/* Estilos para garantir que os botões com ícones tenham alinhamento correto */
+button i, .btn i, a i {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* ===== BOTÕES DO FORMULÁRIO DE LOGIN/CADASTRO ===== */
+
+/* Botão ENTRAR (já existente - atualizado) */
+#formLogin .btn-primary,
+#formLogin button[onclick="fazerLogin()"] {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 18px 32px !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    width: 100% !important;
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    letter-spacing: 0.5px !important;
+    margin: 20px 0 15px 0 !important;
+    display: block !important;
+    text-align: center !important;
+}
+
+#formLogin .btn-primary::before,
+#formLogin button[onclick="fazerLogin()"]::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: -100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+    transition: left 0.7s ease !important;
+}
+
+#formLogin .btn-primary:hover::before,
+#formLogin button[onclick="fazerLogin()"]:hover::before {
+    left: 100% !important;
+}
+
+#formLogin .btn-primary:hover,
+#formLogin button[onclick="fazerLogin()"]:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4) !important;
+    background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+}
+
+#formLogin .btn-primary:active,
+#formLogin button[onclick="fazerLogin()"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* Botão CADASTRAR (formulário de cadastro) */
+#formCadastro .btn-primary,
+#formCadastro button[onclick="fazerCadastro()"] {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 18px 32px !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    width: 100% !important;
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    letter-spacing: 0.5px !important;
+    margin: 20px 0 15px 0 !important;
+    display: block !important;
+    text-align: center !important;
+}
+
+#formCadastro .btn-primary::before,
+#formCadastro button[onclick="fazerCadastro()"]::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: -100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+    transition: left 0.7s ease !important;
+}
+
+#formCadastro .btn-primary:hover::before,
+#formCadastro button[onclick="fazerCadastro()"]:hover::before {
+    left: 100% !important;
+}
+
+#formCadastro .btn-primary:hover,
+#formCadastro button[onclick="fazerCadastro()"]:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4) !important;
+    background: linear-gradient(135deg, #059669, #047857) !important;
+}
+
+#formCadastro .btn-primary:active,
+#formCadastro button[onclick="fazerCadastro()"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Botão VOLTAR PARA LOGIN (no formulário de cadastro) */
+#formCadastro .btn-secondary,
+#formCadastro button[onclick="mostrarLogin()"] {
+    background: white !important;
+    color: #6b7280 !important;
+    border: 2px solid #e5e7eb !important;
+    border-radius: 12px !important;
+    padding: 16px 32px !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    width: 100% !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    letter-spacing: 0.3px !important;
+    margin: 0 0 15px 0 !important;
+    display: block !important;
+    text-align: center !important;
+}
+
+#formCadastro .btn-secondary::before,
+#formCadastro button[onclick="mostrarLogin()"]::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: -100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(90deg, transparent, rgba(107, 114, 128, 0.05), transparent) !important;
+    transition: left 0.7s ease !important;
+}
+
+#formCadastro .btn-secondary:hover::before,
+#formCadastro button[onclick="mostrarLogin()"]:hover::before {
+    left: 100% !important;
+}
+
+#formCadastro .btn-secondary:hover,
+#formCadastro button[onclick="mostrarLogin()"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08) !important;
+    border-color: #d1d5db !important;
+    color: #4b5563 !important;
+    background: #f9fafb !important;
+}
+
+#formCadastro .btn-secondary:active,
+#formCadastro button[onclick="mostrarLogin()"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Link "Cadastre-se aqui" (no formulário de login) */
+#formLogin a[onclick="mostrarCadastro()"] {
+    color: #2563eb !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+    transition: all 0.2s ease !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    display: inline-block !important;
+}
+
+#formLogin a[onclick="mostrarCadastro()"]:hover {
+    color: #1e40af !important;
+    background-color: rgba(37, 99, 235, 0.05) !important;
+    text-decoration: underline !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Ícones nos botões (se houver) */
+#formLogin .btn-primary i,
+#formLogin button[onclick="fazerLogin()"] i,
+#formCadastro .btn-primary i,
+#formCadastro button[onclick="fazerCadastro()"] i,
+#formCadastro .btn-secondary i,
+#formCadastro button[onclick="mostrarLogin()"] i {
+    display: none !important;
+}
+
+/* Estilos para estados de loading nos botões */
+#formLogin .btn-primary.loading,
+#formLogin button[onclick="fazerLogin()"].loading,
+#formCadastro .btn-primary.loading,
+#formCadastro button[onclick="fazerCadastro()"].loading {
+    position: relative;
+    color: transparent !important;
+}
+
+#formLogin .btn-primary.loading::after,
+#formLogin button[onclick="fazerLogin()"].loading::after,
+#formCadastro .btn-primary.loading::after,
+#formCadastro button[onclick="fazerCadastro()"].loading::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: buttonSpin 1s linear infinite;
+    left: 50%;
+    top: 50%;
+    margin-left: -10px;
+    margin-top: -10px;
+}
+
+@keyframes buttonSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Melhorar o contêiner dos botões */
+#formLogin .form-group:last-of-type,
+#formCadastro .form-group:last-of-type {
+    margin-bottom: 0;
+}
+
+/* Ajustar espaçamento entre botões */
+#formCadastro > .btn-primary + .btn-secondary {
+    margin-top: 10px !important;
+}
+
+/* Responsividade */
+@media (max-width: 480px) {
+    #formLogin .btn-primary,
+    #formLogin button[onclick="fazerLogin()"],
+    #formCadastro .btn-primary,
+    #formCadastro button[onclick="fazerCadastro()"],
+    #formCadastro .btn-secondary,
+    #formCadastro button[onclick="mostrarLogin()"] {
+        padding: 16px 24px !important;
+        font-size: 16px !important;
+    }
+}
+
+/* ===== BOTÃO FAZER UPLOAD (DASHBOARD) ===== */
+
+/* Botão principal "Fazer Upload" */
+button[onclick="abrirDescricaoTrabalho()"] {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 16px 32px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+    letter-spacing: 0.5px;
+}
+
+/* Efeito de brilho deslizante */
+button[onclick="abrirDescricaoTrabalho()"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.7s ease;
+}
+
+button[onclick="abrirDescricaoTrabalho()"]:hover::before {
+    left: 100%;
+}
+
+/* Efeito hover */
+button[onclick="abrirDescricaoTrabalho()"]:hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+}
+
+/* Efeito active (quando clicado) */
+button[onclick="abrirDescricaoTrabalho()"]:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Ícone do botão */
+button[onclick="abrirDescricaoTrabalho()"] i {
+    font-size: 20px;
+    transition: transform 0.3s ease;
+}
+
+/* Animação do ícone no hover */
+button[onclick="abrirDescricaoTrabalho()"]:hover i {
+    transform: translateY(-2px);
+}
+
+/* Estado disabled (se aplicável) */
+button[onclick="abrirDescricaoTrabalho()"]:disabled {
+    background: linear-gradient(135deg, #9ca3af, #6b7280);
+    cursor: not-allowed;
+    opacity: 0.7;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+button[onclick="abrirDescricaoTrabalho()"]:disabled:hover {
+    transform: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+button[onclick="abrirDescricaoTrabalho()"]:disabled::before {
+    display: none;
+}
+
+button[onclick="abrirDescricaoTrabalho()"]:disabled:hover i {
+    transform: none;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    button[onclick="abrirDescricaoTrabalho()"] {
+        padding: 14px 24px;
+        font-size: 16px;
+    }
+    
+    button[onclick="abrirDescricaoTrabalho()"] i {
+        font-size: 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    button[onclick="abrirDescricaoTrabalho()"] {
+        padding: 12px 20px;
+        font-size: 15px;
+    }
+    
+    button[onclick="abrirDescricaoTrabalho()"] i {
+        font-size: 16px;
     }
 }
