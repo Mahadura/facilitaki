@@ -197,46 +197,226 @@ async function initDatabase() {
 // Função para verificar e atualizar estrutura do banco
 async function verificarEAtualizarEstrutura() {
     try {
-        console.log('🔍 Verificando estrutura do banco de dados...');
+        console.log('🔍 Verificando e atualizando estrutura do banco de dados...');
         
-        const colunasNecessarias = [
-            { name: 'arquivo_path', type: 'VARCHAR(255)' },
-            { name: 'tema', type: 'TEXT' },
-            { name: 'prazo', type: 'DATE' },
-            { name: 'instituicao', type: 'VARCHAR(100)' },
-            { name: 'curso', type: 'VARCHAR(100)' },
-            { name: 'cadeira', type: 'VARCHAR(100)' }
-        ];
+        // Definir todas as colunas necessárias para cada tabela
+        const tabelasColunas = {
+            usuarios: [
+                { name: 'nome', type: 'VARCHAR(100) NOT NULL' },
+                { name: 'telefone', type: 'VARCHAR(20) UNIQUE NOT NULL' },
+                { name: 'senha_hash', type: 'VARCHAR(255) NOT NULL' },
+                { name: 'created_at', type: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' }
+            ],
+            pedidos: [
+                { name: 'usuario_id', type: 'INTEGER REFERENCES usuarios(id) ON DELETE CASCADE' },
+                { name: 'cliente', type: 'VARCHAR(100) NOT NULL' },
+                { name: 'telefone', type: 'VARCHAR(20) NOT NULL' },
+                { name: 'instituicao', type: 'VARCHAR(100)' },
+                { name: 'curso', type: 'VARCHAR(100)' },
+                { name: 'cadeira', type: 'VARCHAR(100)' },
+                { name: 'tema', type: 'TEXT' },
+                { name: 'descricao', type: 'TEXT' },
+                { name: 'prazo', type: 'DATE' },
+                { name: 'plano', type: 'VARCHAR(50) NOT NULL' },
+                { name: 'nome_plano', type: 'VARCHAR(100) NOT NULL' },
+                { name: 'preco', type: 'DECIMAL(10,2) NOT NULL' },
+                { name: 'metodo_pagamento', type: 'VARCHAR(50) NOT NULL' },
+                { name: 'status', type: 'VARCHAR(20) DEFAULT \'pendente\'' },
+                { name: 'arquivo_path', type: 'VARCHAR(255)' },
+                { name: 'data_pedido', type: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' }
+            ],
+            contatos: [
+                { name: 'nome', type: 'VARCHAR(100) NOT NULL' },
+                { name: 'telefone', type: 'VARCHAR(20) NOT NULL' },
+                { name: 'mensagem', type: 'TEXT NOT NULL' },
+                { name: 'data_envio', type: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' }
+            ]
+        };
         
-        for (const coluna of colunasNecessarias) {
-            try {
-                // Verificar se a coluna existe
-                await pool.query(`
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'pedidos' AND column_name = $1
-                `, [coluna.name]);
-                console.log(`✅ Coluna ${coluna.name} já existe na tabela pedidos`);
-            } catch (error) {
-                // Se der erro, a coluna não existe
-                console.log(`➕ Adicionando coluna ${coluna.name} à tabela pedidos...`);
-                
+        for (const [tabela, colunas] of Object.entries(tabelasColunas)) {
+            console.log(`\n📋 Verificando tabela: ${tabela}`);
+            
+            // Verificar se a tabela existe
+            const tabelaExiste = await pool.query(`
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = $1
+                )
+            `, [tabela]);
+            
+            if (!tabelaExiste.rows[0].exists) {
+                console.log(`⚠️ Tabela ${tabela} não existe, criando...`);
+                // A tabela será criada pela initDatabase
+                continue;
+            }
+            
+            // Para cada coluna, verificar se existe
+            for (const coluna of colunas) {
                 try {
-                    await pool.query(`
-                        ALTER TABLE pedidos 
-                        ADD COLUMN ${coluna.name} ${coluna.type}
-                    `);
-                    console.log(`✅ Coluna ${coluna.name} adicionada com sucesso!`);
-                } catch (alterError) {
-                    console.log(`⚠️ Não foi possível adicionar coluna ${coluna.name}:`, alterError.message);
+                    // Verificar se a coluna existe
+                    const colunaExiste = await pool.query(`
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = $1 AND column_name = $2
+                    `, [tabela, coluna.name]);
+                    
+                    if (colunaExiste.rows.length === 0) {
+                        console.log(`➕ Adicionando coluna ${coluna.name} à tabela ${tabela}...`);
+                        
+                        // Remover constraints NOT NULL e DEFAULT para adição
+                        let tipoParaAdicao = coluna.type;
+                        // Se contém NOT NULL, remover para adicionar a coluna
+                        if (tipoParaAdicao.includes('NOT NULL')) {
+                            tipoParaAdicao = tipoParaAdicao.replace('NOT NULL', '').trim();
+                        }
+                        // Se contém DEFAULT, remover para adicionar a coluna
+                        if (tipoParaAdicao.includes('DEFAULT')) {
+                            tipoParaAdicao = tipoParaAdicao.split('DEFAULT')[0].trim();
+                        }
+                        
+                        try {
+                            await pool.query(`
+                                ALTER TABLE ${tabela} 
+                                ADD COLUMN ${coluna.name} ${tipoParaAdicao}
+                            `);
+                            console.log(`✅ Coluna ${coluna.name} adicionada com sucesso!`);
+                            
+                            // Se a coluna original tinha NOT NULL, atualizar depois
+                            if (coluna.type.includes('NOT NULL')) {
+                                // Primeiro, atualizar registros existentes com valor padrão
+                                if (coluna.type.includes('DEFAULT')) {
+                                    const defaultValue = coluna.type.split('DEFAULT')[1].trim();
+                                    await pool.query(`
+                                        UPDATE ${tabela} 
+                                        SET ${coluna.name} = ${defaultValue}
+                                        WHERE ${coluna.name} IS NULL
+                                    `);
+                                }
+                                
+                                // Adicionar NOT NULL constraint
+                                await pool.query(`
+                                    ALTER TABLE ${tabela} 
+                                    ALTER COLUMN ${coluna.name} SET NOT NULL
+                                `);
+                                console.log(`✅ NOT NULL constraint adicionada para ${coluna.name}`);
+                            }
+                            
+                            // Se a coluna original tinha DEFAULT, adicionar
+                            if (coluna.type.includes('DEFAULT')) {
+                                const defaultValue = coluna.type.split('DEFAULT')[1].trim();
+                                await pool.query(`
+                                    ALTER TABLE ${tabela} 
+                                    ALTER COLUMN ${coluna.name} SET DEFAULT ${defaultValue}
+                                `);
+                                console.log(`✅ DEFAULT ${defaultValue} adicionado para ${coluna.name}`);
+                            }
+                            
+                        } catch (alterError) {
+                            console.log(`⚠️ Não foi possível adicionar coluna ${coluna.name}:`, alterError.message);
+                            console.log('⚠️ Tentando abordagem alternativa...');
+                            
+                            // Tentar abordagem mais simples
+                            try {
+                                await pool.query(`
+                                    ALTER TABLE ${tabela} 
+                                    ADD COLUMN ${coluna.name} VARCHAR(255)
+                                `);
+                                console.log(`✅ Coluna ${coluna.name} adicionada com tipo simples`);
+                            } catch (simpleError) {
+                                console.log(`❌ Falha na abordagem alternativa para ${coluna.name}:`, simpleError.message);
+                            }
+                        }
+                    } else {
+                        console.log(`✅ Coluna ${coluna.name} já existe na tabela ${tabela}`);
+                    }
+                } catch (error) {
+                    console.log(`❌ Erro ao verificar coluna ${coluna.name} em ${tabela}:`, error.message);
                 }
             }
         }
         
-        console.log('✅ Estrutura do banco de dados verificada e atualizada!');
+        console.log('\n✅ Estrutura do banco de dados verificada e atualizada!');
         return true;
     } catch (error) {
         console.error('❌ Erro ao verificar/atualizar estrutura:', error.message);
+        return false;
+    }
+}
+
+// Função para recriar tabelas se necessário
+async function recriarTabelasSeNecessario() {
+    try {
+        console.log('🔄 Verificando necessidade de recriar tabelas...');
+        
+        // Verificar se a tabela usuarios tem a coluna senha_hash
+        const colunasUsuarios = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'usuarios'
+        `);
+        
+        const colunasExistentes = colunasUsuarios.rows.map(row => row.column_name);
+        console.log('📊 Colunas existentes na tabela usuarios:', colunasExistentes);
+        
+        // Se não tiver senha_hash, dropar e recriar a tabela
+        if (!colunasExistentes.includes('senha_hash')) {
+            console.log('🔄 Coluna senha_hash não encontrada. Recriando tabela usuarios...');
+            
+            // Primeiro, dropar a tabela pedidos que depende de usuarios
+            try {
+                await pool.query('DROP TABLE IF EXISTS pedidos CASCADE');
+                console.log('✅ Tabela pedidos removida');
+            } catch (error) {
+                console.log('⚠️ Erro ao remover tabela pedidos:', error.message);
+            }
+            
+            // Dropar tabela usuarios
+            await pool.query('DROP TABLE IF EXISTS usuarios CASCADE');
+            console.log('✅ Tabela usuarios removida');
+            
+            // Recriar tabela usuarios
+            await pool.query(`
+                CREATE TABLE usuarios (
+                    id SERIAL PRIMARY KEY,
+                    nome VARCHAR(100) NOT NULL,
+                    telefone VARCHAR(20) UNIQUE NOT NULL,
+                    senha_hash VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('✅ Tabela usuarios recriada com sucesso!');
+            
+            // Recriar tabela pedidos
+            await pool.query(`
+                CREATE TABLE pedidos (
+                    id SERIAL PRIMARY KEY,
+                    usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+                    cliente VARCHAR(100) NOT NULL,
+                    telefone VARCHAR(20) NOT NULL,
+                    instituicao VARCHAR(100),
+                    curso VARCHAR(100),
+                    cadeira VARCHAR(100),
+                    tema TEXT,
+                    descricao TEXT,
+                    prazo DATE,
+                    plano VARCHAR(50) NOT NULL,
+                    nome_plano VARCHAR(100) NOT NULL,
+                    preco DECIMAL(10,2) NOT NULL,
+                    metodo_pagamento VARCHAR(50) NOT NULL,
+                    status VARCHAR(20) DEFAULT 'pendente',
+                    arquivo_path VARCHAR(255),
+                    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('✅ Tabela pedidos recriada com sucesso!');
+            
+            return true;
+        }
+        
+        console.log('✅ Estrutura das tabelas está correta');
+        return false;
+    } catch (error) {
+        console.error('❌ Erro ao verificar/recriar tabelas:', error.message);
         return false;
     }
 }
@@ -288,6 +468,35 @@ app.get('/api/teste-banco', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Erro ao conectar no banco: ' + error.message
+        });
+    }
+});
+
+// Rota para verificar estrutura das tabelas
+app.get('/api/estrutura-tabelas', async (req, res) => {
+    try {
+        const tabelas = ['usuarios', 'pedidos', 'contatos'];
+        const estrutura = {};
+        
+        for (const tabela of tabelas) {
+            const colunas = await pool.query(`
+                SELECT column_name, data_type, is_nullable, column_default
+                FROM information_schema.columns 
+                WHERE table_name = $1
+                ORDER BY ordinal_position
+            `, [tabela]);
+            
+            estrutura[tabela] = colunas.rows;
+        }
+        
+        res.json({
+            success: true,
+            estrutura: estrutura
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Erro ao obter estrutura: ' + error.message
         });
     }
 });
@@ -365,6 +574,17 @@ app.post('/api/login', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Erro no login:', error.message);
+        console.error('❌ Detalhes:', error);
+        
+        // Verificar se é erro de coluna faltante
+        if (error.message && error.message.includes('column') && error.message.includes('does not exist')) {
+            return res.status(500).json({
+                success: false,
+                erro: 'Erro na estrutura do banco de dados. A coluna senha_hash não existe.',
+                detalhes: 'Por favor, recrie as tabelas executando: node -e "require(\'./server.js\').recriarTabelas()"'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             erro: 'Erro interno do servidor: ' + error.message
@@ -374,7 +594,6 @@ app.post('/api/login', async (req, res) => {
 
 // Rota de cadastro
 app.post('/api/cadastrar', async (req, res) => {
-    let client;
     try {
         console.log('📝 Tentativa de cadastro:', req.body);
         
@@ -407,6 +626,7 @@ app.post('/api/cadastrar', async (req, res) => {
         console.log('🔑 Senha hash gerada');
 
         // Inserir novo usuário
+        console.log('💾 Inserindo usuário no banco...');
         const result = await pool.query(
             'INSERT INTO usuarios (nome, telefone, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, telefone',
             [nome, telefone, senhaHash]
@@ -438,6 +658,28 @@ app.post('/api/cadastrar', async (req, res) => {
     } catch (error) {
         console.error('❌ Erro no cadastro:', error.message);
         console.error('❌ Stack trace:', error.stack);
+        
+        // Se for erro de coluna faltante
+        if (error.message && error.message.includes('column') && error.message.includes('does not exist')) {
+            console.log('❌ Erro de estrutura do banco detectado');
+            
+            // Tentar recriar as tabelas
+            try {
+                await recriarTabelasSeNecessario();
+                return res.status(500).json({
+                    success: false,
+                    erro: 'Estrutura do banco corrigida. Por favor, tente cadastrar novamente.',
+                    recriado: true
+                });
+            } catch (recriarError) {
+                return res.status(500).json({
+                    success: false,
+                    erro: 'Erro na estrutura do banco de dados. A coluna senha_hash não existe.',
+                    detalhes: 'Execute manualmente: DROP TABLE pedidos CASCADE; DROP TABLE usuarios CASCADE;',
+                    error: error.message
+                });
+            }
+        }
         
         res.status(500).json({
             success: false,
@@ -1177,6 +1419,30 @@ app.get('/api/teste-upload', (req, res) => {
     });
 });
 
+// Rota para recriar tabelas manualmente
+app.get('/api/recriar-tabelas', async (req, res) => {
+    try {
+        const recriado = await recriarTabelasSeNecessario();
+        
+        if (recriado) {
+            res.json({
+                success: true,
+                message: 'Tabelas recriadas com sucesso!'
+            });
+        } else {
+            res.json({
+                success: true,
+                message: 'Tabelas já estão com estrutura correta.'
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Erro ao recriar tabelas: ' + error.message
+        });
+    }
+});
+
 // Tratamento de erros
 app.use((err, req, res, next) => {
     console.error('❌ Erro não tratado:', err.message);
@@ -1219,6 +1485,10 @@ async function startServer() {
             console.log('⚠️  Atenção: Não foi possível conectar ao banco de dados');
         }
         
+        // Recriar tabelas se necessário
+        console.log('\n🔄 Verificando necessidade de recriar tabelas...');
+        await recriarTabelasSeNecessario();
+        
         // Inicializar banco
         const dbInicializado = await initDatabase();
         if (!dbInicializado) {
@@ -1229,11 +1499,13 @@ async function startServer() {
         await verificarEAtualizarEstrutura();
         
         app.listen(PORT, '0.0.0.0', () => {
-            console.log(`✅ Servidor rodando na porta ${PORT}`);
+            console.log(`\n✅ Servidor rodando na porta ${PORT}`);
             console.log(`🌐 Site: http://localhost:${PORT}`);
             console.log(`🔧 Admin: http://localhost:${PORT}/admin/pedidos?senha=admin2025`);
             console.log(`📊 Status: http://localhost:${PORT}/status`);
             console.log(`🗄️  Teste BD: http://localhost:${PORT}/api/teste-banco`);
+            console.log(`📊 Estrutura: http://localhost:${PORT}/api/estrutura-tabelas`);
+            console.log(`🔨 Recriar: http://localhost:${PORT}/api/recriar-tabelas`);
             console.log(`📤 Upload: POST http://localhost:${PORT}/api/pedidos/upload`);
             console.log(`📝 Logs ativados - Monitorando todas as requisições...`);
         });
