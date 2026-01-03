@@ -1884,3 +1884,244 @@ button[onclick="abrirDescricaoTrabalho()"]:disabled:hover i {
         font-size: 16px;
     }
 }
+
+/* ===== BOTÃO ENVIAR MENSAGEM (CONTATO) ===== */
+#contato button.btn-primary[onclick="enviarContato()"] {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 16px 32px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
+    position: relative;
+    overflow: hidden;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+#contato button.btn-primary[onclick="enviarContato()"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.7s ease;
+}
+
+#contato button.btn-primary[onclick="enviarContato()"]:hover::before {
+    left: 100%;
+}
+
+#contato button.btn-primary[onclick="enviarContato()"]:hover {
+    background: linear-gradient(135deg, var(--primary-dark), #1e3a8a);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+}
+
+#contato button.btn-primary[onclick="enviarContato()"]:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* ===== CAIXA DE CONCORDAR COM OS TERMOS (MODAL) ===== */
+#aceitarTermos {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+    margin-top: 0.25rem;
+    flex-shrink: 0;
+}
+
+/* Container dos termos no modal */
+#modalDescricaoTrabalho .modal-content div:has(#aceitarTermos) {
+    background: #f8fafc;
+    padding: 1.25rem;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    margin: 1rem 0;
+    transition: all 0.3s ease;
+}
+
+#modalDescricaoTrabalho .modal-content div:has(#aceitarTermos):hover {
+    background: rgba(37, 99, 235, 0.05);
+    border-color: var(--primary-light);
+}
+
+/* Label dos termos */
+#modalDescricaoTrabalho label[for="aceitarTermos"] {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    cursor: pointer;
+    user-select: none;
+    flex: 1;
+}
+
+/* Link nos termos */
+#modalDescricaoTrabalho label[for="aceitarTermos"] a {
+    color: var(--primary-color);
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+#modalDescricaoTrabalho label[for="aceitarTermos"] a:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+}
+
+/* Layout flex para checkbox e label */
+#modalDescricaoTrabalho .modal-content > div:has(#aceitarTermos) > div {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+/* ===== BOTÕES "Voltar ao Dashboard" e "Ir para Início" ===== */
+
+/* Botão "Voltar ao Dashboard" */
+#pagamento-sucesso button.btn-secondary[onclick="navegarPara('dashboard')"] {
+    background: white;
+    color: var(--text-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 14px 28px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex: 1;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 200px;
+}
+
+#pagamento-sucesso button.btn-secondary[onclick="navegarPara('dashboard')"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(107, 114, 128, 0.05), transparent);
+    transition: left 0.7s ease;
+}
+
+#pagamento-sucesso button.btn-secondary[onclick="navegarPara('dashboard')"]:hover::before {
+    left: 100%;
+}
+
+#pagamento-sucesso button.btn-secondary[onclick="navegarPara('dashboard')"]:hover {
+    background: var(--bg-tertiary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-dark);
+    color: var(--text-primary);
+}
+
+#pagamento-sucesso button.btn-secondary[onclick="navegarPara('dashboard')"]:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Botão "Ir para Início" */
+#pagamento-sucesso button.btn-primary[onclick="navegarPara('home')"] {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 28px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex: 1;
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 200px;
+    position: relative;
+    overflow: hidden;
+}
+
+#pagamento-sucesso button.btn-primary[onclick="navegarPara('home')"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    transition: left 0.7s ease;
+}
+
+#pagamento-sucesso button.btn-primary[onclick="navegarPara('home')"]:hover::before {
+    left: 100%;
+}
+
+#pagamento-sucesso button.btn-primary[onclick="navegarPara('home')"]:hover {
+    background: linear-gradient(135deg, var(--primary-dark), #1e3a8a);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+}
+
+#pagamento-sucesso button.btn-primary[onclick="navegarPara('home')"]:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* Container dos botões na seção pagamento-sucesso */
+#pagamento-sucesso .checkout-container > div:last-child {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+
+/* Responsividade para os botões */
+@media (max-width: 768px) {
+    #pagamento-sucesso button.btn-secondary[onclick="navegarPara('dashboard')"],
+    #pagamento-sucesso button.btn-primary[onclick="navegarPara('home')"] {
+        min-width: 150px;
+        padding: 12px 20px;
+        font-size: 15px;
+    }
+    
+    #contato button.btn-primary[onclick="enviarContato()"] {
+        padding: 14px 24px;
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    #pagamento-sucesso .checkout-container > div:last-child {
+        flex-direction: column;
+    }
+    
+    #pagamento-sucesso button.btn-secondary[onclick="navegarPara('dashboard')"],
+    #pagamento-sucesso button.btn-primary[onclick="navegarPara('home')"] {
+        width: 100%;
+        min-width: unset;
+    }
+    
+    #modalDescricaoTrabalho label[for="aceitarTermos"] {
+        font-size: 0.85rem;
+    }
+}
