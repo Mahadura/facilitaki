@@ -1,4 +1,5 @@
 // script.js - Facilitaki - Sistema Completo COM UPLOAD REAL
+// Atualizado para o novo HTML organizado
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = null;
@@ -40,23 +41,28 @@ async function testarConexaoAPI() {
 function navegarPara(sectionId) {
     console.log('📍 Navegando para:', sectionId);
     
+    // Esconder todas as seções
     document.querySelectorAll('.section').forEach(section => {
         section.classList.remove('active');
     });
     
+    // Remover classe ativa de todos os links
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
     });
     
+    // Mostrar a seção selecionada
     const section = document.getElementById(sectionId);
     if (section) {
         section.classList.add('active');
         
+        // Ativar link de navegação correspondente
         const navLink = document.querySelector(`[onclick*="${sectionId}"]`);
         if (navLink && navLink.classList.contains('nav-link')) {
             navLink.classList.add('active');
         }
         
+        // Executar ações específicas para cada seção
         switch(sectionId) {
             case 'dashboard':
                 if (usuarioLogado) {
@@ -70,9 +76,16 @@ function navegarPara(sectionId) {
                     mostrarInstrucoesPagamento();
                 }
                 break;
+            case 'checkout':
+                atualizarResumoPedido();
+                break;
+            case 'login':
+                mostrarLogin(); // Garantir que o formulário de login esteja visível
+                break;
         }
     }
     
+    // Scroll para o topo
     window.scrollTo(0, 0);
 }
 
@@ -81,6 +94,7 @@ function verificarELogar(tipo, preco) {
     console.log('🔐 Verificando login para:', tipo, preco);
     
     if (!usuarioLogado) {
+        // Salvar seleção para continuar após login
         sessionStorage.setItem('servico_selecionado', tipo);
         sessionStorage.setItem('preco_selecionado', preco);
         
@@ -154,12 +168,14 @@ async function fazerLogin() {
             
             mostrarMensagem(mensagem, data.mensagem || 'Login realizado com sucesso!', 'success');
             
+            // Atualizar botão do header
             const btnHeader = document.getElementById('btnLoginHeader');
             if(btnHeader) {
                 btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
                 btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
             }
             
+            // Verificar se há serviço selecionado antes do login
             const servicoSelecionado = sessionStorage.getItem('servico_selecionado');
             const precoSelecionado = sessionStorage.getItem('preco_selecionado');
             
@@ -249,6 +265,7 @@ async function fazerCadastro() {
             
             console.log('✅ Cadastro e login automático bem-sucedido');
             
+            // Atualizar botão do header
             const btnHeader = document.getElementById('btnLoginHeader');
             if(btnHeader) {
                 btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
@@ -320,7 +337,7 @@ function mostrarLogin() {
     document.getElementById('mensagemLogin').innerHTML = '';
 }
 
-// ===== UPLOAD DE ARQUIVOS (SIMPLIFICADO PARA USUÁRIO) =====
+// ===== UPLOAD DE ARQUIVOS =====
 function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -342,11 +359,15 @@ function handleFileSelect(event) {
     
     arquivoSelecionado = file;
     
-    // Mostrar apenas o nome do arquivo (simples)
-    const arquivoNomeDiv = document.getElementById('arquivoSelecionadoNome');
-    if (arquivoNomeDiv) {
-        arquivoNomeDiv.textContent = `✓ ${file.name}`;
-        arquivoNomeDiv.style.color = '#10b981';
+    // Mostrar pré-visualização do arquivo
+    const filePreview = document.getElementById('filePreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    
+    if (filePreview && fileName && fileSize) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        filePreview.style.display = 'block';
     }
     
     // Habilitar botão de submeter
@@ -357,13 +378,21 @@ function handleFileSelect(event) {
     }
 }
 
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 function removerArquivo() {
     arquivoSelecionado = null;
     const fileInput = document.getElementById('fileInput');
-    const arquivoNomeDiv = document.getElementById('arquivoSelecionadoNome');
+    const filePreview = document.getElementById('filePreview');
     
     if (fileInput) fileInput.value = '';
-    if (arquivoNomeDiv) arquivoNomeDiv.textContent = '';
+    if (filePreview) filePreview.style.display = 'none';
     
     const btnSolicitar = document.getElementById('btnSolicitarServico');
     if (btnSolicitar) {
@@ -390,17 +419,18 @@ function selecionarPlano(tipo, preco) {
     };
     
     console.log('🛒 Carrinho atualizado:', carrinho);
-    
     navegarPara('checkout');
 }
 
 function selecionarMetodo(metodo) {
     console.log('💳 Selecionando método de pagamento:', metodo);
     
+    // Remover classe ativa de todos os métodos
     document.querySelectorAll('.metodo-pagamento').forEach(btn => {
         btn.classList.remove('ativo');
     });
     
+    // Adicionar classe ativa ao método selecionado
     const btnSelecionado = document.querySelector(`[data-metodo="${metodo}"]`);
     if (btnSelecionado) {
         btnSelecionado.classList.add('ativo');
@@ -408,6 +438,7 @@ function selecionarMetodo(metodo) {
     
     carrinho.metodoPagamento = metodo;
     
+    // Habilitar botão de finalizar compra
     const btnFinalizar = document.querySelector('#checkout button[onclick="finalizarCompra()"]');
     if (btnFinalizar) {
         btnFinalizar.disabled = false;
@@ -417,15 +448,8 @@ function selecionarMetodo(metodo) {
 
 function atualizarResumoPedido() {
     const resumoDiv = document.getElementById('resumoPedido');
-    const nomeCliente = document.getElementById('nomeCliente');
-    const telefoneCliente = document.getElementById('telefoneCliente');
     
     if (carrinho.plano) {
-        if (usuarioLogado) {
-            if (nomeCliente) nomeCliente.value = usuarioLogado.nome || '';
-            if (telefoneCliente) telefoneCliente.value = usuarioLogado.telefone || '';
-        }
-        
         if (resumoDiv) {
             resumoDiv.innerHTML = `
                 <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
@@ -440,7 +464,7 @@ function atualizarResumoPedido() {
                     </div>
                     <div style="padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.9rem; color: #6b7280;">
                         <p style="margin: 0.5rem 0;">
-                            <i class="fas fa-info-circle"></i> Envie o arquivo após selecionar o serviço
+                            <i class="fas fa-info-circle"></i> Após o login, você poderá enviar o arquivo
                         </p>
                     </div>
                 </div>
@@ -461,34 +485,22 @@ function atualizarResumoPedido() {
     }
 }
 
-async function finalizarCompra() {
+function finalizarCompra() {
     console.log('💰 Finalizando compra...');
     
-    const nomeCliente = document.getElementById('nomeCliente')?.value.trim() || usuarioLogado?.nome || '';
-    const telefoneCliente = document.getElementById('telefoneCliente')?.value.trim() || usuarioLogado?.telefone || '';
-    const instituicao = document.getElementById('instituicao')?.value.trim() || '';
-    const curso = document.getElementById('curso')?.value.trim() || '';
-    const cadeira = document.getElementById('cadeira')?.value.trim() || '';
-    const descricao = document.getElementById('descricao')?.value.trim() || '';
-    const mensagemDiv = document.getElementById('mensagemCheckout');
-    
-    if (!nomeCliente || !telefoneCliente) {
-        mostrarMensagem(mensagemDiv, 'Nome e telefone são obrigatórios', 'error');
-        return;
-    }
-    
     if (!carrinho.plano) {
-        mostrarMensagem(mensagemDiv, 'Selecione um serviço primeiro', 'error');
+        mostrarMensagemGlobal('Selecione um serviço primeiro', 'error');
         return;
     }
     
     if (!carrinho.metodoPagamento) {
-        mostrarMensagem(mensagemDiv, 'Selecione um método de pagamento', 'error');
+        mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
         return;
     }
     
-    mostrarMensagem(mensagemDiv, 'Vá para a área do cliente para enviar o arquivo', 'info');
-    setTimeout(() => navegarPara('dashboard'), 2000);
+    // Redirecionar para área do cliente para upload do arquivo
+    mostrarMensagemGlobal('Faça login para enviar o arquivo e completar a solicitação', 'info');
+    navegarPara('login');
 }
 
 function mostrarInstrucoesPagamento() {
@@ -561,6 +573,8 @@ function mostrarInstrucoesPagamento() {
                 </div>
             `;
             break;
+        default:
+            instrucoes = '<p>Selecione um método de pagamento</p>';
     }
     
     instrucoesDiv.innerHTML = instrucoes;
@@ -631,18 +645,22 @@ function abrirDescricaoTrabalho() {
         modal.dataset.servicoNome = servico.nome;
         modal.dataset.servicoPreco = servico.preco;
         
+        // Resetar campos do modal
         const descricaoDetalhada = document.getElementById('descricaoDetalhada');
         const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
         const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
+        const aceitarTermos = document.getElementById('aceitarTermos');
         
         if (descricaoDetalhada) descricaoDetalhada.value = '';
         if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
         if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
+        if (aceitarTermos) aceitarTermos.checked = false;
         
         removerArquivo();
         
         modal.style.display = 'flex';
         
+        // Focar na área de upload
         setTimeout(() => {
             const uploadArea = document.getElementById('uploadArea');
             if (uploadArea) uploadArea.focus();
@@ -662,14 +680,21 @@ function fecharModalDescricao() {
     const descricaoDetalhada = document.getElementById('descricaoDetalhada');
     const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
     const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
+    const aceitarTermos = document.getElementById('aceitarTermos');
     
     if (descricaoDetalhada) descricaoDetalhada.value = '';
     if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
     if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
+    if (aceitarTermos) aceitarTermos.checked = false;
 }
 
 async function solicitarServicoComArquivo() {
     console.log('🚀 Solicitando serviço com arquivo REAL...');
+    
+    if (!arquivoSelecionado) {
+        mostrarMensagemGlobal('Selecione um arquivo para enviar', 'error');
+        return;
+    }
     
     const descricao = document.getElementById('descricaoDetalhada')?.value.trim() || '';
     const prazo = document.getElementById('prazoTrabalhoDetalhe')?.value || '';
@@ -681,11 +706,6 @@ async function solicitarServicoComArquivo() {
     const servicoTipo = modal ? modal.dataset.servicoTipo : 'basico';
     const servicoNome = modal ? modal.dataset.servicoNome : 'Serviço';
     const servicoPreco = modal ? parseInt(modal.dataset.servicoPreco) || 0 : 0;
-    
-    if (!arquivoSelecionado) {
-        mostrarMensagemGlobal('Selecione um arquivo para enviar', 'error');
-        return;
-    }
     
     if (!metodoPagamento) {
         mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
@@ -706,6 +726,10 @@ async function solicitarServicoComArquivo() {
     
     try {
         const token = localStorage.getItem('token_facilitaki');
+        if (!token) {
+            throw new Error('Token não encontrado. Faça login novamente.');
+        }
+        
         const usuario = usuarioLogado || { nome: 'Cliente', telefone: '' };
         
         const formData = new FormData();
@@ -725,10 +749,12 @@ async function solicitarServicoComArquivo() {
         
         console.log('📤 Enviando arquivo:', arquivoSelecionado.name);
         
-        const response = await fetch(`${API_URL}/api/pedidos/upload-completo`, {
+        // Note: A rota /api/pedidos/upload está definida no server.js
+        const response = await fetch(`${API_URL}/api/pedidos/upload`, {
             method: 'POST',
             headers: { 
                 'Authorization': `Bearer ${token}`
+                // Não definir Content-Type para FormData, o browser faz automaticamente
             },
             body: formData,
             mode: 'cors'
@@ -753,6 +779,7 @@ async function solicitarServicoComArquivo() {
         if (data.success) {
             fecharModalDescricao();
             
+            // Atualizar carrinho com os dados do pedido
             carrinho = {
                 plano: servicoTipo,
                 nomePlano: servicoNome,
@@ -762,7 +789,11 @@ async function solicitarServicoComArquivo() {
             
             mostrarMensagemGlobal('Arquivo enviado com sucesso!', 'success');
             
-            setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
+            // Atualizar dashboard e navegar para instruções de pagamento
+            setTimeout(() => {
+                atualizarDashboard();
+                navegarPara('pagamento-sucesso');
+            }, 1500);
         } else {
             throw new Error(data.erro || 'Erro ao enviar arquivo');
         }
@@ -789,6 +820,10 @@ async function atualizarDashboard() {
     
     try {
         const token = localStorage.getItem('token_facilitaki');
+        if (!token) {
+            throw new Error('Token não encontrado');
+        }
+        
         const response = await fetch(`${API_URL}/api/meus-pedidos`, {
             method: 'GET',
             headers: { 
@@ -805,14 +840,17 @@ async function atualizarDashboard() {
             if (data.success) {
                 const pedidosUsuario = data.pedidos || [];
                 
+                // Calcular valor total por pagar (pedidos pendentes)
                 const pedidosPendentes = pedidosUsuario.filter(p => p.status === 'pendente');
                 const valorTotal = pedidosPendentes.reduce((total, pedido) => total + (parseFloat(pedido.preco) || 0), 0);
                 
+                // Atualizar valor total por pagar
                 const valorTotalPagar = document.getElementById('valorTotalPagar');
                 if (valorTotalPagar) {
                     valorTotalPagar.textContent = valorTotal.toLocaleString('pt-MZ') + ' MT';
                 }
                 
+                // Atualizar lista de pedidos
                 const listaPedidosDiv = document.getElementById('listaPedidos');
                 if (listaPedidosDiv) {
                     if (pedidosUsuario.length === 0) {
@@ -830,16 +868,16 @@ async function atualizarDashboard() {
                             const dataPedido = pedido.data_pedido ? new Date(pedido.data_pedido) : new Date();
                             const statusColor = getStatusColor(pedido.status);
                             const statusText = pedido.status ? pedido.status.replace('_', ' ') : 'pendente';
-                            const temArquivo = pedido.arquivo_nome;
+                            const temArquivo = pedido.arquivo_path;
                             
                             return `
                                 <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${statusColor};">
                                     <div style="display: flex; justify-content: space-between; align-items: start;">
                                         <div>
-                                            <strong style="color: #1e40af;">${pedido.nome_plano || pedido.nomePlano || 'Serviço'}</strong>
+                                            <strong style="color: #1e40af;">${pedido.nome_plano || 'Serviço'}</strong>
                                             <div style="font-size: 0.9rem; color: #6b7280; margin-top: 0.25rem;">
-                                                ${pedido.cadeira || pedido.tema || 'Sem descrição'}
-                                                ${temArquivo ? `<br><small><i class="fas fa-file"></i> ${pedido.arquivo_nome}</small>` : ''}
+                                                ${pedido.tema || pedido.descricao || 'Sem descrição'}
+                                                ${temArquivo ? `<br><small><i class="fas fa-file"></i> Arquivo anexado</small>` : ''}
                                             </div>
                                         </div>
                                         <div style="text-align: right;">
@@ -861,10 +899,13 @@ async function atualizarDashboard() {
                     }
                 }
             }
+        } else {
+            console.error('❌ Erro ao carregar pedidos:', response.status);
+            mostrarMensagemGlobal('Erro ao carregar seus pedidos', 'error');
         }
     } catch (error) {
         console.error('❌ Erro ao carregar pedidos:', error);
-        mostrarMensagemGlobal('Erro ao carregar pedidos', 'error');
+        mostrarMensagemGlobal('Erro de conexão ao carregar pedidos', 'error');
     }
 }
 
@@ -924,6 +965,7 @@ async function enviarContato() {
         if (response.ok && data.success) {
             mostrarMensagem(mensagemDiv, data.mensagem || 'Mensagem enviada com sucesso!', 'success');
             
+            // Limpar campos
             if (document.getElementById('contatoNome')) document.getElementById('contatoNome').value = '';
             if (document.getElementById('contatoTelefone')) document.getElementById('contatoTelefone').value = '';
             if (document.getElementById('contatoMensagem')) document.getElementById('contatoMensagem').value = '';
@@ -1000,6 +1042,7 @@ function inicializarApp() {
     console.log('🚀 Inicializando Facilitaki com upload real...');
     console.log('🌐 URL da API:', API_URL);
     
+    // Verificar se há usuário logado
     const usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
     const tokenSalvo = localStorage.getItem('token_facilitaki');
     
@@ -1008,6 +1051,7 @@ function inicializarApp() {
             usuarioLogado = JSON.parse(usuarioSalvo);
             console.log('👤 Usuário recuperado do localStorage:', usuarioLogado);
             
+            // Atualizar botão do header
             const btnHeader = document.getElementById('btnLoginHeader');
             if(btnHeader) {
                 btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
@@ -1020,12 +1064,14 @@ function inicializarApp() {
         }
     }
     
+    // Configurar data mínima para campos de data
     const hoje = new Date().toISOString().split('T')[0];
     const campoPrazo = document.getElementById('prazoTrabalhoDetalhe');
     if (campoPrazo) {
         campoPrazo.min = hoje;
     }
     
+    // Formatar campos de telefone
     const camposTelefone = document.querySelectorAll('input[type="tel"]');
     camposTelefone.forEach(campo => {
         campo.addEventListener('input', function(e) {
@@ -1038,6 +1084,7 @@ function inicializarApp() {
         });
     });
     
+    // Configurar modais para fechar ao clicar fora
     const modals = document.querySelectorAll('.modal');
     modals.forEach(modal => {
         modal.addEventListener('click', function(e) {
@@ -1047,6 +1094,7 @@ function inicializarApp() {
         });
     });
     
+    // Adicionar estilos CSS para animações
     const style = document.createElement('style');
     style.textContent = `
         @keyframes slideInRight {
@@ -1060,6 +1108,7 @@ function inicializarApp() {
     `;
     document.head.appendChild(style);
     
+    // Testar conexão com API após 2 segundos
     setTimeout(() => {
         testarConexaoAPI();
     }, 2000);
@@ -1072,6 +1121,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('📄 DOM carregado, inicializando app...');
     inicializarApp();
     
+    // Prevenir submit padrão de formulários
     const forms = document.querySelectorAll('form');
     forms.forEach(form => {
         form.addEventListener('submit', function(e) {
@@ -1080,6 +1130,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    // Configurar drag and drop para upload
     const uploadArea = document.getElementById('uploadArea');
     if (uploadArea) {
         uploadArea.addEventListener('dragover', (e) => {
@@ -1107,11 +1158,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ===== FUNÇÕES PARA MODAIS =====
 function mostrarTermos() {
-    alert('TERMOS DE SERVIÇO\n\n1. O serviço será iniciado após confirmação do pagamento de 50%.\n2. O prazo começa a contar após pagamento e envio de materiais.\n3. Garantimos 99,9% de taxa de aprovação.\n4. Sua privacidade é respeitada conforme a lei.');
+    alert('TERMOS DE SERVIÇO\n\n1. O serviço será iniciado após confirmação do pagamento de 50%.\n2. O prazo começa a contar após pagamento e envio de materiais.\n3. Garantimos 99,9% de taxa de aprovação.\n4. Sua privacidade é respeitada conforme a lei.\n5. O cliente é responsável pelo conteúdo enviado.');
 }
 
 function mostrarPrivacidade() {
-    alert('POLÍTICA DE PRIVACIDADE\n\n1. Seus dados são usados apenas para processar seu pedido.\n2. Não compartilhamos suas informações com terceiros.\n3. Você pode solicitar exclusão de seus dados a qualquer momento.\n4. Usamos criptografia para proteger suas informações.');
+    alert('POLÍTICA DE PRIVACIDADE\n\n1. Seus dados são usados apenas para processar seu pedido.\n2. Não compartilhamos suas informações com terceiros.\n3. Você pode solicitar exclusão de seus dados a qualquer momento.\n4. Usamos criptografia para proteger suas informações.\n5. Arquivos são armazenados com segurança e excluídos após 90 dias.');
 }
 
 function fecharRecarga() {
@@ -1125,7 +1176,7 @@ function processarRecarga() {
     const valorInput = document.getElementById('valorRecarga');
     const metodoSelect = document.getElementById('metodoRecarga');
     
-    const valor = valorInput ? valorInput.value : 0;
+    const valor = valorInput ? parseInt(valorInput.value) || 0 : 0;
     const metodo = metodoSelect ? metodoSelect.value : '';
     
     if (valor < 50) {
@@ -1142,7 +1193,7 @@ function processarRecarga() {
     fecharRecarga();
 }
 
-// ===== EXPORTAR FUNÇÕES =====
+// ===== EXPORTAR FUNÇÕES PARA O ESCOPO GLOBAL =====
 window.fazerLogin = fazerLogin;
 window.fazerCadastro = fazerCadastro;
 window.fazerLogout = fazerLogout;
