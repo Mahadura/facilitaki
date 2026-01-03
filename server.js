@@ -19,8 +19,19 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgresql://facilitaki_user:hUf4YfChbZvSWoq1cIRat14Jodok6WOb@dpg-d59mcr4hg0os73cenpi0-a.oregon-postgres.render.com/facilitaki_db',
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
 });
+
+// Configurar CORS mais permissivo
+const corsOptions = {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true
+};
 
 // Configuração do multer para upload de arquivos
 const storage = multer.diskStorage({
@@ -39,7 +50,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     fileFilter: function (req, file, cb) {
         const allowedTypes = ['.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png'];
         const ext = path.extname(file.originalname).toLowerCase();
@@ -52,13 +63,22 @@ const upload = multer({
 });
 
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Servir arquivos estáticos
 app.use(express.static('.'));
 app.use('/uploads', express.static('uploads'));
+
+// Middleware para log de requisições
+app.use((req, res, next) => {
+    console.log(`📨 ${req.method} ${req.url}`);
+    if (req.body && Object.keys(req.body).length > 0 && req.method !== 'GET') {
+        console.log('📦 Body:', JSON.stringify(req.body).substring(0, 500));
+    }
+    next();
+});
 
 // Middleware de autenticação JWT
 const authenticateToken = (req, res, next) => {
@@ -66,11 +86,13 @@ const authenticateToken = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
+        console.log('❌ Token não fornecido');
         return res.status(401).json({ success: false, error: 'Token não fornecido' });
     }
 
     jwt.verify(token, SECRET_KEY, (err, user) => {
         if (err) {
+            console.log('❌ Token inválido:', err.message);
             return res.status(403).json({ success: false, error: 'Token inválido' });
         }
         req.user = user;
@@ -88,10 +110,33 @@ const authenticateAdmin = (req, res, next) => {
     }
 };
 
+// Testar conexão com banco de dados
+async function testarConexaoBD() {
+    try {
+        console.log('🔍 Testando conexão com banco de dados...');
+        const client = await pool.connect();
+        const result = await client.query('SELECT NOW() as hora_atual, version() as versao');
+        console.log('✅ Conexão com banco OK');
+        console.log('⏰ Hora do banco:', result.rows[0].hora_atual);
+        console.log('📊 Versão PostgreSQL:', result.rows[0].versao.substring(0, 50));
+        client.release();
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao conectar no banco:', error.message);
+        return false;
+    }
+}
+
 // Inicializar banco de dados
 async function initDatabase() {
     try {
         console.log('🔧 Inicializando banco de dados...');
+        
+        // Testar conexão primeiro
+        const conexaoOk = await testarConexaoBD();
+        if (!conexaoOk) {
+            throw new Error('Falha na conexão com o banco de dados');
+        }
         
         // Criar tabela de usuários
         await pool.query(`
@@ -103,6 +148,7 @@ async function initDatabase() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        console.log('✅ Tabela usuarios criada/verificada');
 
         // Criar tabela de pedidos
         await pool.query(`
@@ -126,6 +172,7 @@ async function initDatabase() {
                 data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        console.log('✅ Tabela pedidos criada/verificada');
 
         // Criar tabela de contatos
         await pool.query(`
@@ -137,10 +184,13 @@ async function initDatabase() {
                 data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        console.log('✅ Tabela contatos criada/verificada');
 
         console.log('✅ Banco de dados inicializado com sucesso!');
+        return true;
     } catch (error) {
-        console.error('❌ Erro ao inicializar banco de dados:', error);
+        console.error('❌ Erro ao inicializar banco de dados:', error.message);
+        return false;
     }
 }
 
@@ -149,49 +199,66 @@ async function verificarEAtualizarEstrutura() {
     try {
         console.log('🔍 Verificando estrutura do banco de dados...');
         
-        // Verificar se todas as colunas necessárias existem na tabela pedidos
         const colunasNecessarias = [
-            'arquivo_path',
-            'tema',
-            'prazo',
-            'instituicao',
-            'curso',
-            'cadeira'
+            { name: 'arquivo_path', type: 'VARCHAR(255)' },
+            { name: 'tema', type: 'TEXT' },
+            { name: 'prazo', type: 'DATE' },
+            { name: 'instituicao', type: 'VARCHAR(100)' },
+            { name: 'curso', type: 'VARCHAR(100)' },
+            { name: 'cadeira', type: 'VARCHAR(100)' }
         ];
         
         for (const coluna of colunasNecessarias) {
             try {
                 // Verificar se a coluna existe
                 await pool.query(`
-                    SELECT ${coluna} FROM pedidos LIMIT 1
-                `);
-                console.log(`✅ Coluna ${coluna} já existe na tabela pedidos`);
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'pedidos' AND column_name = $1
+                `, [coluna.name]);
+                console.log(`✅ Coluna ${coluna.name} já existe na tabela pedidos`);
             } catch (error) {
                 // Se der erro, a coluna não existe
-                console.log(`➕ Adicionando coluna ${coluna} à tabela pedidos...`);
+                console.log(`➕ Adicionando coluna ${coluna.name} à tabela pedidos...`);
                 
-                // Determinar o tipo da coluna
-                let tipoColuna = 'VARCHAR(255)';
-                if (coluna === 'tema' || coluna === 'descricao') {
-                    tipoColuna = 'TEXT';
-                } else if (coluna === 'prazo') {
-                    tipoColuna = 'DATE';
-                } else if (coluna === 'instituicao' || coluna === 'curso' || coluna === 'cadeira') {
-                    tipoColuna = 'VARCHAR(100)';
+                try {
+                    await pool.query(`
+                        ALTER TABLE pedidos 
+                        ADD COLUMN ${coluna.name} ${coluna.type}
+                    `);
+                    console.log(`✅ Coluna ${coluna.name} adicionada com sucesso!`);
+                } catch (alterError) {
+                    console.log(`⚠️ Não foi possível adicionar coluna ${coluna.name}:`, alterError.message);
                 }
-                
-                await pool.query(`
-                    ALTER TABLE pedidos 
-                    ADD COLUMN ${coluna} ${tipoColuna}
-                `);
-                
-                console.log(`✅ Coluna ${coluna} adicionada com sucesso!`);
             }
         }
         
         console.log('✅ Estrutura do banco de dados verificada e atualizada!');
+        return true;
     } catch (error) {
-        console.error('❌ Erro ao verificar/atualizar estrutura:', error);
+        console.error('❌ Erro ao verificar/atualizar estrutura:', error.message);
+        return false;
+    }
+}
+
+// Função para validar e converter data
+function validarData(dataString) {
+    if (!dataString || dataString.trim() === '' || dataString === 'null' || dataString === 'undefined') {
+        return null;
+    }
+    
+    try {
+        const data = new Date(dataString);
+        // Verificar se a data é válida
+        if (isNaN(data.getTime())) {
+            return null;
+        }
+        
+        // Formatar para YYYY-MM-DD
+        return data.toISOString().split('T')[0];
+    } catch (error) {
+        console.log('❌ Erro ao converter data:', dataString, error.message);
+        return null;
     }
 }
 
@@ -203,19 +270,51 @@ app.get('/status', (req, res) => {
         status: 'online',
         message: 'Facilitaki API está funcionando',
         timestamp: new Date().toISOString(),
-        version: '1.0.0'
+        version: '1.0.0',
+        database: 'PostgreSQL'
     });
+});
+
+// Rota de teste de banco de dados
+app.get('/api/teste-banco', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT NOW() as hora, version() as versao');
+        res.json({
+            success: true,
+            hora: result.rows[0].hora,
+            versao: result.rows[0].versao
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Erro ao conectar no banco: ' + error.message
+        });
+    }
 });
 
 // Rota para verificar token
 app.get('/api/verificar-token', authenticateToken, (req, res) => {
-    res.json({ success: true, valido: true, usuario: req.user });
+    res.json({ 
+        success: true, 
+        valido: true, 
+        usuario: req.user,
+        message: 'Token válido'
+    });
 });
 
 // Rota de login
 app.post('/api/login', async (req, res) => {
     try {
+        console.log('🔐 Tentativa de login para telefone:', req.body.telefone);
+        
         const { telefone, senha } = req.body;
+
+        if (!telefone || !senha) {
+            return res.status(400).json({
+                success: false,
+                erro: 'Telefone e senha são obrigatórios'
+            });
+        }
 
         // Buscar usuário
         const result = await pool.query(
@@ -224,6 +323,7 @@ app.post('/api/login', async (req, res) => {
         );
 
         if (result.rows.length === 0) {
+            console.log('❌ Usuário não encontrado:', telefone);
             return res.status(401).json({
                 success: false,
                 erro: 'Telefone ou senha incorretos'
@@ -231,10 +331,12 @@ app.post('/api/login', async (req, res) => {
         }
 
         const usuario = result.rows[0];
+        console.log('👤 Usuário encontrado:', usuario.nome);
 
         // Verificar senha
         const senhaValida = await bcrypt.compare(senha, usuario.senha_hash);
         if (!senhaValida) {
+            console.log('❌ Senha incorreta para usuário:', usuario.nome);
             return res.status(401).json({
                 success: false,
                 erro: 'Telefone ou senha incorretos'
@@ -248,6 +350,8 @@ app.post('/api/login', async (req, res) => {
             { expiresIn: '7d' }
         );
 
+        console.log('✅ Login bem-sucedido para:', usuario.nome);
+
         res.json({
             success: true,
             mensagem: 'Login realizado com sucesso!',
@@ -260,18 +364,28 @@ app.post('/api/login', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erro no login:', error);
+        console.error('❌ Erro no login:', error.message);
         res.status(500).json({
             success: false,
-            erro: 'Erro interno do servidor'
+            erro: 'Erro interno do servidor: ' + error.message
         });
     }
 });
 
 // Rota de cadastro
 app.post('/api/cadastrar', async (req, res) => {
+    let client;
     try {
+        console.log('📝 Tentativa de cadastro:', req.body);
+        
         const { nome, telefone, senha } = req.body;
+
+        if (!nome || !telefone || !senha) {
+            return res.status(400).json({
+                success: false,
+                erro: 'Nome, telefone e senha são obrigatórios'
+            });
+        }
 
         // Verificar se usuário já existe
         const existingUser = await pool.query(
@@ -280,6 +394,7 @@ app.post('/api/cadastrar', async (req, res) => {
         );
 
         if (existingUser.rows.length > 0) {
+            console.log('❌ Telefone já cadastrado:', telefone);
             return res.status(400).json({
                 success: false,
                 erro: 'Este telefone já está cadastrado'
@@ -289,6 +404,7 @@ app.post('/api/cadastrar', async (req, res) => {
         // Hash da senha
         const saltRounds = 10;
         const senhaHash = await bcrypt.hash(senha, saltRounds);
+        console.log('🔑 Senha hash gerada');
 
         // Inserir novo usuário
         const result = await pool.query(
@@ -297,6 +413,7 @@ app.post('/api/cadastrar', async (req, res) => {
         );
 
         const novoUsuario = result.rows[0];
+        console.log('✅ Usuário cadastrado:', novoUsuario);
 
         // Gerar token JWT
         const token = jwt.sign(
@@ -304,6 +421,8 @@ app.post('/api/cadastrar', async (req, res) => {
             SECRET_KEY,
             { expiresIn: '7d' }
         );
+
+        console.log('✅ Cadastro completo para:', novoUsuario.nome);
 
         res.json({
             success: true,
@@ -317,10 +436,12 @@ app.post('/api/cadastrar', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erro no cadastro:', error);
+        console.error('❌ Erro no cadastro:', error.message);
+        console.error('❌ Stack trace:', error.stack);
+        
         res.status(500).json({
             success: false,
-            erro: 'Erro interno do servidor'
+            erro: 'Erro interno do servidor. Detalhes: ' + error.message
         });
     }
 });
@@ -378,6 +499,11 @@ app.post('/api/pedidos', authenticateToken, async (req, res) => {
 // Rota para criar pedido com upload de arquivo
 app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), async (req, res) => {
     try {
+        console.log('📤 Recebendo upload de arquivo...');
+        console.log('🔑 Usuário autenticado:', req.user);
+        console.log('📄 Body recebido:', JSON.stringify(req.body));
+        console.log('📁 Arquivo recebido:', req.file ? req.file.originalname : 'Nenhum');
+        
         const {
             cliente,
             telefone,
@@ -396,15 +522,26 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), asy
         let arquivoPath = null;
         if (req.file) {
             arquivoPath = req.file.path;
+            console.log('💾 Arquivo salvo em:', arquivoPath);
         }
 
         // Validar campos obrigatórios
-        if (!cliente || !telefone || !plano || !nomePlano || !preco || !metodoPagamento) {
+        const camposObrigatorios = { cliente, telefone, plano, nomePlano, preco, metodoPagamento };
+        const camposFaltando = Object.keys(camposObrigatorios).filter(key => !camposObrigatorios[key]);
+        
+        if (camposFaltando.length > 0) {
+            console.log('❌ Campos obrigatórios faltando:', camposFaltando);
             return res.status(400).json({
                 success: false,
-                erro: 'Preencha todos os campos obrigatórios: cliente, telefone, plano, nomePlano, preco, metodoPagamento'
+                erro: `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`
             });
         }
+
+        // Validar e converter data
+        const prazoValidado = validarData(prazo);
+        
+        console.log('📅 Prazo original:', prazo);
+        console.log('📅 Prazo validado:', prazoValidado);
 
         // Inserir pedido
         const result = await pool.query(
@@ -415,11 +552,24 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), asy
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'pendente')
             RETURNING *`,
             [
-                req.user.id, cliente, telefone, instituicao, curso, cadeira,
-                tema, descricao, prazo, plano, nomePlano, parseFloat(preco),
-                metodoPagamento, arquivoPath
+                req.user.id, 
+                cliente, 
+                telefone, 
+                instituicao || null, 
+                curso || null, 
+                cadeira || null,
+                tema || null, 
+                descricao || null, 
+                prazoValidado,
+                plano, 
+                nomePlano, 
+                parseFloat(preco) || 0,
+                metodoPagamento, 
+                arquivoPath
             ]
         );
+
+        console.log('✅ Pedido criado com sucesso! ID:', result.rows[0].id);
 
         res.json({
             success: true,
@@ -428,20 +578,30 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), asy
         });
 
     } catch (error) {
-        console.error('Erro ao criar pedido com arquivo:', error);
+        console.error('❌ Erro ao criar pedido com arquivo:', error.message);
+        console.error('❌ Stack trace:', error.stack);
         
-        // Se houver erro de coluna faltante, informar ao usuário
+        // Se houver erro de coluna faltante
         if (error.message && error.message.includes('column') && error.message.includes('does not exist')) {
             return res.status(500).json({
                 success: false,
-                erro: 'Erro no banco de dados. Contate o administrador do sistema.',
+                erro: 'Erro no banco de dados. A coluna não existe.',
+                detalhes: error.message
+            });
+        }
+        
+        // Se for erro de data inválida
+        if (error.message && error.message.includes('date')) {
+            return res.status(400).json({
+                success: false,
+                erro: 'Data inválida. Por favor, insira uma data válida ou deixe em branco.',
                 detalhes: error.message
             });
         }
         
         res.status(500).json({
             success: false,
-            erro: error.message || 'Erro ao criar pedido'
+            erro: 'Erro ao criar pedido: ' + error.message
         });
     }
 });
@@ -449,12 +609,16 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), asy
 // Rota para buscar pedidos do usuário
 app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
     try {
+        console.log('📊 Buscando pedidos para usuário:', req.user.id);
+        
         const result = await pool.query(
             `SELECT * FROM pedidos 
              WHERE usuario_id = $1 
              ORDER BY data_pedido DESC`,
             [req.user.id]
         );
+
+        console.log('✅ Pedidos encontrados:', result.rows.length);
 
         res.json({
             success: true,
@@ -473,12 +637,23 @@ app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
 // Rota para envio de contato
 app.post('/api/contato', async (req, res) => {
     try {
+        console.log('📨 Recebendo mensagem de contato:', req.body);
+        
         const { nome, telefone, mensagem } = req.body;
+
+        if (!nome || !telefone || !mensagem) {
+            return res.status(400).json({
+                success: false,
+                erro: 'Nome, telefone e mensagem são obrigatórios'
+            });
+        }
 
         await pool.query(
             'INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)',
             [nome, telefone, mensagem]
         );
+
+        console.log('✅ Mensagem de contato salva');
 
         res.json({
             success: true,
@@ -1002,22 +1177,69 @@ app.get('/api/teste-upload', (req, res) => {
     });
 });
 
+// Tratamento de erros
+app.use((err, req, res, next) => {
+    console.error('❌ Erro não tratado:', err.message);
+    console.error('❌ Stack:', err.stack);
+    
+    if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({
+                success: false,
+                error: 'Arquivo muito grande. O tamanho máximo é 10MB.'
+            });
+        }
+    }
+    
+    res.status(500).json({
+        success: false,
+        error: 'Erro interno do servidor: ' + err.message
+    });
+});
+
+// Rota padrão para erros 404
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        error: 'Rota não encontrada'
+    });
+});
+
 // Inicializar servidor
 async function startServer() {
     try {
-        await initDatabase();
+        console.log('🚀 Iniciando servidor Facilitaki...');
+        console.log('📊 Porta:', PORT);
+        console.log('🔑 Chave secreta:', SECRET_KEY ? 'Configurada' : 'Usando padrão');
+        console.log('🗄️  Banco de dados:', process.env.DATABASE_URL ? 'Configurado' : 'Usando URL padrão');
+        
+        // Testar conexão com banco
+        const conexaoBD = await testarConexaoBD();
+        if (!conexaoBD) {
+            console.log('⚠️  Atenção: Não foi possível conectar ao banco de dados');
+        }
+        
+        // Inicializar banco
+        const dbInicializado = await initDatabase();
+        if (!dbInicializado) {
+            console.log('⚠️  Atenção: Problemas ao inicializar banco de dados');
+        }
+        
+        // Verificar estrutura
         await verificarEAtualizarEstrutura();
         
-        app.listen(PORT, () => {
-            console.log(`🚀 Servidor rodando na porta ${PORT}`);
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`✅ Servidor rodando na porta ${PORT}`);
             console.log(`🌐 Site: http://localhost:${PORT}`);
             console.log(`🔧 Admin: http://localhost:${PORT}/admin/pedidos?senha=admin2025`);
             console.log(`📊 Status: http://localhost:${PORT}/status`);
+            console.log(`🗄️  Teste BD: http://localhost:${PORT}/api/teste-banco`);
             console.log(`📤 Upload: POST http://localhost:${PORT}/api/pedidos/upload`);
-            console.log(`🧪 Teste: GET http://localhost:${PORT}/api/teste-upload`);
+            console.log(`📝 Logs ativados - Monitorando todas as requisições...`);
         });
     } catch (error) {
-        console.error('❌ Falha ao iniciar servidor:', error);
+        console.error('❌ Falha ao iniciar servidor:', error.message);
+        console.error('❌ Stack trace:', error.stack);
         process.exit(1);
     }
 }
