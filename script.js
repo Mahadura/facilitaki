@@ -614,8 +614,8 @@ function mostrarInstrucoesPagamento() {
                 <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
                     <p><strong>Dados bancários:</strong></p>
                     <div style="margin-bottom: 1rem;">
-                        <p><strong>Banco:</strong> BCI</p>
-                        <p><strong>NIB:</strong> 00080000790534651019</p>
+                        <p><strong>Banco:</strong> MOZABANCO</p>
+                        <p><strong>NIB:</strong> 00340000358480311018</p>
                         <p><strong>Nome:</strong> Aguinaldo Anli Mahadura</p>
                         <p><strong>Valor:</strong> <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong> (entrada de 50%)</p>
                     </div>
@@ -631,7 +631,7 @@ function mostrarInstrucoesPagamento() {
     // Atualizar resumo com valores calculados
     resumoDiv.innerHTML = `
         <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
-            <h5 style="margin-top: 0; color: var(--primary-dark);">Resumo do Pedido</h5>
+            <h5 style="margin-top: 0; color: var(--primary-dark);">Detalhes</h5>
             
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Serviço:</span>
@@ -1274,3 +1274,4 @@ window.removerArquivo = removerArquivo;
 console.log('🎯 Facilitaki com upload real carregado!');
 console.log('📁 Arquivos físicos são enviados para o servidor');
 console.log('👨‍💼 Preview apenas no painel administrativo');
+
