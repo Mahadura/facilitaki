@@ -1,6 +1,6 @@
 /* style.css - Estilos completos para o Facilitaki (Versão Atualizada e Completa) */
 
-/* ===== RESET E BASE ===== */
+/* ===== RESET E BASEe ===== */
 :root {
     --primary-color: #2563eb;
     --primary-dark: #1e40af;
@@ -2304,4 +2304,5 @@ button[onclick="abrirDescricaoTrabalho()"]:disabled:hover i {
         font-size: 15px;
     }
 }
+
 
