@@ -1,4 +1,4 @@
-// server.js - Versão Simplificada e Funcional
+// server.js - Facilitaki Backend (Sem credenciais visíveis)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -87,6 +87,17 @@ async function initDatabase() {
             )
         `);
         
+        // Verificar se existe admin, se não existir criar um
+        const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        if (parseInt(adminCheck.rows[0].count) === 0) {
+            const hash = await bcrypt.hash('admin123', 10);
+            await pool.query(
+                'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
+                ['admin', 'admin@facilitaki.com', hash]
+            );
+            console.log('✅ Admin padrão criado');
+        }
+        
         console.log('✅ Banco inicializado');
     } catch (error) {
         console.error('❌ Erro:', error.message);
@@ -102,9 +113,9 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ==================== ROTAS ADMIN (SIMPLIFICADAS - SEM TOKEN) ====================
+// ==================== ROTAS ADMIN ====================
 
-// Página de login admin
+// Página de login admin - SEM CREDENCIAIS VISÍVEIS
 app.get('/admin/login', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -122,25 +133,54 @@ app.get('/admin/login', (req, res) => {
                 button:hover{transform:translateY(-2px)}
                 .error{color:#c33;margin-top:10px;display:none}
                 .success{color:#3c3;margin-top:10px;display:none}
-                .info{margin-top:20px;font-size:12px;color:#999}
+                .tabs{display:flex;margin-bottom:20px;border-bottom:2px solid #ddd}
+                .tab{flex:1;padding:10px;cursor:pointer;color:#666}
+                .tab.active{color:#667eea;border-bottom:2px solid #667eea}
+                .form-container{display:none}
+                .form-container.active{display:block}
             </style>
         </head>
         <body>
             <div class="container">
                 <h1>Admin Login</h1>
-                <input type="text" id="username" placeholder="Usuário" value="admin">
-                <input type="password" id="password" placeholder="Senha" value="admin123">
-                <button onclick="login()">Entrar</button>
-                <div id="error" class="error"></div>
-                <div class="info">
-                    <p>Credenciais padrão: admin / admin123</p>
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('login')">Login</div>
+                    <div class="tab" onclick="switchTab('register')">Criar Admin</div>
                 </div>
+                <div id="login-container" class="form-container active">
+                    <input type="text" id="username" placeholder="Usuário">
+                    <input type="password" id="password" placeholder="Senha">
+                    <button onclick="login()">Entrar</button>
+                </div>
+                <div id="register-container" class="form-container">
+                    <input type="text" id="newUser" placeholder="Usuário">
+                    <input type="password" id="newPass" placeholder="Senha">
+                    <input type="password" id="newPassConfirm" placeholder="Confirmar Senha">
+                    <button onclick="registerAdmin()">Criar Administrador</button>
+                </div>
+                <div id="error" class="error"></div>
+                <div id="success" class="success"></div>
             </div>
             <script>
+                function switchTab(tab) {
+                    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+                    document.querySelectorAll('.form-container').forEach(c=>c.classList.remove('active'));
+                    if(tab==='login'){
+                        document.querySelector('.tab').classList.add('active');
+                        document.getElementById('login-container').classList.add('active');
+                    }else{
+                        document.querySelectorAll('.tab')[1].classList.add('active');
+                        document.getElementById('register-container').classList.add('active');
+                    }
+                    document.getElementById('error').style.display='none';
+                    document.getElementById('success').style.display='none';
+                }
+                
                 async function login() {
                     const username = document.getElementById('username').value;
                     const password = document.getElementById('password').value;
                     const errorDiv = document.getElementById('error');
+                    errorDiv.style.display='none';
                     
                     if(!username||!password){
                         errorDiv.textContent='Preencha todos os campos';
@@ -166,37 +206,117 @@ app.get('/admin/login', (req, res) => {
                         errorDiv.style.display='block';
                     }
                 }
+                
+                async function registerAdmin() {
+                    const user = document.getElementById('newUser').value;
+                    const pass = document.getElementById('newPass').value;
+                    const confirm = document.getElementById('newPassConfirm').value;
+                    const errorDiv = document.getElementById('error');
+                    const successDiv = document.getElementById('success');
+                    errorDiv.style.display='none';
+                    successDiv.style.display='none';
+                    
+                    if(!user||!pass||!confirm){
+                        errorDiv.textContent='Preencha todos os campos';
+                        errorDiv.style.display='block';
+                        return;
+                    }
+                    if(pass!==confirm){
+                        errorDiv.textContent='As senhas não coincidem';
+                        errorDiv.style.display='block';
+                        return;
+                    }
+                    if(pass.length<6){
+                        errorDiv.textContent='A senha deve ter no mínimo 6 caracteres';
+                        errorDiv.style.display='block';
+                        return;
+                    }
+                    
+                    try{
+                        const res = await fetch('/admin/do-register', {
+                            method:'POST',
+                            headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({usuario:user, senha:pass})
+                        });
+                        const data = await res.json();
+                        if(data.success){
+                            successDiv.textContent = data.message || 'Administrador criado! Faça login.';
+                            successDiv.style.display='block';
+                            document.getElementById('newUser').value='';
+                            document.getElementById('newPass').value='';
+                            document.getElementById('newPassConfirm').value='';
+                            setTimeout(()=>switchTab('login'),2000);
+                        }else{
+                            errorDiv.textContent = data.error || 'Erro ao criar admin';
+                            errorDiv.style.display='block';
+                        }
+                    }catch(e){
+                        errorDiv.textContent = 'Erro de conexão';
+                        errorDiv.style.display='block';
+                    }
+                }
             </script>
         </body>
         </html>
     `);
 });
 
-// Processar login admin (simplificado - usa session em vez de token)
+// Processar login admin
 app.post('/admin/do-login', async (req, res) => {
     try {
         const { usuario, senha } = req.body;
         
-        // Verificar credenciais
-        if (usuario === 'admin' && senha === 'admin123') {
-            res.json({ success: true });
-        } else {
-            // Verificar no banco se existe admin
-            const result = await pool.query('SELECT * FROM usuarios WHERE nome = $1 AND is_admin = true', [usuario]);
-            if (result.rows.length > 0) {
-                const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
-                if (valid) {
-                    return res.json({ success: true });
-                }
-            }
-            res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+        // Buscar no banco
+        const result = await pool.query('SELECT * FROM usuarios WHERE nome = $1 AND is_admin = true', [usuario]);
+        
+        if (result.rows.length === 0) {
+            return res.status(401).json({ success: false, error: 'Usuário ou senha incorretos' });
         }
+        
+        const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
+        if (!valid) {
+            return res.status(401).json({ success: false, error: 'Usuário ou senha incorretos' });
+        }
+        
+        res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Painel admin (sem autenticação por token - usa cookie/session implícita)
+// Registrar novo admin
+app.post('/admin/do-register', async (req, res) => {
+    try {
+        const { usuario, senha } = req.body;
+        
+        // Verificar se já existe algum admin
+        const adminCount = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        const isFirstAdmin = parseInt(adminCount.rows[0].count) === 0;
+        
+        // Se não for o primeiro admin, precisa de autenticação
+        if (!isFirstAdmin) {
+            return res.status(401).json({ success: false, error: 'Apenas administradores existentes podem criar novos admins' });
+        }
+        
+        // Verificar se usuário já existe
+        const exists = await pool.query('SELECT id FROM usuarios WHERE nome = $1', [usuario]);
+        if (exists.rows.length > 0) {
+            return res.status(400).json({ success: false, error: 'Usuário já existe' });
+        }
+        
+        const hash = await bcrypt.hash(senha, 10);
+        await pool.query(
+            'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
+            [usuario, `admin_${Date.now()}@system.com`, hash]
+        );
+        
+        res.json({ success: true, message: 'Administrador criado com sucesso!' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Painel admin
 app.get('/admin/painel', async (req, res) => {
     try {
         const pedidos = await pool.query('SELECT * FROM pedidos ORDER BY data_pedido DESC LIMIT 50');
@@ -252,6 +372,7 @@ app.get('/admin/painel', async (req, res) => {
                     <button class="tab active" onclick="showTab('pedidos')">Pedidos (${pedidos.rows.length})</button>
                     <button class="tab" onclick="showTab('usuarios')">Usuários (${usuarios.rows.length})</button>
                     <button class="tab" onclick="showTab('contatos')">Contatos (${contatos.rows.length})</button>
+                    <button class="tab" onclick="showTab('admins')">Administradores</button>
                 </div>
                 
                 <div id="tab-pedidos" class="tab-content active">
@@ -272,6 +393,20 @@ app.get('/admin/painel', async (req, res) => {
                     </table>
                 </div>
                 
+                <div id="tab-admins" class="tab-content">
+                    <div style="margin-bottom:20px;padding:15px;background:#f8f9fa;border-radius:8px">
+                        <h3>Criar Novo Administrador</h3>
+                        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+                            <input type="text" id="newAdminUser" placeholder="Usuário" style="flex:2;padding:10px;border:1px solid #ddd;border-radius:5px">
+                            <input type="password" id="newAdminPass" placeholder="Senha" style="flex:2;padding:10px;border:1px solid #ddd;border-radius:5px">
+                            <input type="password" id="newAdminPassConfirm" placeholder="Confirmar" style="flex:2;padding:10px;border:1px solid #ddd;border-radius:5px">
+                            <button onclick="createNewAdmin()" style="background:#667eea;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer">Criar Admin</button>
+                        </div>
+                        <div id="adminMsg" style="margin-top:10px"></div>
+                    </div>
+                    <div id="adminsList"></div>
+                </div>
+                
                 <script>
                     async function apiCall(url, options={}) {
                         const res = await fetch(url, {
@@ -286,6 +421,60 @@ app.get('/admin/painel', async (req, res) => {
                         document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
                         event.target.classList.add('active');
                         document.getElementById('tab-'+name).classList.add('active');
+                        if(name==='admins') loadAdmins();
+                    }
+                    
+                    async function loadAdmins() {
+                        const data = await apiCall('/api/admin/listar');
+                        if(data && data.success) {
+                            const container = document.getElementById('adminsList');
+                            if(data.admins.length===0) {
+                                container.innerHTML = '<p>Nenhum administrador encontrado</p>';
+                            } else {
+                                container.innerHTML = '<table><thead><tr><th>ID</th><th>Nome</th><th>Data</th><th>Ações</th></tr></thead><tbody>' + 
+                                    data.admins.map(admin => '<tr><td>'+admin.id+'</td><td>'+admin.nome+' <span class="admin-badge">Admin</span>'+(admin.id === 1 ? ' (Principal)' : '')+'</td><td>'+new Date(admin.created_at).toLocaleDateString()+'</td><td>'+(admin.id !== 1 ? '<button class="btn btn-delete" onclick="deleteAdmin('+admin.id+')">Excluir</button>' : '<span>Admin principal</span>')+'</td></tr>').join('') +
+                                    '</tbody></table>';
+                            }
+                        }
+                    }
+                    
+                    async function createNewAdmin() {
+                        const usuario = document.getElementById('newAdminUser').value;
+                        const senha = document.getElementById('newAdminPass').value;
+                        const confirm = document.getElementById('newAdminPassConfirm').value;
+                        const msgDiv = document.getElementById('adminMsg');
+                        
+                        if(!usuario||!senha||!confirm){
+                            msgDiv.innerHTML='<span style="color:#c33">Preencha todos os campos</span>';
+                            return;
+                        }
+                        if(senha!==confirm){
+                            msgDiv.innerHTML='<span style="color:#c33">As senhas não coincidem</span>';
+                            return;
+                        }
+                        if(senha.length<6){
+                            msgDiv.innerHTML='<span style="color:#c33">Mínimo 6 caracteres</span>';
+                            return;
+                        }
+                        
+                        const data = await apiCall('/admin/do-register', { method:'POST', body:JSON.stringify({usuario, senha}) });
+                        if(data && data.success){
+                            msgDiv.innerHTML='<span style="color:#3c3">✅ '+data.message+'</span>';
+                            document.getElementById('newAdminUser').value='';
+                            document.getElementById('newAdminPass').value='';
+                            document.getElementById('newAdminPassConfirm').value='';
+                            loadAdmins();
+                            setTimeout(()=>msgDiv.innerHTML='',3000);
+                        } else if(data){
+                            msgDiv.innerHTML='<span style="color:#c33">❌ '+data.error+'</span>';
+                        }
+                    }
+                    
+                    async function deleteAdmin(id) {
+                        if(confirm('Excluir este administrador?')){
+                            const data = await apiCall('/api/admin/usuario/'+id, { method:'DELETE' });
+                            if(data && data.success) loadAdmins();
+                        }
                     }
                     
                     async function viewPedido(id) {
@@ -334,6 +523,11 @@ app.get('/admin/painel', async (req, res) => {
                     function logout() {
                         window.location.href = '/admin/login';
                     }
+                    
+                    // Carregar admins ao iniciar
+                    if(document.getElementById('tab-admins')) {
+                        loadAdmins();
+                    }
                 </script>
             </body>
             </html>
@@ -344,6 +538,15 @@ app.get('/admin/painel', async (req, res) => {
 });
 
 // ==================== ROTAS ADMIN API ====================
+app.get('/api/admin/listar', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, nome, created_at FROM usuarios WHERE is_admin = true ORDER BY created_at DESC');
+        res.json({ success: true, admins: result.rows });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 app.get('/api/admin/pedido/:id', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM pedidos WHERE id = $1', [req.params.id]);
@@ -498,7 +701,7 @@ async function startServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`✅ Servidor rodando na porta ${PORT}`);
         console.log(`🔐 Admin: https://facilitaki.onrender.com/admin/login`);
-        console.log(`🔑 Credenciais: admin / admin123`);
+        console.log(`💡 O primeiro admin deve ser criado na aba "Criar Admin"`);
     });
 }
 
