@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (Sem credenciais visíveis)
+// server.js - Facilitaki Backend (Corrigido - Permite primeiro admin)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -87,17 +87,6 @@ async function initDatabase() {
             )
         `);
         
-        // Verificar se existe admin, se não existir criar um
-        const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
-        if (parseInt(adminCheck.rows[0].count) === 0) {
-            const hash = await bcrypt.hash('admin123', 10);
-            await pool.query(
-                'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
-                ['admin', 'admin@facilitaki.com', hash]
-            );
-            console.log('✅ Admin padrão criado');
-        }
-        
         console.log('✅ Banco inicializado');
     } catch (error) {
         console.error('❌ Erro:', error.message);
@@ -115,7 +104,7 @@ app.get('/', (req, res) => {
 
 // ==================== ROTAS ADMIN ====================
 
-// Página de login admin - SEM CREDENCIAIS VISÍVEIS
+// Página de login admin
 app.get('/admin/login', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -138,6 +127,7 @@ app.get('/admin/login', (req, res) => {
                 .tab.active{color:#667eea;border-bottom:2px solid #667eea}
                 .form-container{display:none}
                 .form-container.active{display:block}
+                .info{margin-top:20px;font-size:12px;color:#999;text-align:center}
             </style>
         </head>
         <body>
@@ -160,8 +150,23 @@ app.get('/admin/login', (req, res) => {
                 </div>
                 <div id="error" class="error"></div>
                 <div id="success" class="success"></div>
+                <div class="info" id="infoMsg"></div>
             </div>
             <script>
+                // Verificar se já existe admin
+                async function checkAdminExists() {
+                    try {
+                        const res = await fetch('/api/admin/exists');
+                        const data = await res.json();
+                        if (!data.exists) {
+                            document.getElementById('infoMsg').innerHTML = '⚠️ Nenhum administrador existe. Crie o primeiro admin na aba "Criar Admin"!';
+                            document.getElementById('infoMsg').style.color = '#f59e0b';
+                        }
+                    } catch(e) {
+                        console.log('Erro ao verificar admin');
+                    }
+                }
+                
                 function switchTab(tab) {
                     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
                     document.querySelectorAll('.form-container').forEach(c=>c.classList.remove('active'));
@@ -245,20 +250,37 @@ app.get('/admin/login', (req, res) => {
                             document.getElementById('newUser').value='';
                             document.getElementById('newPass').value='';
                             document.getElementById('newPassConfirm').value='';
-                            setTimeout(()=>switchTab('login'),2000);
+                            setTimeout(()=>{
+                                switchTab('login');
+                                document.getElementById('infoMsg').innerHTML = '';
+                            },2000);
                         }else{
                             errorDiv.textContent = data.error || 'Erro ao criar admin';
                             errorDiv.style.display='block';
                         }
                     }catch(e){
-                        errorDiv.textContent = 'Erro de conexão';
+                        errorDiv.textContent = 'Erro de conexão: ' + e.message;
                         errorDiv.style.display='block';
                     }
                 }
+                
+                // Verificar se existe admin ao carregar
+                checkAdminExists();
             </script>
         </body>
         </html>
     `);
+});
+
+// Verificar se existe admin
+app.get('/api/admin/exists', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        const exists = parseInt(result.rows[0].count) > 0;
+        res.json({ exists });
+    } catch (error) {
+        res.json({ exists: false });
+    }
 });
 
 // Processar login admin
@@ -266,7 +288,6 @@ app.post('/admin/do-login', async (req, res) => {
     try {
         const { usuario, senha } = req.body;
         
-        // Buscar no banco
         const result = await pool.query('SELECT * FROM usuarios WHERE nome = $1 AND is_admin = true', [usuario]);
         
         if (result.rows.length === 0) {
@@ -284,7 +305,7 @@ app.post('/admin/do-login', async (req, res) => {
     }
 });
 
-// Registrar novo admin
+// Registrar novo admin (permitindo primeiro admin)
 app.post('/admin/do-register', async (req, res) => {
     try {
         const { usuario, senha } = req.body;
@@ -293,9 +314,14 @@ app.post('/admin/do-register', async (req, res) => {
         const adminCount = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
         const isFirstAdmin = parseInt(adminCount.rows[0].count) === 0;
         
-        // Se não for o primeiro admin, precisa de autenticação
+        console.log('isFirstAdmin:', isFirstAdmin);
+        console.log('Total admins:', adminCount.rows[0].count);
+        
+        // Se não for o primeiro admin, verificar autenticação via header
         if (!isFirstAdmin) {
-            return res.status(401).json({ success: false, error: 'Apenas administradores existentes podem criar novos admins' });
+            // Para criar novos admins, precisa estar logado (via cookie/session)
+            // Como não temos session, vamos permitir apenas se for o primeiro
+            return res.status(401).json({ success: false, error: 'Apenas administradores existentes podem criar novos admins. Faça login primeiro.' });
         }
         
         // Verificar se usuário já existe
@@ -310,8 +336,10 @@ app.post('/admin/do-register', async (req, res) => {
             [usuario, `admin_${Date.now()}@system.com`, hash]
         );
         
+        console.log('✅ Novo admin criado:', usuario);
         res.json({ success: true, message: 'Administrador criado com sucesso!' });
     } catch (error) {
+        console.error('Erro ao criar admin:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -433,7 +461,7 @@ app.get('/admin/painel', async (req, res) => {
                             } else {
                                 container.innerHTML = '<table><thead><tr><th>ID</th><th>Nome</th><th>Data</th><th>Ações</th></tr></thead><tbody>' + 
                                     data.admins.map(admin => '<tr><td>'+admin.id+'</td><td>'+admin.nome+' <span class="admin-badge">Admin</span>'+(admin.id === 1 ? ' (Principal)' : '')+'</td><td>'+new Date(admin.created_at).toLocaleDateString()+'</td><td>'+(admin.id !== 1 ? '<button class="btn btn-delete" onclick="deleteAdmin('+admin.id+')">Excluir</button>' : '<span>Admin principal</span>')+'</td></tr>').join('') +
-                                    '</tbody></table>';
+                                    '</tbody></tr>';
                             }
                         }
                     }
@@ -701,7 +729,7 @@ async function startServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`✅ Servidor rodando na porta ${PORT}`);
         console.log(`🔐 Admin: https://facilitaki.onrender.com/admin/login`);
-        console.log(`💡 O primeiro admin deve ser criado na aba "Criar Admin"`);
+        console.log(`💡 Crie o primeiro administrador na aba "Criar Admin"`);
     });
 }
 
