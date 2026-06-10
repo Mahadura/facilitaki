@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend Completo e Atualizado
+// server.js - Facilitaki Backend Completo e Corrigido
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -97,20 +97,29 @@ async function initDatabase() {
     try {
         console.log('🔧 Inicializando banco de dados...');
         
-        // Tabela usuarios com is_admin
+        // Criar tabela usuarios (sem is_admin primeiro)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL,
                 telefone VARCHAR(20) UNIQUE NOT NULL,
                 senha_hash VARCHAR(255) NOT NULL,
-                is_admin BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
         console.log('✅ Tabela usuarios OK');
+        
+        // Adicionar coluna is_admin se não existir
+        try {
+            await pool.query(`
+                ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE
+            `);
+            console.log('✅ Coluna is_admin adicionada com sucesso');
+        } catch (err) {
+            console.log('⚠️ Coluna is_admin já existe ou erro ao adicionar:', err.message);
+        }
 
-        // Tabela pedidos
+        // Criar tabela pedidos
         await pool.query(`
             CREATE TABLE IF NOT EXISTS pedidos (
                 id SERIAL PRIMARY KEY,
@@ -134,7 +143,7 @@ async function initDatabase() {
         `);
         console.log('✅ Tabela pedidos OK');
 
-        // Tabela contatos
+        // Criar tabela contatos
         await pool.query(`
             CREATE TABLE IF NOT EXISTS contatos (
                 id SERIAL PRIMARY KEY,
@@ -146,18 +155,20 @@ async function initDatabase() {
         `);
         console.log('✅ Tabela contatos OK');
 
-        // Criar admin padrão se não existir
+        // Verificar se já existe admin, se não existir, criar um padrão
         const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
         if (parseInt(adminCheck.rows[0].count) === 0) {
             const defaultHash = await bcrypt.hash('admin123', 10);
             await pool.query(
-                'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
-                ['admin', 'admin@facilitaki.com', defaultHash]
+                `INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) 
+                 VALUES ($1, $2, $3, true) 
+                 ON CONFLICT (telefone) DO NOTHING`,
+                ['admin', 'admin123', defaultHash]
             );
             console.log('✅ Admin padrão criado: admin / admin123');
         }
 
-        console.log('✅ Banco de dados inicializado!');
+        console.log('✅ Banco de dados inicializado com sucesso!');
         return true;
     } catch (error) {
         console.error('❌ Erro ao inicializar banco:', error.message);
@@ -195,15 +206,31 @@ app.get('/', (req, res) => {
 app.post('/api/login', async (req, res) => {
     try {
         const { telefone, senha } = req.body;
+        console.log('🔐 Login tentativa:', telefone);
+        
         const result = await pool.query('SELECT * FROM usuarios WHERE telefone = $1', [telefone]);
-        if (result.rows.length === 0) return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
+        if (result.rows.length === 0) {
+            return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
+        }
         
         const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
-        if (!valid) return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
+        if (!valid) {
+            return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
+        }
         
-        const token = jwt.sign({ id: result.rows[0].id, nome: result.rows[0].nome, telefone }, SECRET_KEY, { expiresIn: '7d' });
-        res.json({ success: true, token, usuario: result.rows[0] });
+        const token = jwt.sign(
+            { id: result.rows[0].id, nome: result.rows[0].nome, telefone, isAdmin: result.rows[0].is_admin || false },
+            SECRET_KEY,
+            { expiresIn: '7d' }
+        );
+        
+        res.json({ 
+            success: true, 
+            token, 
+            usuario: { id: result.rows[0].id, nome: result.rows[0].nome, telefone: result.rows[0].telefone }
+        });
     } catch (error) {
+        console.error('❌ Erro no login:', error);
         res.status(500).json({ success: false, erro: error.message });
     }
 });
@@ -211,14 +238,28 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/cadastrar', async (req, res) => {
     try {
         const { nome, telefone, senha } = req.body;
+        console.log('📝 Cadastro tentativa:', telefone);
+        
         const existe = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefone]);
-        if (existe.rows.length > 0) return res.status(400).json({ success: false, erro: 'Telefone já cadastrado' });
+        if (existe.rows.length > 0) {
+            return res.status(400).json({ success: false, erro: 'Telefone já cadastrado' });
+        }
         
         const hash = await bcrypt.hash(senha, 10);
-        const result = await pool.query('INSERT INTO usuarios (nome, telefone, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, telefone', [nome, telefone, hash]);
-        const token = jwt.sign({ id: result.rows[0].id, nome, telefone }, SECRET_KEY, { expiresIn: '7d' });
+        const result = await pool.query(
+            'INSERT INTO usuarios (nome, telefone, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, telefone',
+            [nome, telefone, hash]
+        );
+        
+        const token = jwt.sign(
+            { id: result.rows[0].id, nome, telefone, isAdmin: false },
+            SECRET_KEY,
+            { expiresIn: '7d' }
+        );
+        
         res.json({ success: true, token, usuario: result.rows[0] });
     } catch (error) {
+        console.error('❌ Erro no cadastro:', error);
         res.status(500).json({ success: false, erro: error.message });
     }
 });
@@ -231,22 +272,29 @@ app.post('/api/logout', authenticateToken, (req, res) => {
 app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), async (req, res) => {
     try {
         const { cliente, telefone, tema, descricao, plano, nomePlano, preco, metodoPagamento } = req.body;
+        
         const result = await pool.query(
             `INSERT INTO pedidos (usuario_id, cliente, telefone, tema, descricao, plano, nome_plano, preco, metodo_pagamento, arquivo_path)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
             [req.user.id, cliente, telefone, tema, descricao, plano, nomePlano, preco, metodoPagamento, req.file?.path]
         );
+        
         res.json({ success: true, pedido: result.rows[0] });
     } catch (error) {
+        console.error('❌ Erro ao criar pedido:', error);
         res.status(500).json({ success: false, erro: error.message });
     }
 });
 
 app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM pedidos WHERE usuario_id = $1 ORDER BY data_pedido DESC', [req.user.id]);
+        const result = await pool.query(
+            'SELECT * FROM pedidos WHERE usuario_id = $1 ORDER BY data_pedido DESC',
+            [req.user.id]
+        );
         res.json({ success: true, pedidos: result.rows });
     } catch (error) {
+        console.error('❌ Erro ao buscar pedidos:', error);
         res.json({ success: true, pedidos: [] });
     }
 });
@@ -254,14 +302,18 @@ app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
 app.post('/api/contato', async (req, res) => {
     try {
         const { nome, telefone, mensagem } = req.body;
-        await pool.query('INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)', [nome, telefone, mensagem]);
+        await pool.query(
+            'INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)',
+            [nome, telefone, mensagem]
+        );
         res.json({ success: true });
     } catch (error) {
+        console.error('❌ Erro ao salvar contato:', error);
         res.status(500).json({ success: false, erro: error.message });
     }
 });
 
-// ==================== ROTAS ADMIN - PÁGINAS ====================
+// ==================== ROTAS ADMIN - PÁGINA DE LOGIN ====================
 app.get('/admin/login', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -325,7 +377,6 @@ app.get('/admin/login', (req, res) => {
                     font-size: 12px;
                     color: #999;
                 }
-                .info a { color: #667eea; cursor: pointer; text-decoration: none; }
             </style>
         </head>
         <body>
@@ -344,11 +395,13 @@ app.get('/admin/login', (req, res) => {
                     const username = document.getElementById('username').value;
                     const password = document.getElementById('password').value;
                     const errorDiv = document.getElementById('error');
+                    
                     if (!username || !password) {
                         errorDiv.textContent = 'Preencha todos os campos';
                         errorDiv.style.display = 'block';
                         return;
                     }
+                    
                     try {
                         const res = await fetch('/api/admin/login', {
                             method: 'POST',
@@ -356,6 +409,7 @@ app.get('/admin/login', (req, res) => {
                             body: JSON.stringify({ usuario: username, senha: password })
                         });
                         const data = await res.json();
+                        
                         if (data.success) {
                             localStorage.setItem('admin_token', data.token);
                             window.location.href = '/admin/painel';
@@ -378,15 +432,27 @@ app.get('/admin/login', (req, res) => {
 app.post('/api/admin/login', async (req, res) => {
     try {
         const { usuario, senha } = req.body;
+        console.log('🔐 Login admin tentativa:', usuario);
+        
         const result = await pool.query('SELECT * FROM usuarios WHERE nome = $1 AND is_admin = true', [usuario]);
-        if (result.rows.length === 0) return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+        if (result.rows.length === 0) {
+            return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+        }
         
         const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
-        if (!valid) return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+        if (!valid) {
+            return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+        }
         
-        const token = jwt.sign({ id: result.rows[0].id, nome: usuario, isAdmin: true }, SECRET_KEY, { expiresIn: '8h' });
+        const token = jwt.sign(
+            { id: result.rows[0].id, nome: usuario, isAdmin: true },
+            SECRET_KEY,
+            { expiresIn: '8h' }
+        );
+        
         res.json({ success: true, token });
     } catch (error) {
+        console.error('❌ Erro no login admin:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -434,7 +500,9 @@ app.delete('/api/admin/pedido/:id', authenticateAdmin, async (req, res) => {
 app.delete('/api/admin/usuario/:id', authenticateAdmin, async (req, res) => {
     try {
         const arquivos = await pool.query('SELECT arquivo_path FROM pedidos WHERE usuario_id = $1', [req.params.id]);
-        arquivos.rows.forEach(row => { if (row.arquivo_path && fs.existsSync(row.arquivo_path)) fs.unlinkSync(row.arquivo_path); });
+        arquivos.rows.forEach(row => {
+            if (row.arquivo_path && fs.existsSync(row.arquivo_path)) fs.unlinkSync(row.arquivo_path);
+        });
         await pool.query('DELETE FROM usuarios WHERE id = $1 AND is_admin = false', [req.params.id]);
         res.json({ success: true });
     } catch (error) {
@@ -572,17 +640,20 @@ app.get('/admin/painel', authenticateAdmin, async (req, res) => {
                 <script>
                     const TOKEN = localStorage.getItem('admin_token');
                     if (!TOKEN) window.location.href = '/admin/login';
+                    
                     async function apiCall(url, options={}) {
                         const res = await fetch(url, {...options, headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}});
                         if (res.status === 401) window.location.href = '/admin/login';
                         return res.json();
                     }
+                    
                     function showTab(name) {
                         document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
                         document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
                         event.target.classList.add('active');
                         document.getElementById('tab-'+name).classList.add('active');
                     }
+                    
                     async function viewPedido(id) {
                         const data = await apiCall('/api/admin/pedido/'+id);
                         if (data.success) {
@@ -599,12 +670,15 @@ app.get('/admin/painel', authenticateAdmin, async (req, res) => {
                             document.getElementById('modal').style.display = 'flex';
                         }
                     }
+                    
                     async function updateStatus(id) {
                         const status = prompt('Novo status (pendente, pago, em_andamento, concluido):');
                         if (status) { await apiCall('/api/admin/pedido/'+id+'/status', {method:'PUT', body:JSON.stringify({status})}); location.reload(); }
                     }
+                    
                     async function deletePedido(id) { if (confirm('Excluir este pedido?')) { await apiCall('/api/admin/pedido/'+id, {method:'DELETE'}); location.reload(); } }
                     async function deleteUser(id) { if (confirm('Excluir este usuário?')) { await apiCall('/api/admin/usuario/'+id, {method:'DELETE'}); location.reload(); } }
+                    
                     async function viewContato(id) {
                         const data = await apiCall('/api/admin/contato/'+id);
                         if (data.success) {
@@ -619,27 +693,32 @@ app.get('/admin/painel', authenticateAdmin, async (req, res) => {
                             document.getElementById('modal').style.display = 'flex';
                         }
                     }
+                    
                     async function deleteContato(id) { if (confirm('Excluir este contato?')) { await apiCall('/api/admin/contato/'+id, {method:'DELETE'}); location.reload(); } }
                     function closeModal() { document.getElementById('modal').style.display = 'none'; }
+                    
                     async function logout() { await apiCall('/api/admin/logout', {method:'POST'}); localStorage.removeItem('admin_token'); window.location.href='/admin/login'; }
                 </script>
             </body>
             </html>
         `);
     } catch (error) {
+        console.error('❌ Erro no painel admin:', error);
         res.status(500).send('Erro: ' + error.message);
     }
 });
 
-// Redirecionamentos
+// ==================== REDIRECIONAMENTOS ====================
 app.get('/admin', (req, res) => res.redirect('/admin/login'));
 app.get('/admin/', (req, res) => res.redirect('/admin/login'));
 
-// Tratamento de erros
+// ==================== TRATAMENTO DE ERROS ====================
 app.use((err, req, res, next) => {
     console.error('❌ Erro:', err.message);
     if (err instanceof multer.MulterError) {
-        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, error: 'Arquivo muito grande. Máximo 10MB.' });
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ success: false, error: 'Arquivo muito grande. Máximo 10MB.' });
+        }
     }
     res.status(500).json({ success: false, error: err.message });
 });
@@ -654,10 +733,13 @@ async function startServer() {
     console.log('📡 Porta:', PORT);
     console.log('🌍 Ambiente:', process.env.NODE_ENV || 'development');
     
-    await initDatabase();
+    const dbOk = await initDatabase();
+    if (!dbOk) {
+        console.log('⚠️ Atenção: Problemas com o banco de dados, mas continuando...');
+    }
     
     app.listen(PORT, '0.0.0.0', () => {
-        console.log(`\n✅ Servidor rodando em http://localhost:${PORT}`);
+        console.log(`\n✅ Servidor rodando na porta ${PORT}`);
         console.log(`🔐 Painel Admin: https://facilitaki.onrender.com/admin/login`);
         console.log(`🌐 Site: https://facilitaki.onrender.com`);
         console.log(`\n📝 Credenciais admin padrão:`);
