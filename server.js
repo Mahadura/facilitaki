@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (Corrigido - Campo telefone VARCHAR(100))
+// server.js - Facilitaki Backend (Admin com usuário, telefone, senha)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -49,12 +49,12 @@ async function initDatabase() {
     try {
         console.log('🔧 Inicializando banco...');
         
-        // Verificar se a coluna telefone existe e aumentar seu tamanho
+        // Aumentar tamanho da coluna telefone
         try {
             await pool.query(`ALTER TABLE usuarios ALTER COLUMN telefone TYPE VARCHAR(100);`);
-            console.log('✅ Coluna telefone alterada para VARCHAR(100)');
+            console.log('✅ Coluna telefone alterada');
         } catch (err) {
-            console.log('⚠️ Coluna telefone já está no tamanho correto ou erro:', err.message);
+            console.log('⚠️ Coluna telefone já OK');
         }
         
         // Criar tabelas se não existirem
@@ -96,7 +96,7 @@ async function initDatabase() {
             )
         `);
         
-        console.log('✅ Banco inicializado com sucesso!');
+        console.log('✅ Banco inicializado');
     } catch (error) {
         console.error('❌ Erro:', error.message);
     }
@@ -124,7 +124,7 @@ app.get('/admin/login', (req, res) => {
             <style>
                 *{margin:0;padding:0;box-sizing:border-box}
                 body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .container{background:#fff;padding:40px;border-radius:20px;width:350px;text-align:center}
+                .container{background:#fff;padding:40px;border-radius:20px;width:400px;text-align:center}
                 h1{color:#667eea;margin-bottom:30px}
                 input{width:100%;padding:12px;margin:10px 0;border:2px solid #ddd;border-radius:10px}
                 button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold;margin-top:10px}
@@ -146,37 +146,38 @@ app.get('/admin/login', (req, res) => {
                     <div class="tab active" onclick="switchTab('login')">Login</div>
                     <div class="tab" onclick="switchTab('register')">Criar Admin</div>
                 </div>
+                
+                <!-- Login Container -->
                 <div id="login-container" class="form-container active">
                     <input type="text" id="username" placeholder="Usuário">
                     <input type="password" id="password" placeholder="Senha">
                     <button onclick="login()">Entrar</button>
                 </div>
+                
+                <!-- Register Container -->
                 <div id="register-container" class="form-container">
-                    <input type="text" id="newUser" placeholder="Usuário">
-                    <input type="password" id="newPass" placeholder="Senha">
-                    <input type="password" id="newPassConfirm" placeholder="Confirmar Senha">
+                    <input type="text" id="newUser" placeholder="Usuário *">
+                    <input type="text" id="newTelefone" placeholder="Telefone * (ex: 84 123 4567)">
+                    <input type="password" id="newPass" placeholder="Senha *">
+                    <input type="password" id="newPassConfirm" placeholder="Confirmar Senha *">
                     <button onclick="registerAdmin()">Criar Administrador</button>
                 </div>
+                
                 <div id="error" class="error"></div>
                 <div id="success" class="success"></div>
                 <div class="info" id="infoMsg"></div>
             </div>
             <script>
-                // Verificar se já existe admin
                 async function checkAdminExists() {
                     try {
                         const res = await fetch('/api/admin/exists');
                         const data = await res.json();
                         if (!data.exists) {
                             document.getElementById('infoMsg').innerHTML = '⚠️ Nenhum administrador existe. Crie o primeiro admin na aba "Criar Admin"!';
-                            document.getElementById('infoMsg').style.color = '#f59e0b';
                         } else {
                             document.getElementById('infoMsg').innerHTML = '✅ Faça login com suas credenciais de administrador.';
-                            document.getElementById('infoMsg').style.color = '#3c3';
                         }
-                    } catch(e) {
-                        console.log('Erro ao verificar admin');
-                    }
+                    } catch(e) {}
                 }
                 
                 function switchTab(tab) {
@@ -226,6 +227,7 @@ app.get('/admin/login', (req, res) => {
                 
                 async function registerAdmin() {
                     const user = document.getElementById('newUser').value;
+                    const telefone = document.getElementById('newTelefone').value;
                     const pass = document.getElementById('newPass').value;
                     const confirm = document.getElementById('newPassConfirm').value;
                     const errorDiv = document.getElementById('error');
@@ -233,7 +235,7 @@ app.get('/admin/login', (req, res) => {
                     errorDiv.style.display='none';
                     successDiv.style.display='none';
                     
-                    if(!user||!pass||!confirm){
+                    if(!user||!telefone||!pass||!confirm){
                         errorDiv.textContent='Preencha todos os campos';
                         errorDiv.style.display='block';
                         return;
@@ -249,17 +251,26 @@ app.get('/admin/login', (req, res) => {
                         return;
                     }
                     
+                    // Validar telefone (apenas números)
+                    const telefoneLimpo = telefone.replace(/\\D/g, '');
+                    if(telefoneLimpo.length < 9){
+                        errorDiv.textContent='Digite um telefone válido (ex: 841234567)';
+                        errorDiv.style.display='block';
+                        return;
+                    }
+                    
                     try{
                         const res = await fetch('/admin/do-register', {
                             method:'POST',
                             headers:{'Content-Type':'application/json'},
-                            body:JSON.stringify({usuario:user, senha:pass})
+                            body:JSON.stringify({usuario:user, telefone:telefoneLimpo, senha:pass})
                         });
                         const data = await res.json();
                         if(data.success){
                             successDiv.textContent = data.message || 'Administrador criado! Faça login.';
                             successDiv.style.display='block';
                             document.getElementById('newUser').value='';
+                            document.getElementById('newTelefone').value='';
                             document.getElementById('newPass').value='';
                             document.getElementById('newPassConfirm').value='';
                             setTimeout(()=>{
@@ -316,30 +327,29 @@ app.post('/admin/do-login', async (req, res) => {
     }
 });
 
-// Registrar novo admin
+// Registrar novo admin (com usuário, telefone e senha)
 app.post('/admin/do-register', async (req, res) => {
     try {
-        const { usuario, senha } = req.body;
+        const { usuario, telefone, senha } = req.body;
         
-        console.log('📝 Tentando criar admin:', usuario);
-        
-        // Verificar se já existe admin
-        const adminCount = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
-        const isFirstAdmin = parseInt(adminCount.rows[0].count) === 0;
-        
-        console.log('isFirstAdmin:', isFirstAdmin);
+        console.log('📝 Tentando criar admin:', usuario, 'Telefone:', telefone);
         
         // Verificar se usuário já existe
-        const exists = await pool.query('SELECT id FROM usuarios WHERE nome = $1', [usuario]);
-        if (exists.rows.length > 0) {
-            return res.status(400).json({ success: false, error: 'Usuário já existe' });
+        const userExists = await pool.query('SELECT id FROM usuarios WHERE nome = $1', [usuario]);
+        if (userExists.rows.length > 0) {
+            return res.status(400).json({ success: false, error: 'Este nome de usuário já está em uso' });
+        }
+        
+        // Verificar se telefone já existe
+        const telefoneExists = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefone]);
+        if (telefoneExists.rows.length > 0) {
+            return res.status(400).json({ success: false, error: 'Este telefone já está cadastrado' });
         }
         
         const hash = await bcrypt.hash(senha, 10);
-        // Usar um telefone curto para admin
         await pool.query(
             'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
-            [usuario, 'admin@system.com', hash]
+            [usuario, telefone, hash]
         );
         
         console.log('✅ Admin criado com sucesso:', usuario);
@@ -383,8 +393,11 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/cadastrar', async (req, res) => {
     try {
         const { nome, telefone, senha } = req.body;
-        const existe = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefone]);
         
+        // Validar telefone (apenas números)
+        const telefoneLimpo = telefone.replace(/\D/g, '');
+        
+        const existe = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefoneLimpo]);
         if (existe.rows.length > 0) {
             return res.status(400).json({ success: false, erro: 'Telefone já cadastrado' });
         }
@@ -392,7 +405,7 @@ app.post('/api/cadastrar', async (req, res) => {
         const hash = await bcrypt.hash(senha, 10);
         const result = await pool.query(
             'INSERT INTO usuarios (nome, telefone, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, telefone',
-            [nome, telefone, hash]
+            [nome, telefoneLimpo, hash]
         );
         
         const token = jwt.sign(
@@ -403,6 +416,7 @@ app.post('/api/cadastrar', async (req, res) => {
         
         res.json({ success: true, token, usuario: result.rows[0] });
     } catch (error) {
+        console.error('Erro no cadastro:', error);
         res.status(500).json({ success: false, erro: error.message });
     }
 });
@@ -445,12 +459,17 @@ app.post('/api/contato', async (req, res) => {
     }
 });
 
-// Painel admin (página principal)
+// ==================== PAINEL ADMIN ====================
 app.get('/admin/painel', async (req, res) => {
     try {
-        const pedidos = await pool.query('SELECT * FROM pedidos ORDER BY data_pedido DESC LIMIT 50');
-        const usuarios = await pool.query('SELECT id, nome, telefone, is_admin, created_at FROM usuarios ORDER BY created_at DESC LIMIT 50');
-        const contatos = await pool.query('SELECT * FROM contatos ORDER BY data_envio DESC LIMIT 50');
+        // Buscar todos os dados
+        const pedidos = await pool.query('SELECT * FROM pedidos ORDER BY data_pedido DESC LIMIT 100');
+        const usuarios = await pool.query('SELECT id, nome, telefone, is_admin, created_at FROM usuarios ORDER BY created_at DESC');
+        const contatos = await pool.query('SELECT * FROM contatos ORDER BY data_envio DESC LIMIT 100');
+        
+        console.log('📊 Total de usuários:', usuarios.rows.length);
+        console.log('📊 Administradores:', usuarios.rows.filter(u => u.is_admin).length);
+        console.log('📊 Clientes:', usuarios.rows.filter(u => !u.is_admin).length);
         
         res.send(`
             <!DOCTYPE html>
@@ -461,7 +480,7 @@ app.get('/admin/painel', async (req, res) => {
                 <style>
                     *{margin:0;padding:0;box-sizing:border-box}
                     body{font-family:Arial;background:#f5f5f5;padding:20px}
-                    .header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+                    .header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
                     .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:20px}
                     .stat-card{background:#fff;padding:20px;border-radius:10px;text-align:center;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
                     .stat-number{font-size:32px;font-weight:bold;color:#667eea}
@@ -482,6 +501,11 @@ app.get('/admin/painel', async (req, res) => {
                     .btn-delete{background:#e74c3c;color:#fff}
                     .logout-btn{background:#e74c3c;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer}
                     .admin-badge{background:#667eea;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;margin-left:5px}
+                    .no-data{text-align:center;padding:40px;color:#999}
+                    @media (max-width:768px){
+                        body{padding:10px}
+                        th,td{padding:8px;font-size:12px}
+                    }
                 </style>
             </head>
             <body>
@@ -494,7 +518,7 @@ app.get('/admin/painel', async (req, res) => {
                     <div class="stat-card"><div class="stat-number">${pedidos.rows.length}</div><div>Total Pedidos</div></div>
                     <div class="stat-card"><div class="stat-number">${pedidos.rows.filter(p=>p.status==='pendente').length}</div><div>Pendentes</div></div>
                     <div class="stat-card"><div class="stat-number">${usuarios.rows.filter(u=>!u.is_admin).length}</div><div>Clientes</div></div>
-                    <div class="stat-card"><div class="stat-number">${contatos.rows.length}</div><div>Contatos</div></div>
+                    <div class="stat-card"><div class="stat-number">${usuarios.rows.filter(u=>u.is_admin).length}</div><div>Administradores</div></div>
                 </div>
                 
                 <div class="tabs">
@@ -503,37 +527,78 @@ app.get('/admin/painel', async (req, res) => {
                     <button class="tab" onclick="showTab('contatos')">Contatos (${contatos.rows.length})</button>
                 </div>
                 
+                <!-- Tab Pedidos -->
                 <div id="tab-pedidos" class="tab-content active">
+                    ${pedidos.rows.length === 0 ? '<div class="no-data">Nenhum pedido encontrado</div>' : `
                     <table>
                         <thead>
                             <tr><th>ID</th><th>Cliente</th><th>Telefone</th><th>Serviço</th><th>Valor</th><th>Status</th><th>Data</th><th>Ações</th></tr>
                         </thead>
                         <tbody>
-                            ${pedidos.rows.map(p => `<tr><td>${p.id}</td><td>${p.cliente}</td><td>${p.telefone}</td><td>${p.nome_plano}</td><td>${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</td><td><span class="status status-${p.status}">${p.status}</span></td><td>${new Date(p.data_pedido).toLocaleDateString()}</td><td><button class="btn btn-view" onclick="viewPedido(${p.id})">Ver</button><button class="btn btn-update" onclick="updateStatus(${p.id})">Editar</button><button class="btn btn-delete" onclick="deletePedido(${p.id})">Excluir</button></td></tr>`).join('')}
+                            ${pedidos.rows.map(p => `
+                            <tr>
+                                <td>${p.id}</td>
+                                <td>${p.cliente || '-'}</td>
+                                <td>${p.telefone || '-'}</td>
+                                <td>${p.nome_plano || p.plano || '-'}</td>
+                                <td>${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</span></td>
+                                <td><span class="status status-${p.status || 'pendente'}">${p.status || 'pendente'}</span></td>
+                                <td>${p.data_pedido ? new Date(p.data_pedido).toLocaleDateString() : '-'}</span></td>
+                                <td>
+                                    <button class="btn btn-view" onclick="viewPedido(${p.id})">Ver</button>
+                                    <button class="btn btn-update" onclick="updateStatus(${p.id})">Editar</button>
+                                    <button class="btn btn-delete" onclick="deletePedido(${p.id})">Excluir</button>
+                                </span></td>
+                            </tr>`).join('')}
                         </tbody>
                     </table>
+                    `}
                 </div>
                 
+                <!-- Tab Usuários (Mostra TODOS - Admins e Clientes) -->
                 <div id="tab-usuarios" class="tab-content">
+                    ${usuarios.rows.length === 0 ? '<div class="no-data">Nenhum usuário encontrado</div>' : `
                     <table>
                         <thead>
-                            <tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Admin</th><th>Cadastro</th><th>Ações</th></tr>
+                            <tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Tipo</th><th>Cadastro</th><th>Ações</th></tr>
                         </thead>
                         <tbody>
-                            ${usuarios.rows.map(u => `<tr><td>${u.id}</td><td>${u.nome} ${u.is_admin ? '<span class="admin-badge">Admin</span>' : ''}</td><td>${u.telefone}</td><td>${u.is_admin ? 'Sim' : 'Não'}</td><td>${new Date(u.created_at).toLocaleDateString()}</td><td>${!u.is_admin ? `<button class="btn btn-delete" onclick="deleteUser(${u.id})">Excluir</button>` : ''}</td></tr>`).join('')}
+                            ${usuarios.rows.map(u => `
+                            <tr>
+                                <td>${u.id}</span></td>
+                                <td>${u.nome} ${u.is_admin ? '<span class="admin-badge">Admin</span>' : ''}</td>
+                                <td>${u.telefone || '-'}</span></td>
+                                <td>${u.is_admin ? 'Administrador' : 'Cliente'}</td>
+                                <td>${new Date(u.created_at).toLocaleDateString()}</span></td>
+                                <td>${!u.is_admin ? `<button class="btn btn-delete" onclick="deleteUser(${u.id})">Excluir</button>` : '<span style="color:#999;">Não pode excluir admin</span>'}</span></td>
+                            </tr>`).join('')}
                         </tbody>
                     </table>
+                    `}
                 </div>
                 
+                <!-- Tab Contatos -->
                 <div id="tab-contatos" class="tab-content">
+                    ${contatos.rows.length === 0 ? '<div class="no-data">Nenhum contato encontrado</div>' : `
                     <table>
                         <thead>
                             <tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Mensagem</th><th>Data</th><th>Ações</th></tr>
                         </thead>
                         <tbody>
-                            ${contatos.rows.map(c => `<tr><td>${c.id}</td><td>${c.nome}</td><td>${c.telefone}</td><td>${c.mensagem.substring(0,50)}${c.mensagem.length>50?'...':''}</td><td>${new Date(c.data_envio).toLocaleDateString()}</td><td><button class="btn btn-view" onclick="viewContato(${c.id})">Ver</button><button class="btn btn-delete" onclick="deleteContato(${c.id})">Excluir</button></td></tr>`).join('')}
+                            ${contatos.rows.map(c => `
+                            <tr>
+                                <td>${c.id}</span></td>
+                                <td>${c.nome}</span></td>
+                                <td>${c.telefone}</span></td>
+                                <td>${c.mensagem.substring(0, 80)}${c.mensagem.length > 80 ? '...' : ''}</span></td>
+                                <td>${new Date(c.data_envio).toLocaleDateString()}</span></td>
+                                <td><button class="btn btn-view" onclick="viewContato(${c.id})">Ver</button>
+                                    <button class="btn btn-delete" onclick="deleteContato(${c.id})">Excluir</button>
+                                </span></td>
+                            </tr>`).join('')}
                         </tbody>
                     </table>
+                    `}
                 </div>
                 
                 <script>
@@ -555,15 +620,16 @@ app.get('/admin/painel', async (req, res) => {
                     async function viewPedido(id) {
                         const data = await apiCall('/api/admin/pedido/'+id);
                         if(data && data.success){
-                            alert('Pedido #'+data.pedido.id+'\\nCliente: '+data.pedido.cliente+'\\nServiço: '+data.pedido.nome_plano+'\\nValor: '+parseFloat(data.pedido.preco).toLocaleString('pt-MZ')+' MT\\nStatus: '+data.pedido.status);
+                            alert('Pedido #'+data.pedido.id+'\\nCliente: '+data.pedido.cliente+'\\nTelefone: '+data.pedido.telefone+'\\nServiço: '+data.pedido.nome_plano+'\\nValor: '+parseFloat(data.pedido.preco).toLocaleString('pt-MZ')+' MT\\nStatus: '+data.pedido.status+'\\nDescrição: '+(data.pedido.descricao || 'Nenhuma'));
                         }
                     }
                     
                     async function updateStatus(id) {
-                        const status = prompt('Novo status (pendente, pago, em_andamento, concluido):');
+                        const status = prompt('Novo status (pendente, pago, em_andamento, concluido, cancelado):');
                         if(status){
                             const data = await apiCall('/api/admin/pedido/'+id+'/status', { method:'PUT', body:JSON.stringify({status}) });
                             if(data && data.success) location.reload();
+                            else alert(data?.error || 'Erro ao atualizar');
                         }
                     }
                     
@@ -575,7 +641,7 @@ app.get('/admin/painel', async (req, res) => {
                     }
                     
                     async function deleteUser(id) {
-                        if(confirm('Excluir este usuário?')){
+                        if(confirm('Excluir este usuário? Todos os pedidos associados também serão excluídos.')){
                             const data = await apiCall('/api/admin/usuario/'+id, { method:'DELETE' });
                             if(data && data.success) location.reload();
                         }
@@ -584,7 +650,7 @@ app.get('/admin/painel', async (req, res) => {
                     async function viewContato(id) {
                         const data = await apiCall('/api/admin/contato/'+id);
                         if(data && data.success){
-                            alert('Contato de '+data.contato.nome+'\\nTelefone: '+data.contato.telefone+'\\nMensagem: '+data.contato.mensagem);
+                            alert('Contato de '+data.contato.nome+'\\nTelefone: '+data.contato.telefone+'\\nData: '+new Date(data.contato.data_envio).toLocaleString()+'\\nMensagem: '+data.contato.mensagem);
                         }
                     }
                     
@@ -603,7 +669,8 @@ app.get('/admin/painel', async (req, res) => {
             </html>
         `);
     } catch (error) {
-        res.status(500).send('Erro: ' + error.message);
+        console.error('Erro no painel:', error);
+        res.status(500).send('Erro ao carregar painel: ' + error.message);
     }
 });
 
@@ -611,6 +678,7 @@ app.get('/admin/painel', async (req, res) => {
 app.get('/api/admin/pedido/:id', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM pedidos WHERE id = $1', [req.params.id]);
+        if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Pedido não encontrado' });
         res.json({ success: true, pedido: result.rows[0] });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -619,6 +687,10 @@ app.get('/api/admin/pedido/:id', async (req, res) => {
 
 app.put('/api/admin/pedido/:id/status', async (req, res) => {
     try {
+        const validStatus = ['pendente', 'pago', 'em_andamento', 'concluido', 'cancelado'];
+        if (!validStatus.includes(req.body.status)) {
+            return res.status(400).json({ success: false, error: 'Status inválido' });
+        }
         await pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [req.body.status, req.params.id]);
         res.json({ success: true });
     } catch (error) {
@@ -637,7 +709,12 @@ app.delete('/api/admin/pedido/:id', async (req, res) => {
 
 app.delete('/api/admin/usuario/:id', async (req, res) => {
     try {
-        await pool.query('DELETE FROM usuarios WHERE id = $1 AND is_admin = false', [req.params.id]);
+        // Verificar se é admin
+        const userCheck = await pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.params.id]);
+        if (userCheck.rows.length > 0 && userCheck.rows[0].is_admin) {
+            return res.status(400).json({ success: false, error: 'Não é possível excluir administradores' });
+        }
+        await pool.query('DELETE FROM usuarios WHERE id = $1', [req.params.id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -647,6 +724,7 @@ app.delete('/api/admin/usuario/:id', async (req, res) => {
 app.get('/api/admin/contato/:id', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM contatos WHERE id = $1', [req.params.id]);
+        if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Contato não encontrado' });
         res.json({ success: true, contato: result.rows[0] });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -673,7 +751,6 @@ async function startServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`✅ Servidor rodando na porta ${PORT}`);
         console.log(`🔐 Admin: https://facilitaki.onrender.com/admin/login`);
-        console.log(`💡 Crie o primeiro administrador na aba "Criar Admin"`);
     });
 }
 
