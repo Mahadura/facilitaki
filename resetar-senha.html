@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinir Senha - Facilitaki</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;justify-content:center;align-items:center}
+        .container{background:#fff;padding:40px;border-radius:20px;width:400px;text-align:center}
+        input{width:100%;padding:12px;margin:10px 0;border:2px solid #ddd;border-radius:10px}
+        button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold}
+        .message{margin-top:15px;padding:10px;border-radius:5px;display:none}
+        .success{background:#d4edda;color:#155724;display:block}
+        .error{background:#f8d7da;color:#721c24;display:block}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Redefinir Senha</h1>
+        <p>Digite sua nova senha</p>
+        <input type="password" id="novaSenha" placeholder="Nova senha (mínimo 6 caracteres)">
+        <input type="password" id="confirmarSenha" placeholder="Confirmar senha">
+        <button onclick="redefinirSenha()">Redefinir Senha</button>
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+        if (!token) {
+            document.getElementById('message').innerHTML = 'Token inválido ou expirado. Solicite uma nova recuperação.';
+            document.getElementById('message').className = 'message error';
+        }
+
+        async function redefinirSenha() {
+            const novaSenha = document.getElementById('novaSenha').value;
+            const confirmar = document.getElementById('confirmarSenha').value;
+            const messageDiv = document.getElementById('message');
+
+            if (!novaSenha || !confirmar) {
+                messageDiv.innerHTML = 'Preencha todos os campos';
+                messageDiv.className = 'message error';
+                return;
+            }
+
+            if (novaSenha.length < 6) {
+                messageDiv.innerHTML = 'A senha deve ter pelo menos 6 caracteres';
+                messageDiv.className = 'message error';
+                return;
+            }
+
+            if (novaSenha !== confirmar) {
+                messageDiv.innerHTML = 'As senhas não coincidem';
+                messageDiv.className = 'message error';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/redefinir-senha', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, novaSenha })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    messageDiv.innerHTML = data.message + ' Redirecionando para o login...';
+                    messageDiv.className = 'message success';
+                    setTimeout(() => {
+                        window.location.href = '/admin/login';
+                    }, 3000);
+                } else {
+                    messageDiv.innerHTML = data.error || 'Erro ao redefinir senha';
+                    messageDiv.className = 'message error';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = 'Erro de conexão';
+                messageDiv.className = 'message error';
+            }
+        }
+    </script>
+</body>
+</html>
