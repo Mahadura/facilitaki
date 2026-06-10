@@ -1,5 +1,5 @@
-// script.js - Facilitaki - Sistema Completo COM UPLOAD REAL
-// Atualizado para corrigir valores e nomes de serviços
+// script.js - Facilitaki Sistema Completo
+// Versão corrigida com suporte a admin e usuários comuns
 
 // ===== VARIÁVEIS GLOBAIS =====
 let usuarioLogado = null;
@@ -12,7 +12,7 @@ let carrinho = {
 let arquivoSelecionado = null;
 
 // ===== URL DO SERVIDOR =====
-const API_URL = 'https://facilitaki.onrender.com';
+const API_URL = window.location.origin;
 
 // ===== FUNÇÃO PARA TESTAR CONEXÃO =====
 async function testarConexaoAPI() {
@@ -120,8 +120,8 @@ function verificarELogar(tipo, preco) {
 
 // ===== GERENCIAMENTO DE USUÁRIOS =====
 async function fazerLogin() {
-    const telefone = document.getElementById('loginTelefone').value.trim();
-    const senha = document.getElementById('loginSenha').value;
+    const telefone = document.getElementById('loginTelefone')?.value.trim();
+    const senha = document.getElementById('loginSenha')?.value;
     const mensagem = document.getElementById('mensagemLogin');
     
     if (!telefone || !senha) {
@@ -139,42 +139,15 @@ async function fazerLogin() {
     try {
         console.log('🔐 Tentando login para:', telefone);
         
-        const conexaoOk = await testarConexaoAPI();
-        if (!conexaoOk) {
-            mostrarMensagem(mensagem, 'Servidor não disponível', 'error');
-            return;
-        }
-        
         const response = await fetch(`${API_URL}/api/login`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ telefone, senha }),
-            mode: 'cors'
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone, senha })
         });
         
-        console.log('📤 Resposta do login:', response.status);
-        
-        if (!response.ok) {
-            let errorMessage = 'Erro no servidor';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
-            } catch (e) {
-                errorMessage = `Erro ${response.status}: ${response.statusText}`;
-            }
-            
-            console.error('❌ Erro no login:', errorMessage);
-            mostrarMensagem(mensagem, errorMessage, 'error');
-            return;
-        }
-        
         const data = await response.json();
-        console.log('✅ Login bem-sucedido:', data);
         
-        if (data.success) {
+        if (response.ok && data.success) {
             usuarioLogado = data.usuario;
             localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
             localStorage.setItem('token_facilitaki', data.token);
@@ -218,10 +191,10 @@ async function fazerLogin() {
 }
 
 async function fazerCadastro() {
-    const nome = document.getElementById('cadastroNome').value.trim();
-    const telefone = document.getElementById('cadastroTelefone').value.trim();
-    const senha = document.getElementById('cadastroSenha').value;
-    const confirmarSenha = document.getElementById('cadastroSenhaConfirm').value;
+    const nome = document.getElementById('cadastroNome')?.value.trim();
+    const telefone = document.getElementById('cadastroTelefone')?.value.trim();
+    const senha = document.getElementById('cadastroSenha')?.value;
+    const confirmarSenha = document.getElementById('cadastroSenhaConfirm')?.value;
     const mensagem = document.getElementById('mensagemLogin');
     
     if (!nome || !telefone || !senha || !confirmarSenha) {
@@ -249,23 +222,11 @@ async function fazerCadastro() {
     try {
         console.log('📝 Tentando cadastro para:', telefone);
         
-        const conexaoOk = await testarConexaoAPI();
-        if (!conexaoOk) {
-            mostrarMensagem(mensagem, 'Servidor não disponível', 'error');
-            return;
-        }
-        
         const response = await fetch(`${API_URL}/api/cadastrar`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ nome, telefone, senha }),
-            mode: 'cors'
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, telefone, senha })
         });
-        
-        console.log('📤 Resposta do cadastro:', response.status);
         
         const data = await response.json();
 
@@ -304,19 +265,16 @@ async function fazerCadastro() {
 }
 
 async function fazerLogout() {
-    try {
-        const token = localStorage.getItem('token_facilitaki');
-        if (token) {
+    const token = localStorage.getItem('token_facilitaki');
+    if (token) {
+        try {
             await fetch(`${API_URL}/api/logout`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: { 'Authorization': `Bearer ${token}` }
             });
+        } catch (error) {
+            console.error("❌ Erro ao fazer logout:", error);
         }
-    } catch (error) {
-        console.error("❌ Erro ao fazer logout no servidor:", error);
     }
     
     usuarioLogado = null;
@@ -339,15 +297,21 @@ async function fazerLogout() {
 }
 
 function mostrarCadastro() {
-    document.getElementById('formLogin').style.display = 'none';
-    document.getElementById('formCadastro').style.display = 'block';
-    document.getElementById('mensagemLogin').innerHTML = '';
+    const formLogin = document.getElementById('formLogin');
+    const formCadastro = document.getElementById('formCadastro');
+    if (formLogin) formLogin.style.display = 'none';
+    if (formCadastro) formCadastro.style.display = 'block';
+    const mensagem = document.getElementById('mensagemLogin');
+    if (mensagem) mensagem.innerHTML = '';
 }
 
 function mostrarLogin() {
-    document.getElementById('formCadastro').style.display = 'none';
-    document.getElementById('formLogin').style.display = 'block';
-    document.getElementById('mensagemLogin').innerHTML = '';
+    const formLogin = document.getElementById('formLogin');
+    const formCadastro = document.getElementById('formCadastro');
+    if (formCadastro) formCadastro.style.display = 'none';
+    if (formLogin) formLogin.style.display = 'block';
+    const mensagem = document.getElementById('mensagemLogin');
+    if (mensagem) mensagem.innerHTML = '';
 }
 
 // ===== UPLOAD DE ARQUIVOS =====
@@ -414,36 +378,17 @@ function removerArquivo() {
     }
 }
 
-// ===== PLANOS E CHECKOUT - CORRIGIDO =====
+// ===== PLANOS E CHECKOUT =====
 function selecionarPlano(tipo, preco) {
     console.log('📦 Selecionando plano:', tipo, preco);
     
-    // Mapear tipo para nome correto com valores corretos
     const planosInfo = {
-        'formatacao': { 
-            nome: 'Formatação de trabalhos', 
-            preco: 100 
-        },
-        'basico': { 
-            nome: 'Serviços Avulsos', 
-            preco: 100 
-        },
-        'trabalho-campo': { 
-            nome: 'Trabalho de campo (pesquisa)', 
-            preco: 350 
-        },
-        'avancado': { 
-            nome: 'Trabalho de campo', 
-            preco: 350 
-        },
-        'monografia': { 
-            nome: 'Monografia/TCC', 
-            preco: 10000 
-        },
-        'premium': { 
-            nome: 'Monografia/TCC', 
-            preco: 10000 
-        }
+        'formatacao': { nome: 'Formatação de trabalhos', preco: 100 },
+        'basico': { nome: 'Serviços Avulsos', preco: 100 },
+        'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 },
+        'avancado': { nome: 'Trabalho de campo', preco: 350 },
+        'monografia': { nome: 'Monografia/TCC', preco: 10000 },
+        'premium': { nome: 'Monografia/TCC', preco: 10000 }
     };
     
     const plano = planosInfo[tipo] || { nome: 'Serviço', preco: parseFloat(preco) };
@@ -486,39 +431,35 @@ function selecionarMetodo(metodo) {
 function atualizarResumoPedido() {
     const resumoDiv = document.getElementById('resumoPedido');
     
-    if (carrinho.plano && carrinho.preco > 0) {
-        if (resumoDiv) {
-            resumoDiv.innerHTML = `
-                <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <div>
-                            <h4 style="margin: 0; color: var(--primary-dark);">${carrinho.nomePlano}</h4>
-                            <p style="margin: 0.25rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">Serviço selecionado</p>
-                        </div>
-                        <div style="font-size: 1.5rem; font-weight: bold; color: var(--primary-dark);">
-                            ${carrinho.preco.toLocaleString('pt-MZ')} MT
-                        </div>
+    if (carrinho.plano && carrinho.preco > 0 && resumoDiv) {
+        resumoDiv.innerHTML = `
+            <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h4 style="margin: 0; color: #1e40af;">${carrinho.nomePlano}</h4>
+                        <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.9rem;">Serviço selecionado</p>
                     </div>
-                    <div style="padding-top: 1rem; border-top: 1px solid var(--border-color); font-size: 0.9rem; color: var(--text-secondary);">
-                        <p style="margin: 0.5rem 0;">
-                            <i class="fas fa-info-circle"></i> Após o login, você poderá enviar o arquivo
-                        </p>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #1e40af;">
+                        ${carrinho.preco.toLocaleString('pt-MZ')} MT
                     </div>
                 </div>
-            `;
-        }
-    } else {
-        if (resumoDiv) {
-            resumoDiv.innerHTML = `
-                <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                    <i class="fas fa-shopping-cart" style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                    <p>Nenhum serviço selecionado</p>
-                    <button onclick="navegarPara('planos')" style="background: var(--primary-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: var(--radius-md); margin-top: 1rem; cursor: pointer;">
-                        Escolher Serviço
-                    </button>
+                <div style="padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.9rem; color: #6b7280;">
+                    <p style="margin: 0.5rem 0;">
+                        <i class="fas fa-info-circle"></i> Após o login, você poderá enviar o arquivo
+                    </p>
                 </div>
-            `;
-        }
+            </div>
+        `;
+    } else if (resumoDiv) {
+        resumoDiv.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                <i class="fas fa-shopping-cart" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>Nenhum serviço selecionado</p>
+                <button onclick="navegarPara('planos')" style="background: #2563eb; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem; cursor: pointer;">
+                    Escolher Serviço
+                </button>
+            </div>
+        `;
     }
 }
 
@@ -561,15 +502,13 @@ function mostrarInstrucoesPagamento() {
     const valorTotal = carrinho.preco || 0;
     const valorEntrada = Math.ceil(valorTotal * 0.5);
     
-    console.log('💰 Valores calculados:', { valorTotal, valorEntrada });
-    
     switch(carrinho.metodoPagamento) {
         case 'mpesa':
             instrucoes = `
-                <h4 style="color: var(--primary-dark); margin-bottom: 1rem;">
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
                     <i class="fas fa-mobile-alt"></i> Pagamento via M-Pesa
                 </h4>
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
                     <p><strong>Passo a passo:</strong></p>
                     <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
                         <li>Acesse M-Pesa no seu celular</li>
@@ -581,7 +520,7 @@ function mostrarInstrucoesPagamento() {
                         <li>Guarde o comprovativo</li>
                     </ol>
                 </div>
-                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid var(--success-color);">
+                <div style="background: #d1fae5; padding: 1rem; border-radius: 5px; border: 1px solid #10b981;">
                     <p style="margin: 0; color: #065f46;">
                         <strong>Envie o comprovativo para WhatsApp:</strong> 86 728 6665
                     </p>
@@ -590,10 +529,10 @@ function mostrarInstrucoesPagamento() {
             break;
         case 'emola':
             instrucoes = `
-                <h4 style="color: var(--primary-dark); margin-bottom: 1rem;">
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
                     <i class="fas fa-wallet"></i> Pagamento via e-Mola
                 </h4>
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
                     <p><strong>Passo a passo:</strong></p>
                     <ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
                         <li>Acesse e-Mola no seu celular</li>
@@ -608,10 +547,10 @@ function mostrarInstrucoesPagamento() {
             break;
         case 'deposito':
             instrucoes = `
-                <h4 style="color: var(--primary-dark); margin-bottom: 1rem;">
+                <h4 style="color: #1e40af; margin-bottom: 1rem;">
                     <i class="fas fa-university"></i> Depósito Bancário
                 </h4>
-                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e5e7eb;">
                     <p><strong>Dados bancários:</strong></p>
                     <div style="margin-bottom: 1rem;">
                         <p><strong>Banco:</strong> MOZABANCO</p>
@@ -628,44 +567,35 @@ function mostrarInstrucoesPagamento() {
     
     instrucoesDiv.innerHTML = instrucoes;
     
-    // Atualizar resumo com valores calculados
     resumoDiv.innerHTML = `
-        <div style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
-            <h5 style="margin-top: 0; color: var(--primary-dark);">Detalhes</h5>
-            
+        <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <h5 style="margin-top: 0; color: #1e40af;">Detalhes</h5>
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Serviço:</span>
                 <strong>${carrinho.nomePlano || carrinho.plano}</strong>
             </div>
-            
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Valor Total:</span>
                 <strong>${valorTotal.toLocaleString('pt-MZ')} MT</strong>
             </div>
-            
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                 <span>Entrada (50%):</span>
-                <strong style="color: var(--success-color);">${valorEntrada.toLocaleString('pt-MZ')} MT</strong>
+                <strong style="color: #10b981;">${valorEntrada.toLocaleString('pt-MZ')} MT</strong>
             </div>
-            
             <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
                 <span>Saldo Restante:</span>
                 <strong>${(valorTotal - valorEntrada).toLocaleString('pt-MZ')} MT</strong>
             </div>
-            
-            <hr style="border-color: var(--border-color); margin: 1rem 0;">
-            
+            <hr style="border-color: #e5e7eb; margin: 1rem 0;">
             <div style="display: flex; justify-content: space-between;">
                 <span>Método de Pagamento:</span>
                 <strong>${carrinho.metodoPagamento ? carrinho.metodoPagamento.toUpperCase() : 'Não selecionado'}</strong>
             </div>
         </div>
     `;
-    
-    console.log('✅ Instruções de pagamento atualizadas:', carrinho);
 }
 
-// ===== MODAL PARA ENVIO DE ARQUIVO REAL =====
+// ===== MODAL PARA ENVIO DE ARQUIVO =====
 function abrirDescricaoTrabalho() {
     const selectServico = document.getElementById('selectServicoDashboard');
     const servicoSelecionado = selectServico ? selectServico.value : null;
@@ -714,12 +644,6 @@ function abrirDescricaoTrabalho() {
         removerArquivo();
         
         modal.style.display = 'flex';
-        
-        // Focar na área de upload
-        setTimeout(() => {
-            const uploadArea = document.getElementById('uploadArea');
-            if (uploadArea) uploadArea.focus();
-        }, 100);
     }
 }
 
@@ -731,23 +655,20 @@ function fecharModalDescricao() {
     
     arquivoSelecionado = null;
     removerArquivo();
-    
-    const descricaoDetalhada = document.getElementById('descricaoDetalhada');
-    const prazoTrabalhoDetalhe = document.getElementById('prazoTrabalhoDetalhe');
-    const metodoPagamentoModal = document.getElementById('metodoPagamentoModal');
-    const aceitarTermos = document.getElementById('aceitarTermos');
-    
-    if (descricaoDetalhada) descricaoDetalhada.value = '';
-    if (prazoTrabalhoDetalhe) prazoTrabalhoDetalhe.value = '';
-    if (metodoPagamentoModal) metodoPagamentoModal.selectedIndex = 0;
-    if (aceitarTermos) aceitarTermos.checked = false;
 }
 
 async function solicitarServicoComArquivo() {
-    console.log('🚀 Solicitando serviço com arquivo REAL...');
+    console.log('🚀 Solicitando serviço com arquivo...');
     
     if (!arquivoSelecionado) {
         mostrarMensagemGlobal('Selecione um arquivo para enviar', 'error');
+        return;
+    }
+    
+    const token = localStorage.getItem('token_facilitaki');
+    if (!token) {
+        mostrarMensagemGlobal('Faça login novamente', 'error');
+        navegarPara('login');
         return;
     }
     
@@ -772,15 +693,13 @@ async function solicitarServicoComArquivo() {
         return;
     }
     
-    // Atualizar carrinho com os dados do pedido ANTES de enviar
+    // Atualizar carrinho com os dados do pedido
     carrinho = {
         plano: servicoTipo,
         nomePlano: servicoNome,
         preco: servicoPreco,
         metodoPagamento: metodoPagamento
     };
-    
-    console.log('🛒 Carrinho atualizado antes do envio:', carrinho);
     
     const btnSolicitar = document.getElementById('btnSolicitarServico');
     const originalText = btnSolicitar ? btnSolicitar.innerHTML : 'Enviar Arquivo';
@@ -790,21 +709,10 @@ async function solicitarServicoComArquivo() {
     }
     
     try {
-        const token = localStorage.getItem('token_facilitaki');
-        if (!token) {
-            throw new Error('Token não encontrado. Faça login novamente.');
-        }
-        
-        const usuario = usuarioLogado || { nome: 'Cliente', telefone: '' };
-        
         const formData = new FormData();
         formData.append('arquivo', arquivoSelecionado);
-        formData.append('cliente', usuario.nome);
-        formData.append('telefone', usuario.telefone);
-        formData.append('instituicao', 'Não informada');
-        formData.append('curso', 'Não informado');
-        formData.append('cadeira', 'Não informada');
-        formData.append('tema', descricao || 'Serviço solicitado via modal');
+        formData.append('cliente', usuarioLogado?.nome || 'Cliente');
+        formData.append('telefone', usuarioLogado?.telefone || '');
         formData.append('descricao', descricao);
         formData.append('prazo', prazo);
         formData.append('plano', servicoTipo);
@@ -812,39 +720,18 @@ async function solicitarServicoComArquivo() {
         formData.append('preco', servicoPreco.toString());
         formData.append('metodoPagamento', metodoPagamento);
         
-        console.log('📤 Enviando arquivo:', arquivoSelecionado.name);
-        
         const response = await fetch(`${API_URL}/api/pedidos/upload`, {
             method: 'POST',
-            headers: { 
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData,
-            mode: 'cors'
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
         });
         
-        console.log('📤 Resposta do servidor:', response.status);
-        
-        if (!response.ok) {
-            let errorMessage = 'Erro ao enviar arquivo';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.erro || errorData.message || `Erro ${response.status}`;
-            } catch (e) {
-                errorMessage = `Erro ${response.status}: ${response.statusText}`;
-            }
-            throw new Error(errorMessage);
-        }
-        
         const data = await response.json();
-        console.log('✅ Resposta do servidor:', data);
         
         if (data.success) {
             fecharModalDescricao();
-            
             mostrarMensagemGlobal('Arquivo enviado com sucesso!', 'success');
             
-            // Atualizar dashboard e navegar para instruções de pagamento
             setTimeout(() => {
                 atualizarDashboard();
                 navegarPara('pagamento-sucesso');
@@ -873,20 +760,19 @@ async function atualizarDashboard() {
         return;
     }
     
+    const token = localStorage.getItem('token_facilitaki');
+    if (!token) {
+        console.log('❌ Token não encontrado');
+        return;
+    }
+    
     try {
-        const token = localStorage.getItem('token_facilitaki');
-        if (!token) {
-            throw new Error('Token não encontrado');
-        }
-        
         const response = await fetch(`${API_URL}/api/meus-pedidos`, {
             method: 'GET',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/json'
-            },
-            mode: 'cors'
+                'Authorization': `Bearer ${token}`
+            }
         });
         
         if (response.ok) {
@@ -895,11 +781,11 @@ async function atualizarDashboard() {
             if (data.success) {
                 const pedidosUsuario = data.pedidos || [];
                 
-                // Calcular valor total por pagar (pedidos pendentes)
+                // Calcular valor total por pagar
                 const pedidosPendentes = pedidosUsuario.filter(p => p.status === 'pendente');
                 const valorTotal = pedidosPendentes.reduce((total, pedido) => total + (parseFloat(pedido.preco) || 0), 0);
                 
-                // Atualizar valor total por pagar
+                // Atualizar valor total
                 const valorTotalPagar = document.getElementById('valorTotalPagar');
                 if (valorTotalPagar) {
                     valorTotalPagar.textContent = valorTotal.toLocaleString('pt-MZ') + ' MT';
@@ -910,10 +796,10 @@ async function atualizarDashboard() {
                 if (listaPedidosDiv) {
                     if (pedidosUsuario.length === 0) {
                         listaPedidosDiv.innerHTML = `
-                            <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                            <div style="text-align: center; padding: 2rem; color: #6b7280;">
                                 <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem;"></i>
                                 <p>Nenhum pedido encontrado</p>
-                                <button onclick="navegarPara('planos')" style="background: var(--primary-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem; cursor: pointer;">
+                                <button onclick="navegarPara('planos')" style="background: #2563eb; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; margin-top: 1rem; cursor: pointer;">
                                     Solicitar Serviço
                                 </button>
                             </div>
@@ -926,17 +812,17 @@ async function atualizarDashboard() {
                             const temArquivo = pedido.arquivo_path;
                             
                             return `
-                                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${statusColor};">
+                                <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid ${statusColor};">
                                     <div style="display: flex; justify-content: space-between; align-items: start;">
                                         <div>
-                                            <strong style="color: var(--primary-dark);">${pedido.nome_plano || 'Serviço'}</strong>
-                                            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                                                ${pedido.tema || pedido.descricao || 'Sem descrição'}
+                                            <strong style="color: #1e40af;">${pedido.nome_plano || 'Serviço'}</strong>
+                                            <div style="font-size: 0.9rem; color: #6b7280; margin-top: 0.25rem;">
+                                                ${pedido.descricao || 'Sem descrição'}
                                                 ${temArquivo ? `<br><small><i class="fas fa-file"></i> Arquivo anexado</small>` : ''}
                                             </div>
                                         </div>
                                         <div style="text-align: right;">
-                                            <div style="font-weight: bold; color: var(--primary-dark); font-size: 1.1rem;">
+                                            <div style="font-weight: bold; color: #1e40af; font-size: 1.1rem;">
                                                 ${(parseFloat(pedido.preco) || 0).toLocaleString('pt-MZ')} MT
                                             </div>
                                             <span style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 3px; background: ${statusColor}20; color: ${statusColor};">
@@ -944,7 +830,7 @@ async function atualizarDashboard() {
                                             </span>
                                         </div>
                                     </div>
-                                    <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem;">
+                                    <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.5rem;">
                                         <i class="far fa-calendar"></i> ${dataPedido.toLocaleDateString('pt-MZ')}
                                         ${pedido.metodo_pagamento ? ` • <i class="fas fa-credit-card"></i> ${pedido.metodo_pagamento.toUpperCase()}` : ''}
                                     </div>
@@ -956,22 +842,20 @@ async function atualizarDashboard() {
             }
         } else {
             console.error('❌ Erro ao carregar pedidos:', response.status);
-            mostrarMensagemGlobal('Erro ao carregar seus pedidos', 'error');
         }
     } catch (error) {
         console.error('❌ Erro ao carregar pedidos:', error);
-        mostrarMensagemGlobal('Erro de conexão ao carregar pedidos', 'error');
     }
 }
 
 function getStatusColor(status) {
     switch(status) {
-        case 'pendente': return 'var(--warning-color)';
-        case 'pago': return 'var(--success-color)';
-        case 'em_andamento': return 'var(--info-color)';
-        case 'concluido': return 'var(--accent-color)';
-        case 'cancelado': return 'var(--danger-color)';
-        default: return 'var(--text-secondary)';
+        case 'pendente': return '#f59e0b';
+        case 'pago': return '#10b981';
+        case 'em_andamento': return '#3b82f6';
+        case 'concluido': return '#8b5cf6';
+        case 'cancelado': return '#ef4444';
+        default: return '#6b7280';
     }
 }
 
@@ -995,32 +879,16 @@ async function enviarContato() {
     }
     
     try {
-        console.log('📨 Enviando mensagem de contato...');
-        
-        const conexaoOk = await testarConexaoAPI();
-        if (!conexaoOk) {
-            mostrarMensagem(mensagemDiv, 'Servidor não disponível', 'error');
-            return;
-        }
-        
         const response = await fetch(`${API_URL}/api/contato`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ nome, telefone, mensagem: mensagemTexto }),
-            mode: 'cors'
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, telefone, mensagem: mensagemTexto })
         });
         
-        console.log('📤 Resposta do contato:', response.status);
-
         const data = await response.json();
-
-        if (response.ok && data.success) {
-            mostrarMensagem(mensagemDiv, data.mensagem || 'Mensagem enviada com sucesso!', 'success');
-            
-            // Limpar campos
+        
+        if (data.success) {
+            mostrarMensagem(mensagemDiv, 'Mensagem enviada com sucesso!', 'success');
             if (document.getElementById('contatoNome')) document.getElementById('contatoNome').value = '';
             if (document.getElementById('contatoTelefone')) document.getElementById('contatoTelefone').value = '';
             if (document.getElementById('contatoMensagem')) document.getElementById('contatoMensagem').value = '';
@@ -1067,15 +935,15 @@ function mostrarMensagemGlobal(texto, tipo) {
     `;
     
     if (tipo === 'success') {
-        mensagemDiv.style.background = 'var(--success-color)';
+        mensagemDiv.style.background = '#10b981';
         mensagemDiv.style.color = 'white';
         mensagemDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${texto}`;
     } else if (tipo === 'error') {
-        mensagemDiv.style.background = 'var(--danger-color)';
+        mensagemDiv.style.background = '#ef4444';
         mensagemDiv.style.color = 'white';
         mensagemDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${texto}`;
     } else if (tipo === 'info') {
-        mensagemDiv.style.background = 'var(--info-color)';
+        mensagemDiv.style.background = '#3b82f6';
         mensagemDiv.style.color = 'white';
         mensagemDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${texto}`;
     }
@@ -1092,10 +960,42 @@ function mostrarMensagemGlobal(texto, tipo) {
     }, 5000);
 }
 
+function mostrarTermos() {
+    alert('TERMOS DE SERVIÇO\n\n1. O serviço será iniciado após confirmação do pagamento de 50%.\n2. O prazo começa a contar após pagamento e envio de materiais.\n3. Garantimos 99,9% de taxa de aprovação.\n4. Sua privacidade é respeitada conforme a lei.\n5. O cliente é responsável pelo conteúdo enviado.');
+}
+
+function mostrarPrivacidade() {
+    alert('POLÍTICA DE PRIVACIDADE\n\n1. Seus dados são usados apenas para processar seu pedido.\n2. Não compartilhamos suas informações com terceiros.\n3. Você pode solicitar exclusão de seus dados a qualquer momento.\n4. Usamos criptografia para proteger suas informações.\n5. Arquivos são armazenados com segurança e excluídos após 90 dias.');
+}
+
+function fecharRecarga() {
+    const modal = document.getElementById('modalRecarga');
+    if (modal) modal.style.display = 'none';
+}
+
+function processarRecarga() {
+    const valorInput = document.getElementById('valorRecarga');
+    const metodoSelect = document.getElementById('metodoRecarga');
+    const valor = valorInput ? parseInt(valorInput.value) || 0 : 0;
+    const metodo = metodoSelect ? metodoSelect.value : '';
+    
+    if (valor < 50) {
+        mostrarMensagemGlobal('O valor mínimo para recarga é 50 MT', 'error');
+        return;
+    }
+    
+    if (!metodo) {
+        mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
+        return;
+    }
+    
+    mostrarMensagemGlobal(`Recarga de ${valor} MT via ${metodo.toUpperCase()} solicitada!`, 'success');
+    fecharRecarga();
+}
+
 // ===== INICIALIZAÇÃO =====
 function inicializarApp() {
-    console.log('🚀 Inicializando Facilitaki com upload real...');
-    console.log('🌐 URL da API:', API_URL);
+    console.log('🚀 Inicializando Facilitaki...');
     
     // Verificar se há usuário logado
     const usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
@@ -1104,16 +1004,15 @@ function inicializarApp() {
     if (usuarioSalvo && tokenSalvo) {
         try {
             usuarioLogado = JSON.parse(usuarioSalvo);
-            console.log('👤 Usuário recuperado do localStorage:', usuarioLogado);
+            console.log('👤 Usuário recuperado:', usuarioLogado);
             
-            // Atualizar botão do header
             const btnHeader = document.getElementById('btnLoginHeader');
             if(btnHeader) {
                 btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
                 btnHeader.setAttribute('onclick', 'navegarPara(\'dashboard\')');
             }
         } catch (e) {
-            console.error('❌ Erro ao parsear usuário:', e);
+            console.error('❌ Erro ao recuperar usuário:', e);
             localStorage.removeItem('usuarioLogado_facilitaki');
             localStorage.removeItem('token_facilitaki');
         }
@@ -1122,58 +1021,25 @@ function inicializarApp() {
     // Configurar data mínima para campos de data
     const hoje = new Date().toISOString().split('T')[0];
     const campoPrazo = document.getElementById('prazoTrabalhoDetalhe');
-    if (campoPrazo) {
-        campoPrazo.min = hoje;
-    }
+    if (campoPrazo) campoPrazo.min = hoje;
     
-    // Formatar campos de telefone
-    const camposTelefone = document.querySelectorAll('input[type="tel"]');
-    camposTelefone.forEach(campo => {
-        campo.addEventListener('input', function(e) {
-            let valor = e.target.value.replace(/\D/g, '');
-            if (valor.length > 0) {
-                valor = valor.substring(0, 9);
-                valor = valor.replace(/^(\d{2})(\d{3})(\d{4})$/, '$1 $2 $3');
-            }
-            e.target.value = valor;
-        });
-    });
-    
-    // Configurar modais para fechar ao clicar fora
+    // Configurar modais
     const modals = document.querySelectorAll('.modal');
     modals.forEach(modal => {
         modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
-                modal.style.display = 'none';
-            }
+            if (e.target === modal) modal.style.display = 'none';
         });
     });
     
-    // Adicionar estilos CSS para animações
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideInRight {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOutRight {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
+    // Testar conexão
+    setTimeout(() => testarConexaoAPI(), 2000);
     
-    // Testar conexão com API após 2 segundos
-    setTimeout(() => {
-        testarConexaoAPI();
-    }, 2000);
-    
-    console.log('✅ Facilitaki com upload real inicializado!');
+    console.log('✅ Facilitaki inicializado!');
 }
 
 // ===== EVENTOS =====
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 DOM carregado, inicializando app...');
+    console.log('📄 DOM carregado');
     inicializarApp();
     
     // Prevenir submit padrão de formulários
@@ -1181,7 +1047,6 @@ document.addEventListener('DOMContentLoaded', function() {
     forms.forEach(form => {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            console.log('📝 Formulário submetido:', this.id || this.className);
         });
     });
     
@@ -1200,7 +1065,6 @@ document.addEventListener('DOMContentLoaded', function() {
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadArea.style.background = '#f8fafc';
-            
             if (e.dataTransfer.files.length) {
                 document.getElementById('fileInput').files = e.dataTransfer.files;
                 handleFileSelect({ target: { files: e.dataTransfer.files } });
@@ -1208,45 +1072,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    console.log('✅ Tudo pronto para upload de arquivos!');
+    // Formatar campos de telefone
+    const camposTelefone = document.querySelectorAll('input[type="tel"]');
+    camposTelefone.forEach(campo => {
+        campo.addEventListener('input', function(e) {
+            let valor = e.target.value.replace(/\D/g, '');
+            if (valor.length > 0) {
+                valor = valor.substring(0, 9);
+                valor = valor.replace(/^(\d{2})(\d{3})(\d{4})$/, '$1 $2 $3');
+            }
+            e.target.value = valor;
+        });
+    });
 });
-
-// ===== FUNÇÕES PARA MODAIS =====
-function mostrarTermos() {
-    alert('TERMOS DE SERVIÇO\n\n1. O serviço será iniciado após confirmação do pagamento de 50%.\n2. O prazo começa a contar após pagamento e envio de materiais.\n3. Garantimos 99,9% de taxa de aprovação.\n4. Sua privacidade é respeitada conforme a lei.\n5. O cliente é responsável pelo conteúdo enviado.');
-}
-
-function mostrarPrivacidade() {
-    alert('POLÍTICA DE PRIVACIDADE\n\n1. Seus dados são usados apenas para processar seu pedido.\n2. Não compartilhamos suas informações com terceiros.\n3. Você pode solicitar exclusão de seus dados a qualquer momento.\n4. Usamos criptografia para proteger suas informações.\n5. Arquivos são armazenados com segurança e excluídos após 90 dias.');
-}
-
-function fecharRecarga() {
-    const modal = document.getElementById('modalRecarga');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-function processarRecarga() {
-    const valorInput = document.getElementById('valorRecarga');
-    const metodoSelect = document.getElementById('metodoRecarga');
-    
-    const valor = valorInput ? parseInt(valorInput.value) || 0 : 0;
-    const metodo = metodoSelect ? metodoSelect.value : '';
-    
-    if (valor < 50) {
-        mostrarMensagemGlobal('O valor mínimo para recarga é 50 MT', 'error');
-        return;
-    }
-    
-    if (!metodo) {
-        mostrarMensagemGlobal('Selecione um método de pagamento', 'error');
-        return;
-    }
-    
-    mostrarMensagemGlobal(`Recarga de ${valor} MT via ${metodo.toUpperCase()} solicitada!`, 'success');
-    fecharRecarga();
-}
 
 // ===== EXPORTAR FUNÇÕES PARA O ESCOPO GLOBAL =====
 window.fazerLogin = fazerLogin;
@@ -1271,7 +1109,4 @@ window.processarRecarga = processarRecarga;
 window.handleFileSelect = handleFileSelect;
 window.removerArquivo = removerArquivo;
 
-console.log('🎯 Facilitaki com upload real carregado!');
-console.log('📁 Arquivos físicos são enviados para o servidor');
-console.log('👨‍💼 Preview apenas no painel administrativo');
-
+console.log('🎯 Facilitaki carregado com sucesso!');
