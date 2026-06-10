@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (Corrigido - Permite primeiro admin)
+// server.js - Facilitaki Backend (Reset completo)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -49,8 +49,13 @@ async function initDatabase() {
     try {
         console.log('🔧 Inicializando banco...');
         
+        // Recriar tabela usuarios do zero para evitar problemas
+        await pool.query(`DROP TABLE IF EXISTS pedidos CASCADE`);
+        await pool.query(`DROP TABLE IF EXISTS contatos CASCADE`);
+        await pool.query(`DROP TABLE IF EXISTS usuarios CASCADE`);
+        
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS usuarios (
+            CREATE TABLE usuarios (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL,
                 telefone VARCHAR(20) UNIQUE NOT NULL,
@@ -61,7 +66,7 @@ async function initDatabase() {
         `);
         
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS pedidos (
+            CREATE TABLE pedidos (
                 id SERIAL PRIMARY KEY,
                 usuario_id INTEGER REFERENCES usuarios(id),
                 cliente VARCHAR(100) NOT NULL,
@@ -78,7 +83,7 @@ async function initDatabase() {
         `);
         
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS contatos (
+            CREATE TABLE contatos (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL,
                 telefone VARCHAR(20) NOT NULL,
@@ -87,7 +92,8 @@ async function initDatabase() {
             )
         `);
         
-        console.log('✅ Banco inicializado');
+        console.log('✅ Banco reinicializado com sucesso!');
+        console.log('⚠️ Nenhum admin existe. Crie o primeiro admin na página de login.');
     } catch (error) {
         console.error('❌ Erro:', error.message);
     }
@@ -150,23 +156,9 @@ app.get('/admin/login', (req, res) => {
                 </div>
                 <div id="error" class="error"></div>
                 <div id="success" class="success"></div>
-                <div class="info" id="infoMsg"></div>
+                <div class="info" id="infoMsg">⚠️ Nenhum administrador existe. Crie o primeiro admin na aba "Criar Admin"!</div>
             </div>
             <script>
-                // Verificar se já existe admin
-                async function checkAdminExists() {
-                    try {
-                        const res = await fetch('/api/admin/exists');
-                        const data = await res.json();
-                        if (!data.exists) {
-                            document.getElementById('infoMsg').innerHTML = '⚠️ Nenhum administrador existe. Crie o primeiro admin na aba "Criar Admin"!';
-                            document.getElementById('infoMsg').style.color = '#f59e0b';
-                        }
-                    } catch(e) {
-                        console.log('Erro ao verificar admin');
-                    }
-                }
-                
                 function switchTab(tab) {
                     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
                     document.querySelectorAll('.form-container').forEach(c=>c.classList.remove('active'));
@@ -250,9 +242,10 @@ app.get('/admin/login', (req, res) => {
                             document.getElementById('newUser').value='';
                             document.getElementById('newPass').value='';
                             document.getElementById('newPassConfirm').value='';
+                            document.getElementById('infoMsg').innerHTML = '✅ Admin criado! Agora faça login na aba "Login".';
+                            document.getElementById('infoMsg').style.color = '#3c3';
                             setTimeout(()=>{
                                 switchTab('login');
-                                document.getElementById('infoMsg').innerHTML = '';
                             },2000);
                         }else{
                             errorDiv.textContent = data.error || 'Erro ao criar admin';
@@ -263,24 +256,10 @@ app.get('/admin/login', (req, res) => {
                         errorDiv.style.display='block';
                     }
                 }
-                
-                // Verificar se existe admin ao carregar
-                checkAdminExists();
             </script>
         </body>
         </html>
     `);
-});
-
-// Verificar se existe admin
-app.get('/api/admin/exists', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
-        const exists = parseInt(result.rows[0].count) > 0;
-        res.json({ exists });
-    } catch (error) {
-        res.json({ exists: false });
-    }
 });
 
 // Processar login admin
@@ -305,24 +284,12 @@ app.post('/admin/do-login', async (req, res) => {
     }
 });
 
-// Registrar novo admin (permitindo primeiro admin)
+// Registrar novo admin - SEM RESTRIÇÕES (sempre permite)
 app.post('/admin/do-register', async (req, res) => {
     try {
         const { usuario, senha } = req.body;
         
-        // Verificar se já existe algum admin
-        const adminCount = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
-        const isFirstAdmin = parseInt(adminCount.rows[0].count) === 0;
-        
-        console.log('isFirstAdmin:', isFirstAdmin);
-        console.log('Total admins:', adminCount.rows[0].count);
-        
-        // Se não for o primeiro admin, verificar autenticação via header
-        if (!isFirstAdmin) {
-            // Para criar novos admins, precisa estar logado (via cookie/session)
-            // Como não temos session, vamos permitir apenas se for o primeiro
-            return res.status(401).json({ success: false, error: 'Apenas administradores existentes podem criar novos admins. Faça login primeiro.' });
-        }
+        console.log('📝 Tentando criar admin:', usuario);
         
         // Verificar se usuário já existe
         const exists = await pool.query('SELECT id FROM usuarios WHERE nome = $1', [usuario]);
@@ -336,7 +303,7 @@ app.post('/admin/do-register', async (req, res) => {
             [usuario, `admin_${Date.now()}@system.com`, hash]
         );
         
-        console.log('✅ Novo admin criado:', usuario);
+        console.log('✅ Admin criado com sucesso:', usuario);
         res.json({ success: true, message: 'Administrador criado com sucesso!' });
     } catch (error) {
         console.error('Erro ao criar admin:', error);
@@ -416,7 +383,7 @@ app.get('/admin/painel', async (req, res) => {
                 </div>
                 
                 <div id="tab-contatos" class="tab-content">
-                    <table><thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Mensagem</th><th>Data</th><th>Ações</th></tr></thead>
+                    <tr><thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Mensagem</th><th>Data</th><th>Ações</th></tr></thead>
                     <tbody>${contatos.rows.map(c => `<tr><td>${c.id}</td><td>${c.nome}</td><td>${c.telefone}</td><td>${c.mensagem.substring(0,50)}${c.mensagem.length>50?'...':''}</td><td>${new Date(c.data_envio).toLocaleDateString()}</td><td><button class="btn btn-view" onclick="viewContato(${c.id})">Ver</button><button class="btn btn-delete" onclick="deleteContato(${c.id})">Excluir</button></td></tr>`).join('')}</tbody>
                     </table>
                 </div>
@@ -460,8 +427,8 @@ app.get('/admin/painel', async (req, res) => {
                                 container.innerHTML = '<p>Nenhum administrador encontrado</p>';
                             } else {
                                 container.innerHTML = '<table><thead><tr><th>ID</th><th>Nome</th><th>Data</th><th>Ações</th></tr></thead><tbody>' + 
-                                    data.admins.map(admin => '<tr><td>'+admin.id+'</td><td>'+admin.nome+' <span class="admin-badge">Admin</span>'+(admin.id === 1 ? ' (Principal)' : '')+'</td><td>'+new Date(admin.created_at).toLocaleDateString()+'</td><td>'+(admin.id !== 1 ? '<button class="btn btn-delete" onclick="deleteAdmin('+admin.id+')">Excluir</button>' : '<span>Admin principal</span>')+'</td></tr>').join('') +
-                                    '</tbody></tr>';
+                                    data.admins.map(admin => '</tr><td>'+admin.id+'</td><td>'+admin.nome+' <span class="admin-badge">Admin</span>+'</span>'+'</td><td>'+new Date(admin.created_at).toLocaleDateString()+'</span></td>.<span'+(admin.id !== 1 ? '<button class="btn btn-delete" onclick="deleteAdmin('+admin.id+')">Excluir</button>' : '<span>Admin principal</span>')+'</span></tr>').join('') +
+                                    '</tbody></table>';
                             }
                         }
                     }
@@ -729,7 +696,7 @@ async function startServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`✅ Servidor rodando na porta ${PORT}`);
         console.log(`🔐 Admin: https://facilitaki.onrender.com/admin/login`);
-        console.log(`💡 Crie o primeiro administrador na aba "Criar Admin"`);
+        console.log(`💡 IMPORTANTE: Crie o primeiro administrador na aba "Criar Admin"`);
     });
 }
 
