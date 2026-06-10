@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (Reset completo)
+// server.js - Facilitaki Backend (Corrigido - Campo telefone VARCHAR(100))
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -49,16 +49,20 @@ async function initDatabase() {
     try {
         console.log('🔧 Inicializando banco...');
         
-        // Recriar tabela usuarios do zero para evitar problemas
-        await pool.query(`DROP TABLE IF EXISTS pedidos CASCADE`);
-        await pool.query(`DROP TABLE IF EXISTS contatos CASCADE`);
-        await pool.query(`DROP TABLE IF EXISTS usuarios CASCADE`);
+        // Verificar se a coluna telefone existe e aumentar seu tamanho
+        try {
+            await pool.query(`ALTER TABLE usuarios ALTER COLUMN telefone TYPE VARCHAR(100);`);
+            console.log('✅ Coluna telefone alterada para VARCHAR(100)');
+        } catch (err) {
+            console.log('⚠️ Coluna telefone já está no tamanho correto ou erro:', err.message);
+        }
         
+        // Criar tabelas se não existirem
         await pool.query(`
-            CREATE TABLE usuarios (
+            CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) UNIQUE NOT NULL,
+                telefone VARCHAR(100) UNIQUE NOT NULL,
                 senha_hash VARCHAR(255) NOT NULL,
                 is_admin BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -66,11 +70,11 @@ async function initDatabase() {
         `);
         
         await pool.query(`
-            CREATE TABLE pedidos (
+            CREATE TABLE IF NOT EXISTS pedidos (
                 id SERIAL PRIMARY KEY,
                 usuario_id INTEGER REFERENCES usuarios(id),
                 cliente VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) NOT NULL,
+                telefone VARCHAR(100) NOT NULL,
                 descricao TEXT,
                 plano VARCHAR(50),
                 nome_plano VARCHAR(100),
@@ -83,17 +87,16 @@ async function initDatabase() {
         `);
         
         await pool.query(`
-            CREATE TABLE contatos (
+            CREATE TABLE IF NOT EXISTS contatos (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL,
-                telefone VARCHAR(20) NOT NULL,
+                telefone VARCHAR(100) NOT NULL,
                 mensagem TEXT NOT NULL,
                 data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
         
-        console.log('✅ Banco reinicializado com sucesso!');
-        console.log('⚠️ Nenhum admin existe. Crie o primeiro admin na página de login.');
+        console.log('✅ Banco inicializado com sucesso!');
     } catch (error) {
         console.error('❌ Erro:', error.message);
     }
@@ -156,9 +159,26 @@ app.get('/admin/login', (req, res) => {
                 </div>
                 <div id="error" class="error"></div>
                 <div id="success" class="success"></div>
-                <div class="info" id="infoMsg">⚠️ Nenhum administrador existe. Crie o primeiro admin na aba "Criar Admin"!</div>
+                <div class="info" id="infoMsg"></div>
             </div>
             <script>
+                // Verificar se já existe admin
+                async function checkAdminExists() {
+                    try {
+                        const res = await fetch('/api/admin/exists');
+                        const data = await res.json();
+                        if (!data.exists) {
+                            document.getElementById('infoMsg').innerHTML = '⚠️ Nenhum administrador existe. Crie o primeiro admin na aba "Criar Admin"!';
+                            document.getElementById('infoMsg').style.color = '#f59e0b';
+                        } else {
+                            document.getElementById('infoMsg').innerHTML = '✅ Faça login com suas credenciais de administrador.';
+                            document.getElementById('infoMsg').style.color = '#3c3';
+                        }
+                    } catch(e) {
+                        console.log('Erro ao verificar admin');
+                    }
+                }
+                
                 function switchTab(tab) {
                     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
                     document.querySelectorAll('.form-container').forEach(c=>c.classList.remove('active'));
@@ -242,10 +262,9 @@ app.get('/admin/login', (req, res) => {
                             document.getElementById('newUser').value='';
                             document.getElementById('newPass').value='';
                             document.getElementById('newPassConfirm').value='';
-                            document.getElementById('infoMsg').innerHTML = '✅ Admin criado! Agora faça login na aba "Login".';
-                            document.getElementById('infoMsg').style.color = '#3c3';
                             setTimeout(()=>{
                                 switchTab('login');
+                                checkAdminExists();
                             },2000);
                         }else{
                             errorDiv.textContent = data.error || 'Erro ao criar admin';
@@ -256,10 +275,23 @@ app.get('/admin/login', (req, res) => {
                         errorDiv.style.display='block';
                     }
                 }
+                
+                checkAdminExists();
             </script>
         </body>
         </html>
     `);
+});
+
+// Verificar se existe admin
+app.get('/api/admin/exists', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        const exists = parseInt(result.rows[0].count) > 0;
+        res.json({ exists });
+    } catch (error) {
+        res.json({ exists: false });
+    }
 });
 
 // Processar login admin
@@ -284,12 +316,18 @@ app.post('/admin/do-login', async (req, res) => {
     }
 });
 
-// Registrar novo admin - SEM RESTRIÇÕES (sempre permite)
+// Registrar novo admin
 app.post('/admin/do-register', async (req, res) => {
     try {
         const { usuario, senha } = req.body;
         
         console.log('📝 Tentando criar admin:', usuario);
+        
+        // Verificar se já existe admin
+        const adminCount = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        const isFirstAdmin = parseInt(adminCount.rows[0].count) === 0;
+        
+        console.log('isFirstAdmin:', isFirstAdmin);
         
         // Verificar se usuário já existe
         const exists = await pool.query('SELECT id FROM usuarios WHERE nome = $1', [usuario]);
@@ -298,9 +336,10 @@ app.post('/admin/do-register', async (req, res) => {
         }
         
         const hash = await bcrypt.hash(senha, 10);
+        // Usar um telefone curto para admin
         await pool.query(
             'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
-            [usuario, `admin_${Date.now()}@system.com`, hash]
+            [usuario, 'admin@system.com', hash]
         );
         
         console.log('✅ Admin criado com sucesso:', usuario);
@@ -311,7 +350,102 @@ app.post('/admin/do-register', async (req, res) => {
     }
 });
 
-// Painel admin
+// ==================== ROTAS PARA USUÁRIOS COMUNS ====================
+
+// Login usuário comum
+app.post('/api/login', async (req, res) => {
+    try {
+        const { telefone, senha } = req.body;
+        const result = await pool.query('SELECT * FROM usuarios WHERE telefone = $1', [telefone]);
+        
+        if (result.rows.length === 0) {
+            return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
+        }
+        
+        const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
+        if (!valid) {
+            return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
+        }
+        
+        const token = jwt.sign(
+            { id: result.rows[0].id, nome: result.rows[0].nome },
+            SECRET_KEY,
+            { expiresIn: '7d' }
+        );
+        
+        res.json({ success: true, token, usuario: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: error.message });
+    }
+});
+
+// Cadastro usuário comum
+app.post('/api/cadastrar', async (req, res) => {
+    try {
+        const { nome, telefone, senha } = req.body;
+        const existe = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefone]);
+        
+        if (existe.rows.length > 0) {
+            return res.status(400).json({ success: false, erro: 'Telefone já cadastrado' });
+        }
+        
+        const hash = await bcrypt.hash(senha, 10);
+        const result = await pool.query(
+            'INSERT INTO usuarios (nome, telefone, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, telefone',
+            [nome, telefone, hash]
+        );
+        
+        const token = jwt.sign(
+            { id: result.rows[0].id, nome },
+            SECRET_KEY,
+            { expiresIn: '7d' }
+        );
+        
+        res.json({ success: true, token, usuario: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: error.message });
+    }
+});
+
+// Criar pedido com upload
+app.post('/api/pedidos/upload', upload.single('arquivo'), async (req, res) => {
+    try {
+        const { cliente, telefone, descricao, plano, nomePlano, preco, metodoPagamento } = req.body;
+        
+        const result = await pool.query(
+            `INSERT INTO pedidos (cliente, telefone, descricao, plano, nome_plano, preco, metodo_pagamento, arquivo_path)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [cliente, telefone, descricao, plano, nomePlano, preco, metodoPagamento, req.file?.path]
+        );
+        
+        res.json({ success: true, pedido: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: error.message });
+    }
+});
+
+// Buscar pedidos
+app.get('/api/meus-pedidos', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM pedidos ORDER BY data_pedido DESC');
+        res.json({ success: true, pedidos: result.rows });
+    } catch (error) {
+        res.json({ success: true, pedidos: [] });
+    }
+});
+
+// Contato
+app.post('/api/contato', async (req, res) => {
+    try {
+        const { nome, telefone, mensagem } = req.body;
+        await pool.query('INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)', [nome, telefone, mensagem]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: error.message });
+    }
+});
+
+// Painel admin (página principal)
 app.get('/admin/painel', async (req, res) => {
     try {
         const pedidos = await pool.query('SELECT * FROM pedidos ORDER BY data_pedido DESC LIMIT 50');
@@ -367,39 +501,39 @@ app.get('/admin/painel', async (req, res) => {
                     <button class="tab active" onclick="showTab('pedidos')">Pedidos (${pedidos.rows.length})</button>
                     <button class="tab" onclick="showTab('usuarios')">Usuários (${usuarios.rows.length})</button>
                     <button class="tab" onclick="showTab('contatos')">Contatos (${contatos.rows.length})</button>
-                    <button class="tab" onclick="showTab('admins')">Administradores</button>
                 </div>
                 
                 <div id="tab-pedidos" class="tab-content active">
-                    <table><thead><tr><th>ID</th><th>Cliente</th><th>Telefone</th><th>Serviço</th><th>Valor</th><th>Status</th><th>Data</th><th>Ações</th></tr></thead>
-                    <tbody>${pedidos.rows.map(p => `<tr><td>${p.id}</td><td>${p.cliente}</td><td>${p.telefone}</td><td>${p.nome_plano}</td><td>${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</td><td><span class="status status-${p.status}">${p.status}</span></td><td>${new Date(p.data_pedido).toLocaleDateString()}</td><td><button class="btn btn-view" onclick="viewPedido(${p.id})">Ver</button><button class="btn btn-update" onclick="updateStatus(${p.id})">Editar</button><button class="btn btn-delete" onclick="deletePedido(${p.id})">Excluir</button></td></tr>`).join('')}</tbody>
+                    <table>
+                        <thead>
+                            <tr><th>ID</th><th>Cliente</th><th>Telefone</th><th>Serviço</th><th>Valor</th><th>Status</th><th>Data</th><th>Ações</th></tr>
+                        </thead>
+                        <tbody>
+                            ${pedidos.rows.map(p => `<tr><td>${p.id}</td><td>${p.cliente}</td><td>${p.telefone}</td><td>${p.nome_plano}</td><td>${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</td><td><span class="status status-${p.status}">${p.status}</span></td><td>${new Date(p.data_pedido).toLocaleDateString()}</td><td><button class="btn btn-view" onclick="viewPedido(${p.id})">Ver</button><button class="btn btn-update" onclick="updateStatus(${p.id})">Editar</button><button class="btn btn-delete" onclick="deletePedido(${p.id})">Excluir</button></td></tr>`).join('')}
+                        </tbody>
                     </table>
                 </div>
                 
                 <div id="tab-usuarios" class="tab-content">
-                    <table><thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Admin</th><th>Cadastro</th><th>Ações</th></tr></thead>
-                    <tbody>${usuarios.rows.map(u => `<tr><td>${u.id}</td><td>${u.nome} ${u.is_admin ? '<span class="admin-badge">Admin</span>' : ''}</td><td>${u.telefone}</td><td>${u.is_admin ? 'Sim' : 'Não'}</td><td>${new Date(u.created_at).toLocaleDateString()}</td><td>${!u.is_admin ? `<button class="btn btn-delete" onclick="deleteUser(${u.id})">Excluir</button>` : ''}</td></tr>`).join('')}</tbody>
+                    <table>
+                        <thead>
+                            <tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Admin</th><th>Cadastro</th><th>Ações</th></tr>
+                        </thead>
+                        <tbody>
+                            ${usuarios.rows.map(u => `<tr><td>${u.id}</td><td>${u.nome} ${u.is_admin ? '<span class="admin-badge">Admin</span>' : ''}</td><td>${u.telefone}</td><td>${u.is_admin ? 'Sim' : 'Não'}</td><td>${new Date(u.created_at).toLocaleDateString()}</td><td>${!u.is_admin ? `<button class="btn btn-delete" onclick="deleteUser(${u.id})">Excluir</button>` : ''}</td></tr>`).join('')}
+                        </tbody>
                     </table>
                 </div>
                 
                 <div id="tab-contatos" class="tab-content">
-                    <tr><thead><tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Mensagem</th><th>Data</th><th>Ações</th></tr></thead>
-                    <tbody>${contatos.rows.map(c => `<tr><td>${c.id}</td><td>${c.nome}</td><td>${c.telefone}</td><td>${c.mensagem.substring(0,50)}${c.mensagem.length>50?'...':''}</td><td>${new Date(c.data_envio).toLocaleDateString()}</td><td><button class="btn btn-view" onclick="viewContato(${c.id})">Ver</button><button class="btn btn-delete" onclick="deleteContato(${c.id})">Excluir</button></td></tr>`).join('')}</tbody>
+                    <table>
+                        <thead>
+                            <tr><th>ID</th><th>Nome</th><th>Telefone</th><th>Mensagem</th><th>Data</th><th>Ações</th></tr>
+                        </thead>
+                        <tbody>
+                            ${contatos.rows.map(c => `<tr><td>${c.id}</td><td>${c.nome}</td><td>${c.telefone}</td><td>${c.mensagem.substring(0,50)}${c.mensagem.length>50?'...':''}</td><td>${new Date(c.data_envio).toLocaleDateString()}</td><td><button class="btn btn-view" onclick="viewContato(${c.id})">Ver</button><button class="btn btn-delete" onclick="deleteContato(${c.id})">Excluir</button></td></tr>`).join('')}
+                        </tbody>
                     </table>
-                </div>
-                
-                <div id="tab-admins" class="tab-content">
-                    <div style="margin-bottom:20px;padding:15px;background:#f8f9fa;border-radius:8px">
-                        <h3>Criar Novo Administrador</h3>
-                        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-                            <input type="text" id="newAdminUser" placeholder="Usuário" style="flex:2;padding:10px;border:1px solid #ddd;border-radius:5px">
-                            <input type="password" id="newAdminPass" placeholder="Senha" style="flex:2;padding:10px;border:1px solid #ddd;border-radius:5px">
-                            <input type="password" id="newAdminPassConfirm" placeholder="Confirmar" style="flex:2;padding:10px;border:1px solid #ddd;border-radius:5px">
-                            <button onclick="createNewAdmin()" style="background:#667eea;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer">Criar Admin</button>
-                        </div>
-                        <div id="adminMsg" style="margin-top:10px"></div>
-                    </div>
-                    <div id="adminsList"></div>
                 </div>
                 
                 <script>
@@ -416,60 +550,6 @@ app.get('/admin/painel', async (req, res) => {
                         document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
                         event.target.classList.add('active');
                         document.getElementById('tab-'+name).classList.add('active');
-                        if(name==='admins') loadAdmins();
-                    }
-                    
-                    async function loadAdmins() {
-                        const data = await apiCall('/api/admin/listar');
-                        if(data && data.success) {
-                            const container = document.getElementById('adminsList');
-                            if(data.admins.length===0) {
-                                container.innerHTML = '<p>Nenhum administrador encontrado</p>';
-                            } else {
-                                container.innerHTML = '<table><thead><tr><th>ID</th><th>Nome</th><th>Data</th><th>Ações</th></tr></thead><tbody>' + 
-                                    data.admins.map(admin => '</tr><td>'+admin.id+'</td><td>'+admin.nome+' <span class="admin-badge">Admin</span>+'</span>'+'</td><td>'+new Date(admin.created_at).toLocaleDateString()+'</span></td>.<span'+(admin.id !== 1 ? '<button class="btn btn-delete" onclick="deleteAdmin('+admin.id+')">Excluir</button>' : '<span>Admin principal</span>')+'</span></tr>').join('') +
-                                    '</tbody></table>';
-                            }
-                        }
-                    }
-                    
-                    async function createNewAdmin() {
-                        const usuario = document.getElementById('newAdminUser').value;
-                        const senha = document.getElementById('newAdminPass').value;
-                        const confirm = document.getElementById('newAdminPassConfirm').value;
-                        const msgDiv = document.getElementById('adminMsg');
-                        
-                        if(!usuario||!senha||!confirm){
-                            msgDiv.innerHTML='<span style="color:#c33">Preencha todos os campos</span>';
-                            return;
-                        }
-                        if(senha!==confirm){
-                            msgDiv.innerHTML='<span style="color:#c33">As senhas não coincidem</span>';
-                            return;
-                        }
-                        if(senha.length<6){
-                            msgDiv.innerHTML='<span style="color:#c33">Mínimo 6 caracteres</span>';
-                            return;
-                        }
-                        
-                        const data = await apiCall('/admin/do-register', { method:'POST', body:JSON.stringify({usuario, senha}) });
-                        if(data && data.success){
-                            msgDiv.innerHTML='<span style="color:#3c3">✅ '+data.message+'</span>';
-                            document.getElementById('newAdminUser').value='';
-                            document.getElementById('newAdminPass').value='';
-                            document.getElementById('newAdminPassConfirm').value='';
-                            loadAdmins();
-                            setTimeout(()=>msgDiv.innerHTML='',3000);
-                        } else if(data){
-                            msgDiv.innerHTML='<span style="color:#c33">❌ '+data.error+'</span>';
-                        }
-                    }
-                    
-                    async function deleteAdmin(id) {
-                        if(confirm('Excluir este administrador?')){
-                            const data = await apiCall('/api/admin/usuario/'+id, { method:'DELETE' });
-                            if(data && data.success) loadAdmins();
-                        }
                     }
                     
                     async function viewPedido(id) {
@@ -518,11 +598,6 @@ app.get('/admin/painel', async (req, res) => {
                     function logout() {
                         window.location.href = '/admin/login';
                     }
-                    
-                    // Carregar admins ao iniciar
-                    if(document.getElementById('tab-admins')) {
-                        loadAdmins();
-                    }
                 </script>
             </body>
             </html>
@@ -533,15 +608,6 @@ app.get('/admin/painel', async (req, res) => {
 });
 
 // ==================== ROTAS ADMIN API ====================
-app.get('/api/admin/listar', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT id, nome, created_at FROM usuarios WHERE is_admin = true ORDER BY created_at DESC');
-        res.json({ success: true, admins: result.rows });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
 app.get('/api/admin/pedido/:id', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM pedidos WHERE id = $1', [req.params.id]);
@@ -596,95 +662,6 @@ app.delete('/api/admin/contato/:id', async (req, res) => {
     }
 });
 
-// ==================== ROTAS PARA USUÁRIOS COMUNS ====================
-app.post('/api/login', async (req, res) => {
-    try {
-        const { telefone, senha } = req.body;
-        const result = await pool.query('SELECT * FROM usuarios WHERE telefone = $1', [telefone]);
-        
-        if (result.rows.length === 0) {
-            return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
-        }
-        
-        const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
-        if (!valid) {
-            return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
-        }
-        
-        const token = jwt.sign(
-            { id: result.rows[0].id, nome: result.rows[0].nome },
-            SECRET_KEY,
-            { expiresIn: '7d' }
-        );
-        
-        res.json({ success: true, token, usuario: result.rows[0] });
-    } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
-    }
-});
-
-app.post('/api/cadastrar', async (req, res) => {
-    try {
-        const { nome, telefone, senha } = req.body;
-        const existe = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefone]);
-        
-        if (existe.rows.length > 0) {
-            return res.status(400).json({ success: false, erro: 'Telefone já cadastrado' });
-        }
-        
-        const hash = await bcrypt.hash(senha, 10);
-        const result = await pool.query(
-            'INSERT INTO usuarios (nome, telefone, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, telefone',
-            [nome, telefone, hash]
-        );
-        
-        const token = jwt.sign(
-            { id: result.rows[0].id, nome },
-            SECRET_KEY,
-            { expiresIn: '7d' }
-        );
-        
-        res.json({ success: true, token, usuario: result.rows[0] });
-    } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
-    }
-});
-
-app.post('/api/pedidos/upload', upload.single('arquivo'), async (req, res) => {
-    try {
-        const { cliente, telefone, descricao, plano, nomePlano, preco, metodoPagamento } = req.body;
-        
-        const result = await pool.query(
-            `INSERT INTO pedidos (cliente, telefone, descricao, plano, nome_plano, preco, metodo_pagamento, arquivo_path)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [cliente, telefone, descricao, plano, nomePlano, preco, metodoPagamento, req.file?.path]
-        );
-        
-        res.json({ success: true, pedido: result.rows[0] });
-    } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/meus-pedidos', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT * FROM pedidos ORDER BY data_pedido DESC');
-        res.json({ success: true, pedidos: result.rows });
-    } catch (error) {
-        res.json({ success: true, pedidos: [] });
-    }
-});
-
-app.post('/api/contato', async (req, res) => {
-    try {
-        const { nome, telefone, mensagem } = req.body;
-        await pool.query('INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)', [nome, telefone, mensagem]);
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
-    }
-});
-
 // Redirecionamentos
 app.get('/admin', (req, res) => res.redirect('/admin/login'));
 app.get('/admin/', (req, res) => res.redirect('/admin/login'));
@@ -696,7 +673,7 @@ async function startServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`✅ Servidor rodando na porta ${PORT}`);
         console.log(`🔐 Admin: https://facilitaki.onrender.com/admin/login`);
-        console.log(`💡 IMPORTANTE: Crie o primeiro administrador na aba "Criar Admin"`);
+        console.log(`💡 Crie o primeiro administrador na aba "Criar Admin"`);
     });
 }
 
