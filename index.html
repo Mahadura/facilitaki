@@ -2,763 +2,970 @@
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Facilitaki - Seu sucesso académico</title>
-    <meta name="google-site-verification" content="UvVwA_5jVkcuKgX78Y0hK6-zf9BotCclX781TMx8I94" />
-    <meta name="description" content="Apoio académico em Moçambique. Venda de trabalhos, monografias, resoluções de exercícios e normas APA. Entrega rápida e segura para UEM, UP UNIROVUMA, UniSced, UCM, Facilitaki, trabalhos de campo  e mais.">
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Facilitaki - Seu Sucesso Académico em Moçambique</title>
+    <meta name="description" content="Apoio académico em Moçambique. Venda de trabalhos, monografias, resoluções de exercícios e normas APA. Entrega rápida e segura para UEM, UP, UniSced, UCM e mais.">
+    <meta name="keywords" content="trabalhos academicos Mocambique, monografia, TCC, formatacao normas APA, Facilitaki">
+    <meta name="author" content="Facilitaki">
+    <meta name="google-site-verification" content="UvVwA_5jVkcuKgX78Y0hK6-zf9BotCclX781TMx8I94">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📚</text></svg>">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Header com Navegação -->
-    <header class="header-comercial">
-        <div class="container">
-            <div class="header-content">
-                <a href="#" class="logo-pro" onclick="navegarPara('home')">
+
+<!-- ============================================ -->
+<!-- HEADER COM GLASSMORPHISM -->
+<!-- ============================================ -->
+<header class="header-comercial" id="mainHeader">
+    <div class="container">
+        <div class="header-content">
+            <a href="#" class="logo-pro" onclick="navegarPara('home')">
+                <div class="logo-icon">
                     <i class="fas fa-graduation-cap"></i>
-                    <div class="logo-text">
-                        <h1>FACILITAKI</h1>
-                        <p class="tagline">SEU SUCESSO ACADÉMICO</p>
-                    </div>
+                </div>
+                <div class="logo-text">
+                    <h1>FACILITAKI</h1>
+                    <p class="tagline">SEU SUCESSO ACADÉMICO</p>
+                </div>
+            </a>
+            
+            <button class="mobile-menu-btn" id="mobileMenuBtn">
+                <i class="fas fa-bars"></i>
+            </button>
+            
+            <nav class="nav-menu" id="navMenu">
+                <a href="#" class="nav-link active" onclick="navegarPara('home')">
+                    <i class="fas fa-home"></i> <span>Início</span>
                 </a>
-                
-                <nav class="nav-menu">
-                    <a href="#" class="nav-link active" onclick="navegarPara('home')">
-                        <i class="fas fa-home"></i> Início
-                    </a>
-                    <a href="#" class="nav-link" onclick="navegarPara('planos')">
-                        <i class="fas fa-cog"></i> Serviços
-                    </a>
-                    <a href="#" class="nav-link" onclick="navegarPara('como-funciona')">
-                        <i class="fas fa-info-circle"></i> Ajuda
-                    </a>
-                    <a href="#" class="nav-link" onclick="navegarPara('contato')">
-                        <i class="fas fa-phone"></i> Contacto
-                    </a>
-                    <a href="#" class="btn-login" id="btnLoginHeader" onclick="navegarPara('login')">
-                        <i class="fas fa-user"></i> Área do Cliente
-                    </a>
-                </nav>
+                <a href="#" class="nav-link" onclick="navegarPara('planos')">
+                    <i class="fas fa-cog"></i> <span>Serviços</span>
+                </a>
+                <a href="#" class="nav-link" onclick="navegarPara('como-funciona')">
+                    <i class="fas fa-info-circle"></i> <span>Ajuda</span>
+                </a>
+                <a href="#" class="nav-link" onclick="navegarPara('contato')">
+                    <i class="fas fa-phone"></i> <span>Contacto</span>
+                </a>
+                <a href="#" class="btn-login" id="btnLoginHeader" onclick="navegarPara('login')">
+                    <i class="fas fa-user"></i> <span>Área do Cliente</span>
+                </a>
+            </nav>
+        </div>
+    </div>
+</header>
+
+<!-- ============================================ -->
+<!-- CONTEÚDO PRINCIPAL -->
+<!-- ============================================ -->
+<main class="main-content">
+
+    <!-- ========== SEÇÃO HOME ========== -->
+    <section id="home" class="section active">
+        <div class="container">
+            <div class="hero-section">
+                <div class="hero-content">
+                    <div class="hero-badge">
+                        <i class="fas fa-star"></i> +500 Clientes Satisfeitos
+                    </div>
+                    <h1 class="hero-title">
+                        Excelência <span class="gradient-text">Académica</span> Garantida
+                    </h1>
+                    <p class="hero-description">
+                        Apoio profissional para vencer o prazo e alcançar a excelência. 
+                        Nossa equipe especializada está pronta para ajudar você.
+                    </p>
+                    <div class="hero-buttons">
+                        <button class="btn-primary btn-large" onclick="navegarPara('planos')">
+                            <i class="fas fa-bolt"></i> Ver Serviços
+                        </button>
+                        <button class="btn-outline btn-large" onclick="navegarPara('como-funciona')">
+                            <i class="fas fa-play-circle"></i> Como Funciona
+                        </button>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="floating-card card-1">
+                        <i class="fas fa-file-alt"></i>
+                        <span>Formatação APA</span>
+                    </div>
+                    <div class="floating-card card-2">
+                        <i class="fas fa-search"></i>
+                        <span>Trabalho de Campo</span>
+                    </div>
+                    <div class="floating-card card-3">
+                        <i class="fas fa-graduation-cap"></i>
+                        <span>Monografia/TCC</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-section reveal">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="stat-number" data-target="99">0</div>
+                    <div class="stat-label">Taxa de Aprovação</div>
+                    <div class="stat-suffix">%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-number" data-target="72">0</div>
+                    <div class="stat-label">Entrega Rápida</div>
+                    <div class="stat-suffix">horas</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-number" data-target="500">0</div>
+                    <div class="stat-label">Projetos Realizados</div>
+                    <div class="stat-suffix">+</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="stat-number" data-target="100">0</div>
+                    <div class="stat-label">Compromisso</div>
+                    <div class="stat-suffix">%</div>
+                </div>
             </div>
         </div>
-    </header>
+    </section>
 
-    <!-- Conteúdo Principal -->
-    <main class="main-content">
-        <!-- Seção Home (Página Inicial) -->
-        <section id="home" class="section active">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Excelência Acadêmica Garantida</h2>
-                    <p>Apoio profissional para vencer o prazo e alcançar a excelência. Nossa equipe especializada está pronta para ajudar você a alcançar o sucesso acadêmico.</p>
-                </div>
-                
-                <div style="text-align: center; margin: 3rem 0;">
-                    <button onclick="navegarPara('planos')" style="background: #3b82f6; color: white; border: none; padding: 1rem 3rem; border-radius: 5px; font-size: 1.2rem; cursor: pointer; margin-right: 1rem;">
-                        <i class="fas fa-bolt"></i> Ver Serviços
+    <!-- ========== SEÇÃO SERVIÇOS ========== -->
+    <section id="planos" class="section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>Escolha o <span class="gradient-text">Serviço</span></h2>
+                <p>Soluções completas para suas necessidades académicas</p>
+            </div>
+            
+            <div class="planos-container">
+                <div class="plano-card reveal" data-plan="formatacao">
+                    <div class="plano-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <h3>Formatação de trabalhos</h3>
+                    <div class="plano-preco">
+                        100 <span>MT</span>
+                    </div>
+                    <div class="plano-prazo">
+                        <i class="fas fa-clock"></i> Entrega em 24h
+                    </div>
+                    <ul class="plano-features">
+                        <li><i class="fas fa-check-circle"></i> Formatação completa (ABNT/Normas APA)</li>
+                        <li><i class="fas fa-check-circle"></i> Paginação e índice automático</li>
+                        <li><i class="fas fa-check-circle"></i> Padronização de tabelas e figuras</li>
+                        <li><i class="fas fa-check-circle"></i> Submissão em Word e PDF</li>
+                    </ul>
+                    <button class="btn-comprar" onclick="verificarELogar('formatacao', 100)">
+                        <i class="fas fa-shopping-cart"></i> Solicitar Agora
                     </button>
-                    <button onclick="navegarPara('como-funciona')" style="background: transparent; color: #3b82f6; border: 2px solid #3b82f6; padding: 1rem 3rem; border-radius: 5px; font-size: 1.2rem; cursor: pointer;">
-                        <i class="fas fa-play-circle"></i> Como Funciona
+                </div>
+                
+                <div class="plano-card recomendado reveal" data-plan="trabalho-campo">
+                    <div class="plano-badge">
+                        <i class="fas fa-star"></i> MAIS POPULAR
+                    </div>
+                    <div class="plano-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h3>Trabalho de Campo</h3>
+                    <div class="plano-preco">
+                        350 <span>MT</span>
+                    </div>
+                    <div class="plano-prazo">
+                        <i class="fas fa-clock"></i> Entrega em 7 dias
+                    </div>
+                    <ul class="plano-features">
+                        <li><i class="fas fa-check-circle"></i> Introdução e objetivos da pesquisa</li>
+                        <li><i class="fas fa-check-circle"></i> Metodologia de coleta de dados</li>
+                        <li><i class="fas fa-check-circle"></i> Análise de evidências</li>
+                        <li><i class="fas fa-check-circle"></i> Interpretação dos resultados</li>
+                        <li><i class="fas fa-check-circle"></i> Conclusão e recomendações</li>
+                        <li><i class="fas fa-check-circle"></i> Referências bibliográficas</li>
+                    </ul>
+                    <button class="btn-comprar recomendado" onclick="verificarELogar('trabalho-campo', 350)">
+                        <i class="fas fa-bolt"></i> Solicitar Agora
                     </button>
                 </div>
                 
-                <!-- Estatísticas -->
-                <div style="max-width: 1000px; margin: 3rem auto 0; text-align: center;">
-                    <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 30px;">
-                        <div style="flex: 1; min-width: 180px;">
-                            <div style="font-size: 48px; font-weight: bold; color: #10b981; margin-bottom: 10px;">99,9%</div>
-                            <div style="font-size: 16px; color: #333; font-weight: 500;">Taxa de aprovação</div>
-                        </div>
-                        <div style="flex: 1; min-width: 180px;">
-                            <div style="font-size: 48px; font-weight: bold; color: #007bff; margin-bottom: 10px;">72h</div>
-                            <div style="font-size: 16px; color: #333; font-weight: 500;">Período de espera</div>
-                        </div>
-                        <div style="flex: 1; min-width: 180px;">
-                            <div style="font-size: 48px; font-weight: bold; color: #8b5cf6; margin-bottom: 10px;">500+</div>
-                            <div style="font-size: 16px; color: #333; font-weight: 500;">Projetos</div>
-                        </div>
-                        <div style="flex: 1; min-width: 180px;">
-                            <div style="font-size: 48px; font-weight: bold; color: #f59e0b; margin-bottom: 10px;">100%</div>
-                            <div style="font-size: 16px; color: #333; font-weight: 500;">Compromisso</div>
-                        </div>
+                <div class="plano-card reveal" data-plan="monografia">
+                    <div class="plano-icon">
+                        <i class="fas fa-graduation-cap"></i>
                     </div>
+                    <h3>Monografia/TCC</h3>
+                    <div class="plano-preco">
+                        10.000 <span>MT</span>
+                    </div>
+                    <div class="plano-prazo">
+                        <i class="fas fa-clock"></i> Entrega em 3 meses
+                    </div>
+                    <ul class="plano-features">
+                        <li><i class="fas fa-check-circle"></i> Desenvolvimento do projeto</li>
+                        <li><i class="fas fa-check-circle"></i> Pesquisa bibliográfica</li>
+                        <li><i class="fas fa-check-circle"></i> Escrita orientada por capítulos</li>
+                        <li><i class="fas fa-check-circle"></i> Revisão textual completa</li>
+                        <li><i class="fas fa-check-circle"></i> Slides e roteiro para defesa</li>
+                        <li><i class="fas fa-check-circle"></i> Acompanhamento até aprovação</li>
+                    </ul>
+                    <button class="btn-comprar" onclick="verificarELogar('monografia', 10000)">
+                        <i class="fas fa-crown"></i> Solicitar Agora
+                    </button>
                 </div>
             </div>
-        </section>
-
-        <!-- Seção Serviços -->
-        <section id="planos" class="section">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Escolha o serviço</h2>
-                    <p>Apoio profissional para vencer o prazo e alcançar a excelência.</p>
+            
+            <div class="info-box reveal">
+                <div class="info-icon">
+                    <i class="fas fa-info-circle"></i>
                 </div>
-                
-                <div class="planos-container">
-                    <!-- Card 1: Formatação de trabalhos -->
-                    <div class="plano-card">
-                        <h3>Formatação de trabalhos</h3>
-                        
-                        <div class="plano-preco">
-                            100 <span>MT</span>
-                        </div>
-                        
-                        <p style="color: #6b7280; margin-bottom: 1.5rem;">Período máximo de entrega 24h</p>
-                        
-                        <ul class="plano-features">
-                            <li><i class="fas fa-check"></i> Formatação completa (alinhamento, tamanho e tipos de letra, etc.)</li>
-                            <li><i class="fas fa-check"></i> Paginação e índice automático</li>
-                            <li><i class="fas fa-check"></i> Padronização de tabelas, figuras e equações</li>
-                            <li><i class="fas fa-check"></i> Submissão em Word e PDF na plataforma</li>
-                        </ul>
-                        
-                        <button class="btn-comprar" onclick="verificarELogar('formatacao', 100)">
-                            <i class="fas fa-shopping-cart"></i> Solicitar Agora
-                        </button>
-                    </div>
-                    
-                    <!-- Card 2: Trabalho de campo (pesquisa) -->
-                    <div class="plano-card recomendado">
-                        <div class="plano-badge">MAIS POPULAR</div>
-                        <h3>Trabalho de campo (pesquisa)</h3>
-                        
-                        <div class="plano-preco">
-                            350 <span>MT</span>
-                        </div>
-                        
-                        <p style="color: #6b7280; margin-bottom: 1.5rem;">Período máximo de entrega em 7 dias</p>
-                        
-                        <ul class="plano-features">
-                            <li><i class="fas fa-check"></i> Introduzir o tema e os objetivos da pesquisa</li>
-                            <li><i class="fas fa-check"></i> Descrever a metodologia de coleta de dados no local</li>
-                            <li><i class="fas fa-check"></i> Apresentar e analisar as evidências encontradas</li>
-                            <li><i class="fas fa-check"></i> Interpretar os resultados à luz da teoria</li>
-                            <li><i class="fas fa-check"></i> Concluir respondendo ao problema inicial</li>
-                            <li><i class="fas fa-check"></i> Fundamentar com referências bibliográficas</li>
-                        </ul>
-                        
-                        <button class="btn-comprar recomendado" onclick="verificarELogar('trabalho-campo', 500)">
-                            <i class="fas fa-bolt"></i> Solicitar Agora
-                        </button>
-                    </div>
-                    
-                    <!-- Card 3: Monografia/TCC -->
-                    <div class="plano-card">
-                        <h3>Monografia/TCC</h3>
-                        
-                        <div class="plano-preco">
-                            10.000 <span>MT</span>
-                        </div>
-                        
-                        <p style="color: #6b7280; margin-bottom: 1.5rem;">Período máximo de entrega em 3 meses</p>
-                        
-                        <ul class="plano-features">
-                            <li><i class="fas fa-check"></i> Desenvolvimento do projeto de pesquisa</li>
-                            <li><i class="fas fa-check"></i> Pesquisa e organização bibliográfica</li>
-                            <li><i class="fas fa-check"></i> Escrita orientada por capítulos</li>
-                            <li><i class="fas fa-check"></i> Revisão textual e preparação para defesa</li>
-                            <li><i class="fas fa-check"></i> Slides e roteiro de apresentação</li>
-                        </ul>
-                        
-                        <button class="btn-comprar" onclick="verificarELogar('monografia', 15000)">
-                            <i class="fas fa-crown"></i> Solicitar Agora
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Nota importante -->
-                <div style="background: #f0f9ff; padding: 1.5rem; border-radius: 10px; margin-top: 3rem; text-align: center;">
-                    <h3 style="color: #1e40af; margin-bottom: 1rem;">
-                        <i class="fas fa-info-circle"></i> Importante
-                    </h3>
-                    <p style="color: #4b5563;">
-                        O serviço será iniciado após a recepção do comprovativo do pagamento adiantado de uma parcela de 50%. 
-                        O cliente deve fornecer material necessário. Após o término, o cliente será notificado para pagar os 
-                        restantes 50% para ser entregue o trabalho feito.
-                    </p>
+                <div class="info-content">
+                    <h4>Importante</h4>
+                    <p>O serviço será iniciado após a recepção do comprovativo do pagamento adiantado de uma parcela de 50%. O cliente deve fornecer material necessário. Após o término, o cliente será notificado para pagar os restantes 50% para ser entregue o trabalho feito.</p>
                 </div>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <!-- Seção Checkout -->
-        <section id="checkout" class="section">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Finalizar Solicitação</h2>
-                    <p>Complete seus dados para prosseguir com o pedido</p>
-                </div>
-                
-                <div class="checkout-container">
-                    <!-- Resumo do Pedido -->
-                    <div class="checkout-step">
-                        <h3><i class="fas fa-shopping-cart"></i> Serviço Selecionado</h3>
-                        <div id="resumoPedido" style="background: #f9fafb; padding: 1.5rem; border-radius: 5px; text-align: center;">
-                            <p style="color: #6b7280;">Nenhum serviço selecionado</p>
-                        </div>
-                    </div>
-                    
-                    <!-- Métodos de Pagamento -->
-                    <div class="checkout-step">
-                        <h3><i class="fas fa-credit-card"></i> Método de Pagamento</h3>
-                        <p style="color: #6b7280; margin-bottom: 1rem;">Escolha como deseja pagar:</p>
-                        
-                        <div class="metodos-pagamento">
-                            <div class="metodo-pagamento" data-metodo="mpesa" onclick="selecionarMetodo('mpesa')">
-                                <i class="fas fa-mobile-alt"></i>
-                                <span>M-Pesa</span>
-                            </div>
-                            
-                            <div class="metodo-pagamento" data-metodo="emola" onclick="selecionarMetodo('emola')">
-                                <i class="fas fa-wallet"></i>
-                                <span>e-Mola</span>
-                            </div>
-                            
-                            <div class="metodo-pagamento" data-metodo="deposito" onclick="selecionarMetodo('deposito')">
-                                <i class="fas fa-university"></i>
-                                <span>Depósito</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Botões de Ação -->
-                    <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 2rem;">
-                        <button class="btn-primary" onclick="finalizarCompra()">
-                            <i class="fas fa-check"></i> Finalizar Compra
-                        </button>
-                        
-                        <button class="btn-secondary" onclick="navegarPara('planos')">
-                            <i class="fas fa-arrow-left"></i> Voltar aos Serviços
-                        </button>
-                    </div>
-                    
-                    <!-- Mensagem adicional -->
-                    <div id="mensagemCheckout" class="message" style="margin-top: 1rem;"></div>
-                </div>
+    <!-- ========== SEÇÃO CHECKOUT ========== -->
+    <section id="checkout" class="section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>Finalizar <span class="gradient-text">Solicitação</span></h2>
+                <p>Complete seus dados para prosseguir com o pedido</p>
             </div>
-        </section>
-
-        <!-- Seção Login/Registro -->
-        <section id="login" class="section">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Área do Cliente</h2>
-                    <p>Acesse sua conta ou cadastre-se</p>
+            
+            <div class="checkout-container">
+                <div class="checkout-step">
+                    <h3><i class="fas fa-shopping-cart"></i> Serviço Selecionado</h3>
+                    <div id="resumoPedido" class="resumo-pedido">
+                        <div class="empty-state">
+                            <i class="fas fa-shopping-cart"></i>
+                            <p>Nenhum serviço selecionado</p>
+                            <button class="btn-link" onclick="navegarPara('planos')">Escolher Serviço</button>
+                        </div>
+                    </div>
                 </div>
                 
-                <div style="max-width: 400px; margin: 0 auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                    <!-- Login -->
-                    <div id="formLogin">
-                        <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
-                            <i class="fas fa-sign-in-alt"></i> Login
-                        </h3>
-                        
-                        <div class="form-group">
-                            <label for="loginTelefone">WhatsApp *</label>
-                            <input type="tel" id="loginTelefone" placeholder="Ex: 84 123 4567" required>
+                <div class="checkout-step">
+                    <h3><i class="fas fa-credit-card"></i> Método de Pagamento</h3>
+                    <div class="metodos-pagamento">
+                        <div class="metodo-pagamento" data-metodo="mpesa" onclick="selecionarMetodo('mpesa')">
+                            <i class="fab fa-m-pesa"></i>
+                            <span>M-Pesa</span>
                         </div>
-                        
-                        <div class="form-group">
-                            <label for="loginSenha">Senha *</label>
+                        <div class="metodo-pagamento" data-metodo="emola" onclick="selecionarMetodo('emola')">
+                            <i class="fas fa-wallet"></i>
+                            <span>e-Mola</span>
+                        </div>
+                        <div class="metodo-pagamento" data-metodo="deposito" onclick="selecionarMetodo('deposito')">
+                            <i class="fas fa-university"></i>
+                            <span>Depósito</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="checkout-actions">
+                    <button class="btn-primary btn-block" onclick="finalizarCompra()" id="btnFinalizarCompra" disabled>
+                        <i class="fas fa-check"></i> Finalizar Compra
+                    </button>
+                    <button class="btn-secondary btn-block" onclick="navegarPara('planos')">
+                        <i class="fas fa-arrow-left"></i> Voltar aos Serviços
+                    </button>
+                </div>
+                
+                <div id="mensagemCheckout" class="message"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== SEÇÃO LOGIN/REGISTRO ========== -->
+    <section id="login" class="section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>Área do <span class="gradient-text">Cliente</span></h2>
+                <p>Acesse sua conta ou cadastre-se</p>
+            </div>
+            
+            <div class="login-container">
+                <div id="formLogin" class="login-form active">
+                    <div class="form-header">
+                        <i class="fas fa-sign-in-alt"></i>
+                        <h3>Entrar na sua conta</h3>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="loginTelefone">WhatsApp</label>
+                        <div class="input-icon">
+                            <i class="fab fa-whatsapp"></i>
+                            <input type="tel" id="loginTelefone" placeholder="84 123 4567" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="loginSenha">Senha</label>
+                        <div class="input-icon">
+                            <i class="fas fa-lock"></i>
                             <input type="password" id="loginSenha" placeholder="Sua senha" required>
                         </div>
-                        
-                        <button class="btn-primary" onclick="fazerLogin()" style="margin-bottom: 1rem;">
-                            <i class="fas fa-sign-in-alt"></i> Entrar
-                        </button>
-                        
-                        <p style="text-align: center; color: #6b7280;">
-                            Não tem conta? 
-                            <a href="#" onclick="mostrarCadastro()" style="color: #3b82f6; text-decoration: none;">
-                                Cadastre-se aqui
-                            </a>
-                        </p>
                     </div>
                     
-                    <!-- Cadastro -->
-                    <div id="formCadastro" style="display: none;">
-                        <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
-                            <i class="fas fa-user-plus"></i> Cadastro
-                        </h3>
-                        
-                        <div class="form-group">
-                            <label for="cadastroNome">Nome Completo *</label>
-                            <input type="text" id="cadastroNome" placeholder="Seu nome completo" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="cadastroTelefone">WhatsApp *</label>
-                            <input type="tel" id="cadastroTelefone" placeholder="Ex: 84 123 4567" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="cadastroSenha">Senha *</label>
-                            <input type="password" id="cadastroSenha" placeholder="Crie uma senha" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="cadastroSenhaConfirm">Confirmar Senha *</label>
-                            <input type="password" id="cadastroSenhaConfirm" placeholder="Repita a senha" required>
-                        </div>
-                        
-                        <button class="btn-primary" onclick="fazerCadastro()" style="margin-bottom: 1rem;">
-                            <i class="fas fa-check"></i> Cadastrar
-                        </button>
-                        
-                        <button class="btn-secondary" onclick="mostrarLogin()" style="width: 100%;">
-                            <i class="fas fa-arrow-left"></i> Voltar para Login
-                        </button>
-                    </div>
+                    <button class="btn-primary btn-block" onclick="fazerLogin()">
+                        <i class="fas fa-sign-in-alt"></i> Entrar
+                    </button>
                     
-                    <!-- Mensagens -->
-                    <div id="mensagemLogin" class="message"></div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Seção Dashboard (área logada) -->
-        <section id="dashboard" class="section">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Minha Conta</h2>
-                    <p>Gerencie seus serviços e dados</p>
+                    <div class="form-footer">
+                        <p>Não tem conta? <a href="#" onclick="mostrarCadastro()">Cadastre-se aqui</a></p>
+                    </div>
                 </div>
                 
-                <div class="dashboard-grid">
-                    <!-- Valor total por pagar -->
-                    <div class="dashboard-card saldo">
-                        <h3><i class="fas fa-wallet"></i> Valor total por pagar</h3>
-                        <div class="saldo-valor" id="valorTotalPagar">0 MT</div>
-                        <p style="margin-top: 1rem; opacity: 0.9;">Somatório de todos os seus pedidos pendentes</p>
+                <div id="formCadastro" class="login-form">
+                    <div class="form-header">
+                        <i class="fas fa-user-plus"></i>
+                        <h3>Criar nova conta</h3>
                     </div>
                     
-                    <!-- Meus Pedidos -->
-                    <div class="dashboard-card">
-                        <h3><i class="fas fa-history"></i> Meus Pedidos</h3>
-                        <div id="listaPedidos" style="min-height: 200px; color: #6b7280;">
-                            <!-- A estrutura será populada pelo JavaScript -->
+                    <div class="form-group">
+                        <label for="cadastroNome">Nome Completo</label>
+                        <div class="input-icon">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="cadastroNome" placeholder="Seu nome completo" required>
                         </div>
                     </div>
                     
-                    <!-- Solicite aqui! -->
-                    <div class="dashboard-card">
-                        <h3><i class="fas fa-plus-circle"></i> Solicite aqui!</h3>
-                        <p style="margin-bottom: 1rem;">Selecione o serviço e faça o envio do seu trabalho</p>
-                        
+                    <div class="form-group">
+                        <label for="cadastroTelefone">WhatsApp</label>
+                        <div class="input-icon">
+                            <i class="fab fa-whatsapp"></i>
+                            <input type="tel" id="cadastroTelefone" placeholder="84 123 4567" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cadastroSenha">Senha</label>
+                        <div class="input-icon">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="cadastroSenha" placeholder="Crie uma senha" required>
+                        </div>
+                        <small class="form-hint">Mínimo 6 caracteres</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cadastroSenhaConfirm">Confirmar Senha</label>
+                        <div class="input-icon">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="cadastroSenhaConfirm" placeholder="Repita a senha" required>
+                        </div>
+                    </div>
+                    
+                    <button class="btn-primary btn-block" onclick="fazerCadastro()">
+                        <i class="fas fa-check"></i> Cadastrar
+                    </button>
+                    
+                    <button class="btn-secondary btn-block" onclick="mostrarLogin()">
+                        <i class="fas fa-arrow-left"></i> Voltar para Login
+                    </button>
+                </div>
+                
+                <div id="mensagemLogin" class="message"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== SEÇÃO DASHBOARD (MINHA CONTA) ========== -->
+    <section id="dashboard" class="section">
+        <div class="container">
+            <!-- Dashboard Header -->
+            <div class="dashboard-header">
+                <div class="welcome-section">
+                    <div class="user-avatar" id="userAvatar">
+                        <img src="https://ui-avatars.com/api/?background=2563eb&color=fff&name=Usuário" alt="Avatar">
+                        <span class="online-status"></span>
+                    </div>
+                    <div class="welcome-text">
+                        <h2 id="welcomeUserName">Olá, Usuário! 👋</h2>
+                        <p>Bem-vindo de volta à sua conta Facilitaki</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-notification" onclick="abrirNotificacoes()" id="btnNotificacoes">
+                        <i class="fas fa-bell"></i>
+                        <span class="badge" id="notificacaoBadge" style="display: none;">0</span>
+                    </button>
+                    <button class="btn-settings" onclick="abrirConfiguracoes()">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Metrics Cards -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon">
+                        <i class="fas fa-shopping-bag"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" id="totalPedidos">0</span>
+                        <span class="metric-label">Total de Pedidos</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" id="pedidosPendentes">0</span>
+                        <span class="metric-label">Em Andamento</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" id="pedidosConcluidos">0</span>
+                        <span class="metric-label">Concluídos</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">
+                        <i class="fas fa-wallet"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" id="totalGasto">0 MT</span>
+                        <span class="metric-label">Total Gasto</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Tabs -->
+            <div class="dashboard-tabs">
+                <button class="tab-btn active" data-tab="pedidos">
+                    <i class="fas fa-list"></i> Meus Pedidos
+                </button>
+                <button class="tab-btn" data-tab="upload">
+                    <i class="fas fa-plus-circle"></i> Novo Pedido
+                </button>
+                <button class="tab-btn" data-tab="perfil">
+                    <i class="fas fa-user"></i> Meu Perfil
+                </button>
+                <button class="tab-btn" data-tab="financeiro">
+                    <i class="fas fa-chart-pie"></i> Financeiro
+                </button>
+            </div>
+
+            <!-- Tab: Meus Pedidos -->
+            <div class="tab-content active" id="tab-pedidos">
+                <div class="pedidos-filtros">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Buscar pedido..." id="searchPedido">
+                    </div>
+                    <select id="filtroStatus" class="filter-select">
+                        <option value="todos">Todos os status</option>
+                        <option value="pendente">Pendente</option>
+                        <option value="pago">Pago</option>
+                        <option value="em_andamento">Em andamento</option>
+                        <option value="concluido">Concluído</option>
+                    </select>
+                </div>
+                <div id="listaPedidos" class="pedidos-list">
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p>Nenhum pedido encontrado</p>
+                        <button class="btn-primary" onclick="document.querySelector('.tab-btn[data-tab=\"upload\"]').click()">
+                            Solicitar Serviço
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Upload de Ficheiros -->
+            <div class="tab-content" id="tab-upload">
+                <div class="upload-container">
+                    <div class="upload-header">
+                        <h3><i class="fas fa-cloud-upload-alt"></i> Carregar Ficheiro do Trabalho</h3>
+                        <p>Envie o seu trabalho para que possamos iniciar o serviço</p>
+                    </div>
+                    
+                    <div class="upload-form">
                         <div class="form-group">
-                            <label>Serviço:</label>
-                            <select id="selectServicoDashboard" style="width: 100%; margin-bottom: 1rem;">
+                            <label>Serviço *</label>
+                            <select id="uploadServico" class="form-control" onchange="atualizarPrecoUpload()">
                                 <option value="">Selecione um serviço</option>
                                 <option value="formatacao">Formatação de trabalhos - 100 MT</option>
-                                <option value="trabalho-campo">Trabalho de campo - 350 MT</option>
+                                <option value="trabalho-campo">Trabalho de campo (pesquisa) - 350 MT</option>
                                 <option value="monografia">Monografia/TCC - 10.000 MT</option>
                             </select>
                         </div>
                         
-                        <button onclick="abrirDescricaoTrabalho()" class="btn-primary" style="margin-bottom: 1rem; width: 100%;">
-                            <i class="fas fa-upload"></i> Enviar Trabalho
-                        </button>
+                        <div class="form-group">
+                            <label>Descrição do Trabalho (Opcional)</label>
+                            <textarea id="uploadDescricao" rows="4" placeholder="Descreva detalhadamente o que precisa..."></textarea>
+                        </div>
                         
-                        <p style="font-size: 0.9rem; color: #6b7280;">
-                            <i class="fas fa-info-circle"></i> Envie-nos o edital do seu trabalho que contem as orientações (tema, objectivos,etc)
-                        </p>
+                        <div class="form-group">
+                            <label>Prazo de Entrega</label>
+                            <input type="date" id="uploadPrazo" class="form-control">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Ficheiro do Trabalho *</label>
+                            <div class="upload-area-large" id="uploadAreaLarge" onclick="document.getElementById('uploadFileInput').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <h4>Clique para selecionar o ficheiro</h4>
+                                <p>Arraste e solte ou clique para fazer upload</p>
+                                <small>Formatos: PDF, DOC, DOCX, TXT (max 10MB)</small>
+                                <input type="file" id="uploadFileInput" accept=".pdf,.doc,.docx,.txt" style="display: none" onchange="handleUploadFileSelect(event)">
+                            </div>
+                            <div id="uploadFilePreview" class="upload-file-preview" style="display: none;">
+                                <div class="file-info">
+                                    <i class="fas fa-file-alt"></i>
+                                    <span id="uploadFileName"></span>
+                                    <button type="button" onclick="removerUploadFile()" class="btn-remove-file">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Método de Pagamento *</label>
+                            <div class="metodos-upload">
+                                <label class="metodo-radio" onclick="selecionarMetodoUpload('mpesa')">
+                                    <input type="radio" name="uploadMetodo" value="mpesa">
+                                    <i class="fab fa-m-pesa"></i>
+                                    <span>M-Pesa</span>
+                                </label>
+                                <label class="metodo-radio" onclick="selecionarMetodoUpload('emola')">
+                                    <input type="radio" name="uploadMetodo" value="emola">
+                                    <i class="fas fa-wallet"></i>
+                                    <span>e-Mola</span>
+                                </label>
+                                <label class="metodo-radio" onclick="selecionarMetodoUpload('deposito')">
+                                    <input type="radio" name="uploadMetodo" value="deposito">
+                                    <i class="fas fa-university"></i>
+                                    <span>Depósito</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="upload-resumo" id="uploadResumo" style="display: none;">
+                            <h4>Resumo do Pedido</h4>
+                            <div class="resumo-item">
+                                <span>Serviço:</span>
+                                <strong id="resumoServico">-</strong>
+                            </div>
+                            <div class="resumo-item">
+                                <span>Valor Total:</span>
+                                <strong id="resumoValorTotal">0 MT</strong>
+                            </div>
+                            <div class="resumo-item">
+                                <span>Entrada (50%):</span>
+                                <strong id="resumoEntrada">0 MT</strong>
+                            </div>
+                            <div class="resumo-item">
+                                <span>Método:</span>
+                                <strong id="resumoMetodo">-</strong>
+                            </div>
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="uploadTermos" onchange="verificarHabilitarBotaoUpload()">
+                                <span>Concordo com os <a href="#" onclick="mostrarTermos()">Termos de Serviço</a></span>
+                            </label>
+                        </div>
+                        
+                        <div class="upload-actions">
+                            <button class="btn-primary btn-block" onclick="enviarUploadPedido()" id="btnEnviarUpload" disabled>
+                                <i class="fas fa-paper-plane"></i> Enviar e Solicitar Pagamento
+                            </button>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Tab: Meu Perfil -->
+            <div class="tab-content" id="tab-perfil">
+                <div class="perfil-container">
+                    <div class="perfil-header">
+                        <div class="perfil-avatar-grande">
+                            <img id="perfilAvatar" src="https://ui-avatars.com/api/?background=2563eb&color=fff&name=Usuário" alt="Avatar">
+                            <button class="btn-mudar-avatar" onclick="mudarAvatar()">
+                                <i class="fas fa-camera"></i>
+                            </button>
+                        </div>
+                        <div class="perfil-info">
+                            <h3 id="perfilNome">Usuário</h3>
+                            <p class="membro-desde" id="membroDesde">Membro desde --</p>
+                            <div class="badge-verificado">
+                                <i class="fas fa-check-circle"></i> Verificado
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="perfil-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Nome Completo</label>
+                                <input type="text" id="perfilNomeCompleto">
+                            </div>
+                            <div class="form-group">
+                                <label>WhatsApp</label>
+                                <input type="tel" id="perfilTelefone">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input type="email" id="perfilEmail" placeholder="seu@email.com">
+                            </div>
+                            <div class="form-group">
+                                <label>Instituição</label>
+                                <input type="text" id="perfilInstituicao" placeholder="Ex: UEM, UP">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Curso</label>
+                            <input type="text" id="perfilCurso" placeholder="Seu curso">
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="salvarPerfil()">
+                                <i class="fas fa-save"></i> Salvar Alterações
+                            </button>
+                            <button class="btn-secondary" onclick="alterarSenha()">
+                                <i class="fas fa-key"></i> Alterar Senha
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Financeiro -->
+            <div class="tab-content" id="tab-financeiro">
+                <div class="financeiro-container">
+                    <div class="resumo-financeiro">
+                        <div class="financeiro-card">
+                            <div class="card-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <h4>Total Investido</h4>
+                            <div class="valor-grande" id="financeiroTotalInvestido">0 MT</div>
+                            <small>Em todos os serviços</small>
+                        </div>
+                        <div class="financeiro-card">
+                            <div class="card-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <h4>Saldo Pendente</h4>
+                            <div class="valor-grande warning" id="financeiroSaldoPendente">0 MT</div>
+                            <small>Valor restante a pagar</small>
+                        </div>
+                        <div class="financeiro-card">
+                            <div class="card-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <h4>Total Pago</h4>
+                            <div class="valor-grande success" id="financeiroTotalPago">0 MT</div>
+                            <small>Pagamentos confirmados</small>
+                        </div>
+                    </div>
+
+                    <div class="ultimo-pagamento" id="ultimoPagamentoCard" style="display: none;">
+                        <h3><i class="fas fa-receipt"></i> Último Pagamento</h3>
+                        <div class="pagamento-destaque">
+                            <div class="pagamento-valor" id="ultimoPagamentoValor">0 MT</div>
+                            <div class="pagamento-info">
+                                <span id="ultimoPagamentoData">--</span>
+                                <span id="ultimoPagamentoServico">--</span>
+                            </div>
+                            <span class="status-pago">Confirmado</span>
+                        </div>
+                    </div>
+
+                    <div class="historico-pagamentos">
+                        <div class="historico-header">
+                            <h3><i class="fas fa-history"></i> Histórico de Transações</h3>
+                            <button class="btn-exportar" onclick="exportarHistorico()">
+                                <i class="fas fa-download"></i> Exportar
+                            </button>
+                        </div>
+                        
+                        <div class="tabela-historico">
+                            <table class="financeiro-table">
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Serviço</th>
+                                        <th>Valor</th>
+                                        <th>Tipo</th>
+                                        <th>Status</th>
+                                        <th>Referência</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historicoPagamentosBody">
+                                    <tr class="empty-row">
+                                        <td colspan="6">
+                                            <div class="empty-state">
+                                                <i class="fas fa-receipt"></i>
+                                                <p>Nenhum pagamento registrado</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logout -->
+            <div class="logout-section">
+                <button onclick="fazerLogout()" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> Sair da Conta
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== SEÇÃO PAGAMENTO SUCESSO ========== -->
+    <section id="pagamento-sucesso" class="section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>Instruções de <span class="gradient-text">Pagamento</span></h2>
+                <p>Siga as instruções abaixo para completar seu pagamento</p>
+            </div>
+            
+            <div class="checkout-container">
+                <div class="message success" id="mensagemSucesso">
+                    <i class="fas fa-check-circle"></i>
+                    <h3>Solicitação registrada com sucesso!</h3>
+                    <p>Seu pedido foi registrado. Complete o pagamento para iniciarmos.</p>
+                </div>
                 
-                <!-- Botão de logout -->
-                <div style="text-align: center; margin-top: 3rem;">
-                    <button onclick="fazerLogout()" style="background: #ef4444; color: white; border: none; padding: 0.8rem 2rem; border-radius: 5px;">
-                        <i class="fas fa-sign-out-alt"></i> Sair da Conta
+                <div class="checkout-step">
+                    <h3><i class="fas fa-credit-card"></i> Instruções de Pagamento</h3>
+                    <div id="instrucoesDetalhadas" class="instrucoes-pagamento-box"></div>
+                </div>
+                
+                <div class="checkout-step">
+                    <h3><i class="fas fa-money-check-alt"></i> Resumo do Pedido</h3>
+                    <div id="resumoPagamento" class="resumo-pagamento-box"></div>
+                </div>
+                
+                <div class="checkout-actions">
+                    <button class="btn-secondary" onclick="navegarPara('dashboard')">
+                        <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
+                    </button>
+                    <button class="btn-primary" onclick="navegarPara('home')">
+                        <i class="fas fa-home"></i> Ir para Início
                     </button>
                 </div>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <!-- Seção Pagamento Sucesso -->
-        <section id="pagamento-sucesso" class="section">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Instruções de Pagamento</h2>
-                    <p>Siga as instruções abaixo para completar seu pagamento</p>
+    <!-- ========== SEÇÃO COMO FUNCIONA ========== -->
+    <section id="como-funciona" class="section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>Como <span class="gradient-text">Funciona</span></h2>
+                <p>Passo a passo para criar sua conta e solicitar um serviço</p>
+            </div>
+            
+            <div class="steps-container">
+                <div class="step-item reveal">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Cadastre sua conta</h3>
+                        <p>Clique em "Área do Cliente" e depois em "Cadastre-se aqui". Preencha seus dados (nome, WhatsApp e senha).</p>
+                    </div>
                 </div>
                 
-                <div class="checkout-container">
-                    <!-- Mensagem de sucesso -->
-                    <div class="message success" style="margin-bottom: 2rem;">
-                        <h3 style="color: #065f46; margin-bottom: 0.5rem;">
-                            <i class="fas fa-check-circle"></i> Submetido com sucesso!
-                        </h3>
-                        <p>Seu pedido foi registrado. Complete o pagamento para iniciarmos.</p>
+                <div class="step-item reveal">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Solicite um serviço</h3>
+                        <p>Acesse sua conta, escolha o serviço desejado e envie o arquivo com as instruções do seu trabalho.</p>
                     </div>
-                    
-                    <!-- Instruções de Pagamento -->
-                    <div class="checkout-step">
-                        <h3><i class="fas fa-credit-card"></i> Instruções de Pagamento</h3>
-                        <div id="instrucoesDetalhadas" style="background: #f0f9ff; padding: 1.5rem; border-radius: 5px;">
-                            <!-- As instruções serão preenchidas pelo JavaScript -->
-                        </div>
+                </div>
+                
+                <div class="step-item reveal">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Efetue o pagamento</h3>
+                        <p>Pague 50% de entrada via M-Pesa, e-Mola ou Depósito Bancário. Use o código de referência gerado.</p>
                     </div>
-                    
-                    <!-- Relatório do pagamento -->
-                    <div class="checkout-step">
-                        <h3><i class="fas fa-money-check-alt"></i> Relatório do pagamento</h3>
-                        <div id="resumoPagamento" style="background: #f9fafb; padding: 1.5rem; border-radius: 5px;">
-                            <!-- O resumo será preenchido pelo JavaScript -->
-                        </div>
+                </div>
+                
+                <div class="step-item reveal">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Envie o comprovativo</h3>
+                        <p>Envie o comprovativo de pagamento pelo WhatsApp: <strong>86 728 6665</strong> ou <strong>84 728 6665</strong></p>
                     </div>
-                    
-                    <!-- Botões de Ação -->
-                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                        <button class="btn-secondary" onclick="navegarPara('dashboard')">
-                            <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
-                        </button>
-                        <button class="btn-primary" onclick="navegarPara('home')">
-                            <i class="fas fa-home"></i> Ir para Início
-                        </button>
+                </div>
+                
+                <div class="step-item reveal">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h3>Acompanhe seu pedido</h3>
+                        <p>Nossa equipe iniciará o serviço e você poderá acompanhar o status no seu dashboard.</p>
                     </div>
                 </div>
             </div>
-        </section>
-
-        <!-- Seção Como Funciona -->
-        <section id="como-funciona" class="section">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Como funciona</h2>
-                    <p>Passo a passo para criar a sua conta e solicitar um serviço</p>
-                </div>
-                
-                <div style="max-width: 800px; margin: 0 auto;">
-                    <!-- Passo 1: Cadastre a sua conta -->
-                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
-                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
-                            <i class="fas fa-1"></i>
-                        </div>
-                        <div>
-                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">1. Cadastre a sua conta</h3>
-                            <p style="color: #4b5563; line-height: 1.6;">
-                                Para cadastrar a sua conta no nosso sistema, clique no botão "Área do cliente" 
-                                em seguida "Cadastre-se aqui". Preencha seus dados (nome, WhatsApp, senha).
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <!-- Passo 2: Para solicitar um serviço -->
-                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
-                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
-                            <i class="fas fa-2"></i>
-                        </div>
-                        <div>
-                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">2. Para solicitar um serviço</h3>
-                            <p style="color: #4b5563; line-height: 1.6;">
-                                Se tiver um trabalho, acesse sua conta e solicite o serviço pretendido. 
-                                Envie-nos o arquivo (PDF/DOCX) e preencha os detalhes necessários.
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <!-- Passo 3: Pagamento serviços -->
-                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
-                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
-                            <i class="fas fa-3"></i>
-                        </div>
-                        <div>
-                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">3. Pagamento serviços</h3>
-                            <p style="color: #4b5563; line-height: 1.6;">
-                                Após a solicitação do serviço pretendido, faça o pagamento via:
-                            </p>
-                            <ul style="color: #4b5563; margin-left: 1.5rem; margin-top: 0.5rem;">
-                                <li>e-Mola</li>
-                                <li>M-Pesa</li>
-                                <li>NIB Mozabanco</li>
-                            </ul>
-                        </div>
-                    </div>
-                    
-                    <!-- Passo 4: Envio do comprovativo -->
-                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
-                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
-                            <i class="fas fa-4"></i>
-                        </div>
-                        <div>
-                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">4. Envio do comprovativo</h3>
-                            <p style="color: #4b5563; line-height: 1.6;">
-                                Envie o comprovativo de pagamento para o WhatsApp: <strong>86 728 6665</strong> ou <strong>84 728 6665</strong>.
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <!-- Passo 5: Nós entraremos em contacto -->
-                    <div style="display: flex; gap: 2rem; margin-bottom: 3rem; align-items: center;">
-                        <div style="font-size: 3rem; color: #3b82f6; min-width: 60px;">
-                            <i class="fas fa-5"></i>
-                        </div>
-                        <div>
-                            <h3 style="color: #1e40af; margin-bottom: 0.5rem;">5. Nós entraremos em contacto</h3>
-                            <p style="color: #4b5563; line-height: 1.6;">
-                                Nossa equipe é especializada para prestar serviços conforme a sua orientação. 
-                                Entraremos em contacto para confirmar o pagamento.
-                            </p>
-                        </div>
-                    </div>
-                    
-                </div>
-                
-                <!-- Botão para solicitar -->
-                <div style="text-align: center; margin-top: 3rem;">
-                    <button onclick="navegarPara('planos')" class="btn-primary" style="padding: 1rem 3rem;">
-                        <i class="fas fa-play-circle"></i> Solicitar Agora
-                    </button>
-                </div>
+            
+            <div class="steps-cta">
+                <button class="btn-primary btn-large" onclick="navegarPara('planos')">
+                    <i class="fas fa-play-circle"></i> Solicitar Agora
+                </button>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <!-- Seção Contato -->
-        <section id="contato" class="section">
-            <div class="container">
-                <div class="section-header">
-                    <h2>Entre em Contato</h2>
-                    <p>Tire suas dúvidas ou solicite informações</p>
-                </div>
-                
-                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <!-- ========== SEÇÃO CONTATO ========== -->
+    <section id="contato" class="section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>Entre em <span class="gradient-text">Contato</span></h2>
+                <p>Tire suas dúvidas ou solicite informações</p>
+            </div>
+            
+            <div class="contato-grid">
+                <div class="contato-form">
                     <div class="form-group">
-                        <label for="contatoNome">Nome *</label>
-                        <input type="text" id="contatoNome" placeholder="Seu nome" required>
+                        <label for="contatoNome">Nome</label>
+                        <div class="input-icon">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="contatoNome" placeholder="Seu nome">
+                        </div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="contatoTelefone">WhatsApp *</label>
-                        <input type="tel" id="contatoTelefone" placeholder="Ex: 84 123 4567" required>
+                        <label for="contatoTelefone">WhatsApp</label>
+                        <div class="input-icon">
+                            <i class="fab fa-whatsapp"></i>
+                            <input type="tel" id="contatoTelefone" placeholder="84 123 4567">
+                        </div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="contatoMensagem">Mensagem *</label>
-                        <textarea id="contatoMensagem" rows="5" placeholder="Como podemos ajudar?" required></textarea>
+                        <label for="contatoMensagem">Mensagem</label>
+                        <textarea id="contatoMensagem" rows="5" placeholder="Como podemos ajudar?"></textarea>
                     </div>
                     
                     <button class="btn-primary" onclick="enviarContato()">
                         <i class="fas fa-paper-plane"></i> Enviar Mensagem
                     </button>
                     
-                    <div id="mensagemContato" class="message" style="margin-top: 1rem;"></div>
+                    <div id="mensagemContato" class="message"></div>
                 </div>
                 
-                <!-- Informações de Contato -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem; margin-top: 3rem;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;">
-                            <i class="fas fa-phone-alt"></i>
-                        </div>
+                <div class="contato-info">
+                    <div class="info-card">
+                        <i class="fas fa-phone-alt"></i>
                         <h3>Telefone</h3>
                         <p>+258 86 728 6665</p>
                         <p>+258 84 728 6665</p>
-                        <p style="color: #6b7280;">Segunda a Sexta, 8h às 15h</p>
+                        <small>Segunda a Sexta, 8h às 17h</small>
                     </div>
                     
-                    <div style="text-align: center;">
-                        <div style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;">
-                            <i class="fas fa-envelope"></i>
-                        </div>
+                    <div class="info-card">
+                        <i class="fas fa-envelope"></i>
                         <h3>Email</h3>
-                        <p>aguinaldo.mahadura@gmail.com</p>
-                        <p style="color: #6b7280;">Respondemos em até 24h</p>
+                        <p>facilitaki@email.com</p>
+                        <small>Respondemos em até 24h</small>
                     </div>
                     
-                    <div style="text-align: center;">
-                        <div style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;">
-                            <i class="fas fa-map-marker-alt"></i>
-                        </div>
+                    <div class="info-card">
+                        <i class="fas fa-map-marker-alt"></i>
                         <h3>Localização</h3>
                         <p>Niassa - Moçambique</p>
-                        <p style="color: #6b7280;">Atendimento online</p>
+                        <small>Atendimento online</small>
                     </div>
                 </div>
-            </div>
-        </section>
-    </main>
-
-    <!-- Footer -->
-    <footer>
-        <div class="container">
-            <div class="footer-content">
-                <div>
-                    <h4>FacilitAki</h4>
-                    <p>Apoio profissional para vencer o prazo e alcançar a excelência.</p>
-                    <p style="margin-top: 1rem; color: #9ca3af;">
-                        <i class="fas fa-shield-alt"></i> 100% dentro da legalidade
-                    </p>
-                </div>
-                
-                <div>
-                    <h4>Acesso Rápido</h4>
-                    <ul class="footer-links">
-                        <li><a href="#" onclick="navegarPara('home')">Início</a></li>
-                        <li><a href="#" onclick="navegarPara('planos')">Serviços</a></li>
-                        <li><a href="#" onclick="navegarPara('como-funciona')">Ajuda</a></li>
-                        <li><a href="#" onclick="navegarPara('contato')">Contato</a></li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h4>Legal</h4>
-                    <ul class="footer-links">
-                        <li><a href="#" onclick="mostrarTermos()">Termos de Serviço</a></li>
-                        <li><a href="#" onclick="mostrarPrivacidade()">Política de Privacidade</a></li>
-                        <li><a href="#" onclick="navegarPara('como-funciona')">FAQ</a></li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h4>Siga-nos</h4>
-                    <div style="display: flex; gap: 1rem; margin-top: 1rem; justify-content: center;">
-                        <a href="#" style="color: white; font-size: 1.5rem;"><i class="fab fa-facebook"></i></a>
-                        <a href="#" style="color: white; font-size: 1.5rem;"><i class="fab fa-instagram"></i></a>
-                        <a href="#" style="color: white; font-size: 1.5rem;"><i class="fab fa-whatsapp"></i></a>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="footer-bottom">
-                <p>&copy; 2026 FacilitAki. Todos os direitos reservados.</p>
             </div>
         </div>
-    </footer>
+    </section>
+</main>
 
-    <!-- Modal para Upload de Arquivos -->
-    <div id="modalDescricaoTrabalho" class="modal">
-        <div class="modal-content" style="max-width: 600px; padding: 2rem;">
-            <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
-                <i class="fas fa-file-upload"></i> Enviar Trabalho
-            </h3>
-            
-            <!-- Upload de Arquivo (OBRIGATÓRIO) -->
-            <div class="form-group">
-                <label for="arquivoTrabalho">Arquivo do Trabalho</label>
-                <div style="border: 2px dashed #3b82f6; border-radius: 10px; padding: 2rem; text-align: center; background: #f8fafc; cursor: pointer;"
-                     id="uploadArea" onclick="document.getElementById('fileInput').click()">
-                    <i class="fas fa-cloud-upload-alt" style="font-size: 2.5rem; color: #3b82f6; margin-bottom: 1rem;"></i>
-                    <h4 style="color: #1e40af; margin-bottom: 0.5rem;">Clique para selecionar arquivo</h4>
-                    <p style="color: #6b7280; margin-bottom: 0.5rem;">Arraste e solte ou clique para fazer upload</p>
-                    <p style="color: #9ca3af; font-size: 0.9rem;">Formatos suportados: PDF, DOC, DOCX (Tamanho máximo: 10MB)</p>
-                    
-                    <input type="file" id="fileInput" accept=".pdf,.doc,.docx" style="display: none;" 
-                           onchange="handleFileSelect(event)">
+<!-- ============================================ -->
+<!-- FOOTER -->
+<!-- ============================================ -->
+<footer>
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-section">
+                <div class="footer-logo">
+                    <i class="fas fa-graduation-cap"></i>
+                    <h3>FACILITAKI</h3>
                 </div>
-                
-                <!-- Pré-visualização do arquivo -->
-                <div id="filePreview" style="display: none; margin-top: 1rem;">
-                    <div style="background: #f0f9ff; padding: 1rem; border-radius: 8px; border: 1px solid #bfdbfe; display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 1rem;">
-                            <i class="fas fa-file" style="font-size: 1.5rem; color: #3b82f6;"></i>
-                            <div>
-                                <div id="fileName" style="font-weight: bold; color: #1e40af;"></div>
-                                <div id="fileSize" style="font-size: 0.85rem; color: #6b7280;"></div>
-                            </div>
-                        </div>
-                        <button type="button" onclick="removerArquivo()" style="background: none; border: none; color: #ef4444; cursor: pointer;">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
+                <p>Apoio profissional para vencer o prazo e alcançar a excelência académica em Moçambique.</p>
+                <div class="footer-social">
+                    <a href="#"><i class="fab fa-facebook-f"></i></a>
+                    <a href="#"><i class="fab fa-instagram"></i></a>
+                    <a href="#"><i class="fab fa-whatsapp"></i></a>
+                    <a href="#"><i class="fab fa-linkedin-in"></i></a>
                 </div>
             </div>
             
-            <!-- Instruções adicionais (opcional) -->
-            <div class="form-group">
-                <label for="descricaoDetalhada">Instruções Adicionais (opcional)</label>
-                <textarea id="descricaoDetalhada" rows="3" placeholder="Alguma instrução especial ou detalhe adicional..."></textarea>
+            <div class="footer-section">
+                <h4>Links Rápidos</h4>
+                <ul class="footer-links">
+                    <li><a href="#" onclick="navegarPara('home')">Início</a></li>
+                    <li><a href="#" onclick="navegarPara('planos')">Serviços</a></li>
+                    <li><a href="#" onclick="navegarPara('como-funciona')">Como Funciona</a></li>
+                    <li><a href="#" onclick="navegarPara('contato')">Contato</a></li>
+                </ul>
             </div>
             
-            <div class="form-group">
-                <label for="prazoTrabalhoDetalhe">Prazo de Entrega (obrigatório)</label>
-                <input type="date" id="prazoTrabalhoDetalhe">
+            <div class="footer-section">
+                <h4>Serviços</h4>
+                <ul class="footer-links">
+                    <li><a href="#" onclick="verificarELogar('formatacao', 100)">Formatação de Trabalhos</a></li>
+                    <li><a href="#" onclick="verificarELogar('trabalho-campo', 350)">Trabalho de Campo</a></li>
+                    <li><a href="#" onclick="verificarELogar('monografia', 10000)">Monografia/TCC</a></li>
+                </ul>
             </div>
             
-            <!-- Método de Pagamento (OBRIGATÓRIO) -->
-            <div class="form-group">
-                <label for="metodoPagamentoModal">Método de Pagamento *</label>
-                <select id="metodoPagamentoModal" required>
-                    <option value="">Selecione um método</option>
-                    <option value="mpesa">M-Pesa</option>
-                    <option value="emola">e-Mola</option>
-                    <option value="deposito">Depósito Bancário</option>
-                </select>
+            <div class="footer-section">
+                <h4>Legal</h4>
+                <ul class="footer-links">
+                    <li><a href="#" onclick="mostrarTermos()">Termos de Serviço</a></li>
+                    <li><a href="#" onclick="mostrarPrivacidade()">Política de Privacidade</a></li>
+                    <li><a href="#" onclick="mostrarFAQ()">FAQ</a></li>
+                </ul>
             </div>
-            
-            <!-- Resumo do Serviço -->
-            <div style="background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0; border: 1px solid #e5e7eb;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                    <span>Serviço:</span>
-                    <strong id="nomeServicoModal" style="color: #1e40af; font-size: 1.1rem;">-</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Valor:</span>
-                    <strong style="color: #1e40af; font-size: 1.3rem;" id="valorServicoModal">0 MT</strong>
-                </div>
-            </div>
-            
-            <!-- Termos e Condições -->
-            <div style="background: #f0f9ff; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-size: 0.9rem;">
-                <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
-                    <input type="checkbox" id="aceitarTermos" required style="margin-top: 0.25rem;">
-                    <label for="aceitarTermos" style="color: #4b5563;">
-                        Concordo com os 
-                        <a href="#" onclick="mostrarTermos()" style="color: #3b82f6;">Termos de Serviço</a> 
-                        e confirmo que este arquivo é de minha autoria ou tenho permissão para usá-lo.
-                    </label>
-                </div>
-            </div>
-            
-            <!-- Botões -->
-            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                <button class="btn-secondary" onclick="fecharModalDescricao()" style="flex: 1; padding: 1rem;">
-                    <i class="fas fa-times"></i> Cancelar
-                </button>
-                <button class="btn-primary" id="btnSolicitarServico" onclick="solicitarServicoComArquivo()" style="flex: 1; padding: 1rem;" disabled>
-                    <i class="fas fa-check-circle"></i> Submeter
-                </button>
-            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <p>&copy; 2026 Facilitaki - Todos os direitos reservados.</p>
+            <p class="footer-safe">
+                <i class="fas fa-shield-alt"></i> 100% dentro da legalidade
+            </p>
         </div>
     </div>
+</footer>
 
-    <!-- Modal de Recarga -->
-    <div id="modalRecarga" class="modal">
-        <div class="modal-content">
-            <h3 style="margin-bottom: 1.5rem; color: #1e40af;">
-                <i class="fas fa-plus-circle"></i> Recarregar Saldo
-            </h3>
-            
-            <div class="form-group">
-                <label>Valor (MT)</label>
-                <input type="number" id="valorRecarga" min="50" max="5000" value="300" style="width: 100%;">
-            </div>
-            
-            <div class="form-group">
-                <label>Método de Pagamento</label>
-                <select id="metodoRecarga" style="width: 100%;">
-                    <option value="mpesa">M-Pesa</option>
-                    <option value="emola">e-Mola</option>
-                    <option value="deposito">Depósito Bancário</option>
-                </select>
-            </div>
-            
-            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                <button class="btn-secondary" onclick="fecharRecarga()" style="flex: 1;">
-                    Cancelar
-                </button>
-                <button class="btn-primary" onclick="processarRecarga()" style="flex: 1;">
-                    Confirmar
-                </button>
-            </div>
-        </div>
-    </div>
+<!-- ============================================ -->
+<!-- TOAST NOTIFICATIONS -->
+<!-- ============================================ -->
+<div id="toastContainer" class="toast-container"></div>
 
-    <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
-
-
-
-
-
-
