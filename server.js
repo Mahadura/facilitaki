@@ -7,7 +7,6 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SECRET_KEY = 'facilitaki-secret-key-2025';
