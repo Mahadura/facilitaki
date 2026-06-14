@@ -1123,4 +1123,20 @@ footer {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--primary-600);
-}
+}/* CSS rápido para corrigir Ajuda e Contato */
+.steps-container { max-width: 800px; margin: 0 auto; }
+.step-item { background: white; border-radius: 1rem; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; gap: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+.step-number { width: 50px; height: 50px; background: linear-gradient(135deg, #2563eb, #8b5cf6); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; }
+.step-content h3 { margin-bottom: 0.5rem; }
+.step-content p { color: #6b7280; }
+.contato-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.contato-form { background: white; border-radius: 1.5rem; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+.info-card { background: white; border-radius: 1rem; padding: 1.5rem; text-align: center; margin-bottom: 1.5rem; border: 1px solid #e5e7eb; }
+.info-card i { font-size: 2rem; color: #2563eb; margin-bottom: 1rem; }
+.metodos-pagamento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.metodo-pagamento { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 0.75rem; padding: 1rem; text-align: center; cursor: pointer; }
+.metodo-pagamento.ativo { border-color: #2563eb; background: #eff6ff; }
+.checkout-actions { display: flex; gap: 1rem; margin-top: 1rem; }
+.btn-secondary { background: #e5e7eb; color: #374151; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer; border: none; flex: 1; }
+@media (max-width: 768px) { .contato-grid { grid-template-columns: 1fr; } .metodos-pagamento { grid-template-columns: 1fr; } .step-item { flex-direction: column; text-align: center; } .step-number { margin: 0 auto; } .checkout-actions { flex-direction: column; } }
+
