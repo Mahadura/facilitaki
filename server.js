@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (PAINEL ADMIN SEM MÉTODO DE PAGAMENTO)
+// server.js - Facilitaki Backend (CORRIGIDO - TABELA COMPLETA)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -140,12 +140,13 @@ function validarTelefone(telefone) {
 }
 
 // ============================================
-// INICIALIZAÇÃO DO BANCO
+// INICIALIZAÇÃO DO BANCO - CORRIGIDA
 // ============================================
 async function initDatabase() {
     try {
         console.log('🔧 Inicializando banco...');
         
+        // Criar tabela usuarios
         await pool.query(`
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY,
@@ -158,8 +159,11 @@ async function initDatabase() {
             )
         `);
         
+        // DROP e RECREATE da tabela pedidos para garantir estrutura correta
+        await pool.query(`DROP TABLE IF EXISTS pedidos CASCADE`);
+        
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS pedidos (
+            CREATE TABLE pedidos (
                 id SERIAL PRIMARY KEY,
                 usuario_id INTEGER REFERENCES usuarios(id),
                 cliente VARCHAR(100) NOT NULL,
@@ -188,6 +192,7 @@ async function initDatabase() {
             )
         `);
         
+        // Criar admin padrão
         const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
         if (parseInt(adminCheck.rows[0].count) === 0) {
             const hash = await bcrypt.hash('Admin123!@#', 10);
@@ -206,18 +211,57 @@ async function initDatabase() {
 }
 
 // ============================================
-// ROTA DE REPARAR TABELA
+// ROTA DE REPARAR TABELA - COMPLETA
 // ============================================
 app.get('/admin/reparar-tabela', async (req, res) => {
     try {
-        await pool.query(`
-            ALTER TABLE pedidos 
-            ADD COLUMN IF NOT EXISTS descricao TEXT,
-            ADD COLUMN IF NOT EXISTS tema TEXT,
-            ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS prazo_entrega DATE
+        // Verificar se a tabela pedidos existe
+        const tableCheck = await pool.query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'pedidos'
+            )
         `);
+        
+        if (!tableCheck.rows[0].exists) {
+            // Criar tabela do zero
+            await pool.query(`
+                CREATE TABLE pedidos (
+                    id SERIAL PRIMARY KEY,
+                    usuario_id INTEGER REFERENCES usuarios(id),
+                    cliente VARCHAR(100) NOT NULL,
+                    telefone VARCHAR(100) NOT NULL,
+                    descricao TEXT,
+                    tema TEXT,
+                    plano VARCHAR(50) NOT NULL,
+                    nome_plano VARCHAR(100) NOT NULL,
+                    preco DECIMAL(10,2) NOT NULL,
+                    metodo_pagamento VARCHAR(50) NOT NULL,
+                    arquivo_nome VARCHAR(255),
+                    arquivo_original VARCHAR(255),
+                    prazo_entrega DATE,
+                    status VARCHAR(20) DEFAULT 'pendente',
+                    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+        } else {
+            // Verificar e adicionar colunas faltantes
+            const columns = ['descricao', 'tema', 'arquivo_nome', 'arquivo_original', 'prazo_entrega'];
+            for (const col of columns) {
+                const colCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_name = 'pedidos' AND column_name = $1
+                    )
+                `, [col]);
+                
+                if (!colCheck.rows[0].exists) {
+                    await pool.query(`ALTER TABLE pedidos ADD COLUMN ${col} TEXT`);
+                    console.log(`✅ Coluna ${col} adicionada`);
+                }
+            }
+        }
+        
         res.send(`
             <!DOCTYPE html>
             <html>
@@ -226,12 +270,63 @@ app.get('/admin/reparar-tabela', async (req, res) => {
                 body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
                 .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
                 a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+                .warning{color:#856404;background:#fff3cd;padding:10px;border-radius:5px;margin:10px 0}
             </style>
             </head>
             <body>
                 <div class="card">
                     <h1>✅ TABELA REPARADA!</h1>
-                    <p>Todas as colunas necessárias foram adicionadas.</p>
+                    <p>Todas as colunas foram adicionadas com sucesso.</p>
+                    <div class="warning">⚠️ Se ainda houver erro, acesse: <a href="/admin/reparar-completo">Reparo Completo</a></div>
+                    <a href="/">Voltar ao site</a>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        res.send(`Erro: ${error.message}`);
+    }
+});
+
+// ============================================
+// ROTA DE REPARO COMPLETO - RECRIA A TABELA
+// ============================================
+app.get('/admin/reparar-completo', async (req, res) => {
+    try {
+        await pool.query(`DROP TABLE IF EXISTS pedidos CASCADE`);
+        await pool.query(`
+            CREATE TABLE pedidos (
+                id SERIAL PRIMARY KEY,
+                usuario_id INTEGER REFERENCES usuarios(id),
+                cliente VARCHAR(100) NOT NULL,
+                telefone VARCHAR(100) NOT NULL,
+                descricao TEXT,
+                tema TEXT,
+                plano VARCHAR(50) NOT NULL,
+                nome_plano VARCHAR(100) NOT NULL,
+                preco DECIMAL(10,2) NOT NULL,
+                metodo_pagamento VARCHAR(50) NOT NULL,
+                arquivo_nome VARCHAR(255),
+                arquivo_original VARCHAR(255),
+                prazo_entrega DATE,
+                status VARCHAR(20) DEFAULT 'pendente',
+                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Tabela Recriada</title>
+            <style>
+                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+            </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>✅ TABELA RECRIADA!</h1>
+                    <p>A tabela pedidos foi recriada com todas as colunas.</p>
                     <a href="/">Voltar ao site</a>
                 </div>
             </body>
@@ -697,7 +792,7 @@ app.delete('/admin/api/remover-cliente/:id', authenticateAdmin, async (req, res)
 });
 
 // ============================================
-// ROTA DASHBOARD - SEM MÉTODO DE PAGAMENTO
+// ROTA DASHBOARD
 // ============================================
 app.get('/admin/api/dashboard', authenticateAdmin, async (req, res) => {
     try {
@@ -819,7 +914,7 @@ app.get('/admin/login', (req, res) => {
 });
 
 // ============================================
-// PAINEL ADMIN - SEM MÉTODO DE PAGAMENTO
+// PAINEL ADMIN
 // ============================================
 app.get('/admin/painel', (req, res) => {
     res.send(`
@@ -868,6 +963,7 @@ app.get('/admin/painel', (req, res) => {
             .arquivo-link:hover{text-decoration:underline}
             .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
             .valor-destaque{font-size:1.2rem;color:#2563eb;font-weight:700}
+            .reparo-link{display:inline-block;margin-top:10px;padding:8px 16px;background:#f39c12;color:#fff;border-radius:5px;text-decoration:none;font-size:12px}
         </style>
         </head>
         <body>
@@ -882,7 +978,13 @@ app.get('/admin/painel', (req, res) => {
                 <button class="tab-btn" onclick="showTab('admins')">👑 Administradores</button>
                 <button class="tab-btn" onclick="showTab('contatos')">📬 Contatos</button>
             </div>
-            <div id="tab-pedidos" class="tab-content active"><div id="pedidos-table">Carregando...</div></div>
+            <div id="tab-pedidos" class="tab-content active">
+                <div style="margin-bottom:10px;">
+                    <a href="/admin/reparar-tabela" class="reparo-link">🔧 Reparar Tabela</a>
+                    <a href="/admin/reparar-completo" class="reparo-link" style="background:#e74c3c;">⚠️ Recriar Tabela</a>
+                </div>
+                <div id="pedidos-table">Carregando...</div>
+            </div>
             <div id="tab-usuarios" class="tab-content"><div id="usuarios-table">Carregando...</div></div>
             <div id="tab-admins" class="tab-content">
                 <div class="form-admin">
@@ -937,7 +1039,13 @@ app.get('/admin/painel', (req, res) => {
                         document.getElementById('contatos-table').innerHTML = tableContatos(data.contatos || []);
                         carregarUsuarios();
                         carregarAdmins();
-                    } catch(e) { console.error(e); }
+                    } catch(e) { 
+                        console.error(e);
+                        document.getElementById('pedidos-table').innerHTML = \`
+                            <p style="color:red;">❌ Erro ao carregar pedidos. Clique em <a href="/admin/reparar-tabela">Reparar Tabela</a></p>
+                            <p style="color:#666;font-size:12px;">Erro: \${e.message}</p>
+                        \`;
+                    }
                 }
                 
                 function formatarData(data) {
@@ -1056,9 +1164,6 @@ app.get('/admin/painel', (req, res) => {
                     \`;
                 }
                 
-                // ============================================
-                // DETALHES DO PEDIDO - SEM MÉTODO DE PAGAMENTO
-                // ============================================
                 async function verDetalhes(id) {
                     const modal = document.getElementById('modalDetalhes');
                     const content = document.getElementById('detalhesPedido');
@@ -1073,53 +1178,21 @@ app.get('/admin/painel', (req, res) => {
                         
                         content.innerHTML = \`
                             <table>
-                                <tr>
-                                    <td>🆔 ID do Pedido</td>
-                                    <td><strong>#\${pedido.id}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>👤 Cliente</td>
-                                    <td><strong>\${pedido.cliente}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>📱 WhatsApp</td>
-                                    <td><strong>\${pedido.telefone}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>📋 Serviço</td>
-                                    <td><strong>\${pedido.nome_plano}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>💰 Valor a Pagar</td>
-                                    <td><strong class="valor-destaque">\${parseFloat(pedido.preco||0).toLocaleString('pt-MZ')} MT</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>📝 Descrição do Trabalho</td>
-                                    <td><strong style="white-space:pre-wrap;word-wrap:break-word;">\${pedido.descricao || pedido.tema || 'Não informado'}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>📅 Prazo de Entrega</td>
-                                    <td><strong>\${formatarData(pedido.prazo_entrega) || 'Não definido'}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>📎 Ficheiro do Trabalho</td>
-                                    <td>
-                                        \${pedido.arquivo_nome ? 
-                                            \`<a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">
-                                                📄 \${pedido.arquivo_original || pedido.arquivo_nome}
-                                            </a>\` : 
-                                            '<span style="color:#999;">Nenhum arquivo enviado</span>'
-                                        }
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>📊 Status</td>
-                                    <td>\${getStatusBadge(pedido.status)}</td>
-                                </tr>
-                                <tr>
-                                    <td>📅 Data do Pedido</td>
-                                    <td><strong>\${formatarDataHora(pedido.data_pedido)}</strong></td>
-                                </tr>
+                                <tr><td>🆔 ID do Pedido</td><td><strong>#\${pedido.id}</strong></td></tr>
+                                <tr><td>👤 Cliente</td><td><strong>\${pedido.cliente}</strong></td></tr>
+                                <tr><td>📱 WhatsApp</td><td><strong>\${pedido.telefone}</strong></td></tr>
+                                <tr><td>📋 Serviço</td><td><strong>\${pedido.nome_plano}</strong></td></tr>
+                                <tr><td>💰 Valor a Pagar</td><td><strong class="valor-destaque">\${parseFloat(pedido.preco||0).toLocaleString('pt-MZ')} MT</strong></td></tr>
+                                <tr><td>📝 Descrição do Trabalho</td><td><strong style="white-space:pre-wrap;word-wrap:break-word;">\${pedido.descricao || pedido.tema || 'Não informado'}</strong></td></tr>
+                                <tr><td>📅 Prazo de Entrega</td><td><strong>\${formatarData(pedido.prazo_entrega) || 'Não definido'}</strong></td></tr>
+                                <tr><td>📎 Ficheiro do Trabalho</td><td>
+                                    \${pedido.arquivo_nome ? 
+                                        \`<a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">📄 \${pedido.arquivo_original || pedido.arquivo_nome}</a>\` : 
+                                        '<span style="color:#999;">Nenhum arquivo enviado</span>'
+                                    }
+                                </td></tr>
+                                <tr><td>📊 Status</td><td>\${getStatusBadge(pedido.status)}</td></tr>
+                                <tr><td>📅 Data do Pedido</td><td><strong>\${formatarDataHora(pedido.data_pedido)}</strong></td></tr>
                             </table>
                         \`;
                         modal.classList.add('active');
@@ -1256,6 +1329,8 @@ async function startServer() {
         console.log(`\n✅ Servidor rodando na porta ${PORT}`);
         console.log(`🌐 Site: http://localhost:${PORT}`);
         console.log(`🔐 Admin: http://localhost:${PORT}/admin/login`);
+        console.log(`🔧 Reparar Tabela: http://localhost:${PORT}/admin/reparar-tabela`);
+        console.log(`⚠️ Recriar Tabela: http://localhost:${PORT}/admin/reparar-completo`);
         console.log(`📱 APK disponível em: http://localhost:${PORT}/facilitaki.apk`);
         console.log(`\n👑 Admin padrão: 840000000 / Admin123!@#`);
     });
