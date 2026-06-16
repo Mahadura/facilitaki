@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO CORRIGIDA PARA DEPLOY)
+// server.js - Facilitaki Backend (VERSÃO SIMPLIFICADA PARA DEPLOY)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -7,18 +7,15 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const xss = require('xss');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ============================================
-// CONFIGURAÇÕES DE SEGURANÇA
+// CONFIGURAÇÕES
 // ============================================
-const JWT_SECRET = process.env.SECRET_KEY || 'chave-secreta-facilitaki-2026';
+const JWT_SECRET = process.env.SECRET_KEY || 'chave-secreta-facilitaki';
 
 // ============================================
 // BANCO DE DADOS
@@ -31,87 +28,25 @@ try {
     });
 } catch (error) {
     console.error('❌ Erro ao conectar ao banco:', error.message);
-    // Criar pool vazio para fallback
-    pool = new Pool({
-        connectionString: 'postgresql://localhost:5432/facilitaki',
-    });
+    process.exit(1);
 }
 
 // ============================================
-// MIDDLEWARES DE SEGURANÇA
+// MIDDLEWARES BÁSICOS
 // ============================================
-// Helmet com configurações mais permissivas para deploy
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-            imgSrc: ["'self'", "data:", "https://ui-avatars.com"],
-            connectSrc: ["'self'"],
-        },
-    },
-}));
-
-// CORS mais permissivo para deploy
-app.use(cors({
-    origin: '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Rate limiting com fallback
-let globalLimiter;
-let loginLimiter;
-try {
-    globalLimiter = rateLimit({
-        windowMs: 15 * 60 * 1000,
-        max: 100,
-        message: { success: false, erro: 'Muitas requisições. Tente novamente mais tarde.' }
-    });
-    
-    loginLimiter = rateLimit({
-        windowMs: 15 * 60 * 1000,
-        max: 5,
-        message: { success: false, erro: 'Muitas tentativas de login. Tente novamente em 15 minutos.' }
-    });
-} catch (error) {
-    console.warn('⚠️ Rate limit não configurado:', error.message);
-    // Fallback: middlewares vazios
-    globalLimiter = (req, res, next) => next();
-    loginLimiter = (req, res, next) => next();
-}
-
-// Sanitização de entrada com fallback
-app.use((req, res, next) => {
-    if (req.body) {
-        for (let key in req.body) {
-            if (typeof req.body[key] === 'string') {
-                try {
-                    req.body[key] = xss(req.body[key].trim());
-                } catch (e) {
-                    req.body[key] = req.body[key].trim();
-                }
-            }
-        }
-    }
-    next();
-});
-
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('.'));
 
-// Logger seguro
+// Logger simples
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
 });
 
 // ============================================
-// CONFIGURAÇÃO DO MULTER (UPLOAD)
+// CONFIGURAÇÃO DO MULTER
 // ============================================
 const uploadDir = path.join(__dirname, 'uploads');
 try {
@@ -122,43 +57,34 @@ try {
     console.warn('⚠️ Não foi possível criar diretório uploads:', error.message);
 }
 
-let upload;
-try {
-    const storage = multer.diskStorage({
-        destination: (req, file, cb) => {
-            cb(null, uploadDir);
-        },
-        filename: (req, file, cb) => {
-            const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const ext = path.extname(file.originalname);
-            cb(null, unique + ext);
-        }
-    });
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, unique + ext);
+    }
+});
 
-    upload = multer({
-        storage: storage,
-        limits: { fileSize: 10 * 1024 * 1024 },
-        fileFilter: (req, file, cb) => {
-            const allowed = [
-                'application/pdf',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'text/plain',
-                'application/vnd.ms-excel',
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            ];
-            if (allowed.includes(file.mimetype)) {
-                cb(null, true);
-            } else {
-                cb(new Error('Tipo de arquivo não permitido'), false);
-            }
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowed = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Tipo de arquivo não permitido'), false);
         }
-    });
-} catch (error) {
-    console.warn('⚠️ Multer não configurado:', error.message);
-    // Fallback: upload simples
-    upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-}
+    }
+});
 
 // ============================================
 // FUNÇÕES DE AUTENTICAÇÃO
@@ -176,15 +102,11 @@ const authenticateToken = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ success: false, error: 'Token não fornecido' });
     
-    try {
-        jwt.verify(token, JWT_SECRET, (err, user) => {
-            if (err) return res.status(403).json({ success: false, error: 'Token inválido' });
-            req.user = user;
-            next();
-        });
-    } catch (error) {
-        return res.status(403).json({ success: false, error: 'Token inválido' });
-    }
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ success: false, error: 'Token inválido' });
+        req.user = user;
+        next();
+    });
 };
 
 const authenticateAdmin = async (req, res, next) => {
@@ -315,51 +237,6 @@ async function initDatabase() {
 }
 
 // ============================================
-// ROTA DE EMERGÊNCIA - REPARAR TABELA
-// ============================================
-app.get('/admin/reparar-tabela', async (req, res) => {
-    try {
-        const checkCol = await pool.query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'pedidos' AND column_name = 'tema'
-        `);
-        
-        if (checkCol.rows.length === 0) {
-            await pool.query(`
-                ALTER TABLE pedidos 
-                ADD COLUMN IF NOT EXISTS tema TEXT,
-                ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255),
-                ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255),
-                ADD COLUMN IF NOT EXISTS prazo_entrega DATE
-            `);
-        }
-        
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Tabela Reparada</title>
-            <style>
-                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>✅ TABELA REPARADA!</h1>
-                    <p>Colunas adicionadas: tema, arquivo_nome, arquivo_original, prazo_entrega</p>
-                    <a href="/">Voltar ao site</a>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        res.send(`Erro: ${error.message}`);
-    }
-});
-
-// ============================================
 // ROTAS PÚBLICAS
 // ============================================
 app.get('/status', (req, res) => {
@@ -372,16 +249,13 @@ app.get('/', (req, res) => {
 
 app.get('/facilitaki.apk', (req, res) => {
     const apkPath = path.join(__dirname, 'facilitaki.apk');
-    
     if (!fs.existsSync(apkPath)) {
         return res.status(404).json({ error: 'APK não encontrado' });
     }
-    
     const stats = fs.statSync(apkPath);
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
     res.setHeader('Content-Disposition', 'attachment; filename="facilitaki.apk"');
     res.setHeader('Content-Length', stats.size);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
     res.sendFile(apkPath);
 });
 
@@ -395,15 +269,14 @@ app.get('/api/apk-disponivel', (req, res) => {
         disponivel: true, 
         tamanho: stats.size,
         tamanhoMB: (stats.size / (1024 * 1024)).toFixed(1),
-        versao: '2.0.0',
-        nome: 'facilitaki.apk'
+        versao: '2.0.0'
     });
 });
 
 // ============================================
 // ROTAS DE AUTENTICAÇÃO
 // ============================================
-app.post('/api/login', loginLimiter, async (req, res) => {
+app.post('/api/login', async (req, res) => {
     try {
         const { telefone, senha } = req.body;
         
@@ -533,7 +406,7 @@ app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
 });
 
 // ============================================
-// ROTA DE UPLOAD COMPLETA
+// ROTA DE UPLOAD
 // ============================================
 app.post('/api/pedidos/upload', 
     authenticateToken, 
@@ -557,9 +430,9 @@ app.post('/api/pedidos/upload',
         let arquivoOriginal = null;
         
         if (req.file) {
-            arquivoNome = req.file.filename || req.file.originalname;
+            arquivoNome = req.file.filename;
             arquivoOriginal = req.file.originalname;
-            console.log('📎 Arquivo recebido:', arquivoOriginal);
+            console.log('📎 Arquivo salvo:', arquivoNome);
         }
         
         const result = await pool.query(
@@ -592,9 +465,6 @@ app.post('/api/pedidos/upload',
     }
 });
 
-// ============================================
-// ROTA PARA BAIXAR ARQUIVO DO PEDIDO
-// ============================================
 app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
     try {
         const pedidoId = req.params.id;
@@ -610,9 +480,7 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
         
         const pedido = result.rows[0];
         
-        // Verificar se o usuário é o dono do pedido
         if (pedido.usuario_id !== req.user.id) {
-            // Verificar se é admin
             const adminCheck = await pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.user.id]);
             if (adminCheck.rows.length === 0 || !adminCheck.rows[0].is_admin) {
                 return res.status(403).json({ success: false, erro: 'Acesso negado' });
@@ -837,18 +705,17 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, async (req, res) => {
 });
 
 // ============================================
-// PÁGINA ADMIN LOGIN
+// PÁGINAS ADMIN
 // ============================================
 app.get('/admin/login', (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html>
-        <head><meta charset="UTF-8"><title>Admin Login - Facilitaki</title>
+        <head><meta charset="UTF-8"><title>Admin Login</title>
         <style>
             *{margin:0;padding:0;box-sizing:border-box}
             body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;justify-content:center;align-items:center}
             .container{background:#fff;padding:40px;border-radius:20px;width:400px;text-align:center}
-            h1{color:#333;margin-bottom:10px}
             input{width:100%;padding:12px;margin:10px 0;border:2px solid #ddd;border-radius:10px}
             button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold}
             .error{color:#e74c3c;margin-top:10px}
@@ -862,7 +729,7 @@ app.get('/admin/login', (req, res) => {
                 <input type="password" id="password" placeholder="Senha">
                 <button onclick="login()">Entrar</button>
                 <div id="error" class="error"></div>
-                <div class="info">👑 Admin padrão: 840000000 / Admin123!@#</div>
+                <div class="info">👑 Admin: 840000000 / Admin123!@#</div>
             </div>
             <script>
                 async function login() {
@@ -893,14 +760,11 @@ app.get('/admin/login', (req, res) => {
     `);
 });
 
-// ============================================
-// PÁGINA ADMIN PAINEL
-// ============================================
 app.get('/admin/painel', (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html>
-        <head><meta charset="UTF-8"><title>Admin Painel - Facilitaki</title>
+        <head><meta charset="UTF-8"><title>Admin Painel</title>
         <style>
             *{margin:0;padding:0;box-sizing:border-box}
             body{font-family:Arial;background:#f0f2f5;padding:20px}
@@ -925,23 +789,19 @@ app.get('/admin/painel', (req, res) => {
             .form-admin input{margin:8px 0;padding:10px;border:1px solid #ddd;border-radius:5px;width:100%}
             .alert-success{background:#d4edda;color:#155724;padding:10px;border-radius:5px;margin-top:10px}
             .alert-error{background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-top:10px}
-            .alert-warning{background:#fff3cd;color:#856404;padding:10px;border-radius:5px;margin-bottom:10px}
-            .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
-            .pedido-detalhes-modal.active{display:flex}
-            .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
-            .pedido-detalhes-content table{width:100%;border-collapse:collapse}
-            .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
-            .pedido-detalhes-content td:first-child{font-weight:600;color:#555;width:150px}
-            .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
-            .arquivo-link:hover{text-decoration:underline}
-            .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
             .badge-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.75rem;font-weight:600}
             .badge-status.pendente{background:#fef3c7;color:#92400e}
             .badge-status.pago{background:#dbeafe;color:#1e40af}
             .badge-status.em_andamento{background:#ede9fe;color:#5b21b6}
             .badge-status.concluido{background:#d1fae5;color:#065f46}
-            .btn-ver-detalhes{padding:4px 12px;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px}
-            .btn-ver-detalhes:hover{background:#5a67d8}
+            .btn-ver-detalhes{padding:4px 12px;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer}
+            .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
+            .pedido-detalhes-modal.active{display:flex}
+            .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
+            .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
+            .pedido-detalhes-content td:first-child{font-weight:600;width:150px}
+            .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
+            .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
         </style>
         </head>
         <body>
@@ -1011,9 +871,7 @@ app.get('/admin/painel', (req, res) => {
                         document.getElementById('contatos-table').innerHTML = tableContatos(data.contatos || []);
                         carregarUsuarios();
                         carregarAdmins();
-                    } catch(e) {
-                        console.error('Erro ao carregar dashboard:', e);
-                    }
+                    } catch(e) { console.error(e); }
                 }
                 
                 function formatarData(data) {
@@ -1077,7 +935,7 @@ app.get('/admin/painel', (req, res) => {
                     if(!admins || !admins.length) return '<p>Nenhum admin</p>';
                     const adminIdAtual = parseInt(localStorage.getItem('adminId') || '0');
                     return \`
-                        <p class="alert-warning">⚠️ Administrador ID 1 é protegido</p>
+                        <p style="background:#fff3cd;padding:10px;border-radius:5px;margin-bottom:10px;">⚠️ Administrador ID 1 é protegido</p>
                         <table>
                             <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Data</th><th>Ações</th></tr></thead>
                             <tbody>
@@ -1139,9 +997,7 @@ app.get('/admin/painel', (req, res) => {
                                     <td>Arquivo</td>
                                     <td>
                                         \${pedido.arquivo_nome ? 
-                                            \`<a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">
-                                                📎 \${pedido.arquivo_original || pedido.arquivo_nome}
-                                            </a>\` : 
+                                            \`<a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">📎 \${pedido.arquivo_original || pedido.arquivo_nome}</a>\` : 
                                             '<span style="color:#999;">Nenhum arquivo enviado</span>'
                                         }
                                     </td>
@@ -1282,19 +1138,9 @@ async function startServer() {
         console.log(`\n✅ Servidor rodando na porta ${PORT}`);
         console.log(`🌐 Site: http://localhost:${PORT}`);
         console.log(`🔐 Admin: http://localhost:${PORT}/admin/login`);
-        console.log(`🔧 Reparar Tabela: http://localhost:${PORT}/admin/reparar-tabela`);
         console.log(`📱 APK disponível em: http://localhost:${PORT}/facilitaki.apk`);
         console.log(`\n👑 Admin padrão: 840000000 / Admin123!@#`);
     });
 }
-
-// Tratamento de erros não capturados
-process.on('uncaughtException', (error) => {
-    console.error('❌ Erro não capturado:', error);
-});
-
-process.on('unhandledRejection', (error) => {
-    console.error('❌ Promessa rejeitada não tratada:', error);
-});
 
 startServer();
