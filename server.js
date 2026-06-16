@@ -1,29 +1,29 @@
-// script.js - FACILITAKI (CORRIGIDO APENAS A LÓGICA DOS BOTÕES DE SERVIÇO)
+// script.js - FACILITAKI (VERSÃO COMPATÍVEL COM DEPLOY)
 // ============================================
 // FACILITAKI - SCRIPT COMPLETO V2.0
 // ============================================
 
-let usuarioLogado = null;
-let carrinho = {
+var usuarioLogado = null;
+var carrinho = {
     plano: null,
     nomePlano: '',
     preco: 0,
     metodoPagamento: null
 };
-let pedidosOriginais = [];
-let uploadArquivoSelecionado = null;
-let uploadMetodoSelecionado = null;
+var pedidosOriginais = [];
+var uploadArquivoSelecionado = null;
+var uploadMetodoSelecionado = null;
 
-const API_URL = '';
+var API_URL = '';
 
 // ============================================
 // INICIALIZAÇÃO
 // ============================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Facilitaki inicializado');
     
-    const usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
-    const tokenSalvo = localStorage.getItem('token_facilitaki');
+    var usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
+    var tokenSalvo = localStorage.getItem('token_facilitaki');
     
     if (usuarioSalvo && tokenSalvo) {
         try {
@@ -38,28 +38,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Menu mobile
-    const mobileBtn = document.getElementById('mobileMenuBtn');
-    const navMenu = document.getElementById('navMenu');
+    var mobileBtn = document.getElementById('mobileMenuBtn');
+    var navMenu = document.getElementById('navMenu');
     if (mobileBtn) {
-        mobileBtn.addEventListener('click', () => {
+        mobileBtn.addEventListener('click', function() {
             navMenu.classList.toggle('active');
         });
     }
     
     // Animações
-    const observerOptions = { threshold: 0.1 };
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
+    var observerOptions = { threshold: 0.1 };
+    var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
             if (entry.isIntersecting) {
                 entry.target.classList.add('active');
             }
         });
     }, observerOptions);
-    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+    document.querySelectorAll('.reveal').forEach(function(el) {
+        observer.observe(el);
+    });
     
     // Header scroll
-    window.addEventListener('scroll', () => {
-        const header = document.getElementById('mainHeader');
+    window.addEventListener('scroll', function() {
+        var header = document.getElementById('mainHeader');
         if (window.scrollY > 50) {
             header.classList.add('scrolled');
         } else {
@@ -68,13 +70,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Estatísticas animadas
-    const statNumbers = document.querySelectorAll('.stat-number');
-    statNumbers.forEach(stat => {
-        const target = parseInt(stat.dataset.target);
+    var statNumbers = document.querySelectorAll('.stat-number');
+    statNumbers.forEach(function(stat) {
+        var target = parseInt(stat.dataset.target);
         if (target) {
-            let current = 0;
-            const increment = target / 50;
-            const timer = setInterval(() => {
+            var current = 0;
+            var increment = target / 50;
+            var timer = setInterval(function() {
                 current += increment;
                 if (current >= target) {
                     stat.textContent = target;
@@ -87,15 +89,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Tabs do dashboard
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tabId = btn.dataset.tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var tabId = btn.dataset.tab;
+            document.querySelectorAll('.tab-btn').forEach(function(b) {
+                b.classList.remove('active');
+            });
             btn.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(content => {
+            document.querySelectorAll('.tab-content').forEach(function(content) {
                 content.classList.remove('active');
             });
-            const targetTab = document.getElementById(`tab-${tabId}`);
+            var targetTab = document.getElementById('tab-' + tabId);
             if (targetTab) targetTab.classList.add('active');
             
             if (tabId === 'pedidos') carregarPedidos();
@@ -105,14 +109,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Filtros
-    const searchInput = document.getElementById('searchPedido');
-    const statusFilter = document.getElementById('filtroStatus');
-    if (searchInput) searchInput.addEventListener('input', () => aplicarFiltros());
-    if (statusFilter) statusFilter.addEventListener('change', () => aplicarFiltros());
+    var searchInput = document.getElementById('searchPedido');
+    var statusFilter = document.getElementById('filtroStatus');
+    if (searchInput) searchInput.addEventListener('input', function() { aplicarFiltros(); });
+    if (statusFilter) statusFilter.addEventListener('change', function() { aplicarFiltros(); });
     
     // Upload
-    const uploadDescricao = document.getElementById('uploadDescricao');
-    const uploadTermos = document.getElementById('uploadTermos');
+    var uploadDescricao = document.getElementById('uploadDescricao');
+    var uploadTermos = document.getElementById('uploadTermos');
     if (uploadDescricao) uploadDescricao.addEventListener('input', verificarHabilitarBotaoUpload);
     if (uploadTermos) uploadTermos.addEventListener('change', verificarHabilitarBotaoUpload);
 });
@@ -121,19 +125,19 @@ document.addEventListener('DOMContentLoaded', () => {
 // NAVEGAÇÃO
 // ============================================
 function navegarPara(sectionId) {
-    document.querySelectorAll('.section').forEach(section => {
+    document.querySelectorAll('.section').forEach(function(section) {
         section.classList.remove('active');
     });
     
-    document.querySelectorAll('.nav-link').forEach(link => {
+    document.querySelectorAll('.nav-link').forEach(function(link) {
         link.classList.remove('active');
     });
     
-    const section = document.getElementById(sectionId);
+    var section = document.getElementById(sectionId);
     if (section) {
         section.classList.add('active');
         
-        const navLink = document.querySelector(`[onclick*="${sectionId}"]`);
+        var navLink = document.querySelector('[onclick*="' + sectionId + '"]');
         if (navLink && navLink.classList.contains('nav-link')) {
             navLink.classList.add('active');
         }
@@ -143,9 +147,9 @@ function navegarPara(sectionId) {
             carregarDadosFinanceiros();
             carregarPerfilUsuario();
             // Garantir que a aba "Novo Pedido" seja a padrão quando vier dos serviços
-            const tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
+            var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
             if (tabUpload && sessionStorage.getItem('servico_selecionado')) {
-                setTimeout(() => {
+                setTimeout(function() {
                     tabUpload.click();
                     sessionStorage.removeItem('servico_selecionado');
                 }, 300);
@@ -155,7 +159,7 @@ function navegarPara(sectionId) {
         if (sectionId === 'pagamento-sucesso' && carrinho.plano) mostrarInstrucoesPagamento();
     }
     
-    const navMenu = document.getElementById('navMenu');
+    var navMenu = document.getElementById('navMenu');
     if (navMenu && navMenu.classList.contains('active')) {
         navMenu.classList.remove('active');
     }
@@ -167,47 +171,49 @@ function navegarPara(sectionId) {
 // AUTENTICAÇÃO
 // ============================================
 function atualizarHeaderLogado() {
-    const btnHeader = document.getElementById('btnLoginHeader');
+    var btnHeader = document.getElementById('btnLoginHeader');
     if (btnHeader && usuarioLogado) {
         btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
         btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
     }
 }
 
-function mostrarToast(mensagem, tipo = 'info') {
-    const container = document.getElementById('toastContainer');
+function mostrarToast(mensagem, tipo) {
+    if (tipo === undefined) tipo = 'info';
+    var container = document.getElementById('toastContainer');
     if (!container) return;
     
-    const toast = document.createElement('div');
-    toast.className = `toast ${tipo}`;
-    const icon = tipo === 'success' ? 'fa-check-circle' : tipo === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
-    toast.innerHTML = `<i class="fas ${icon}"></i><span class="toast-message">${mensagem}</span><button class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>`;
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + tipo;
+    var icon = tipo === 'success' ? 'fa-check-circle' : tipo === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+    toast.innerHTML = '<i class="fas ' + icon + '"></i><span class="toast-message">' + mensagem + '</span><button class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>';
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 5000);
+    setTimeout(function() { toast.remove(); }, 5000);
 }
 
-function mostrarLoading(mensagem = 'Carregando...') {
-    let loading = document.getElementById('globalLoading');
+function mostrarLoading(mensagem) {
+    if (mensagem === undefined) mensagem = 'Carregando...';
+    var loading = document.getElementById('globalLoading');
     if (loading) loading.remove();
     
     loading = document.createElement('div');
     loading.id = 'globalLoading';
     loading.className = 'global-loading';
-    loading.innerHTML = `<div class="loading-content"><div class="spinner"></div><p>${mensagem}</p></div>`;
+    loading.innerHTML = '<div class="loading-content"><div class="spinner"></div><p>' + mensagem + '</p></div>';
     document.body.appendChild(loading);
 }
 
 function fecharLoading() {
-    const loading = document.getElementById('globalLoading');
+    var loading = document.getElementById('globalLoading');
     if (loading) loading.remove();
 }
 
 // ============================================
 // LOGIN E CADASTRO - CORRIGIDO
 // ============================================
-async function fazerLogin() {
-    const telefone = document.getElementById('loginTelefone')?.value.trim();
-    const senha = document.getElementById('loginSenha')?.value;
+function fazerLogin() {
+    var telefone = document.getElementById('loginTelefone')?.value.trim();
+    var senha = document.getElementById('loginSenha')?.value;
     
     if (!telefone || !senha) {
         mostrarToast('Preencha todos os campos', 'error');
@@ -216,15 +222,14 @@ async function fazerLogin() {
     
     mostrarLoading('Entrando...');
     
-    try {
-        const response = await fetch(`${API_URL}/api/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telefone, senha })
-        });
-        
-        const data = await response.json();
-        
+    fetch(API_URL + '/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: telefone, senha: senha })
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        fecharLoading();
         if (data.success) {
             usuarioLogado = data.usuario;
             localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
@@ -233,40 +238,38 @@ async function fazerLogin() {
             mostrarToast('Login realizado com sucesso!', 'success');
             
             // Verificar se veio de um serviço
-            const servicoSelecionado = sessionStorage.getItem('servico_selecionado');
-            const precoSelecionado = sessionStorage.getItem('preco_selecionado');
+            var servicoSelecionado = sessionStorage.getItem('servico_selecionado');
+            var precoSelecionado = sessionStorage.getItem('preco_selecionado');
             
             if (servicoSelecionado && precoSelecionado) {
-                // Limpar e redirecionar para o dashboard com a aba de upload
                 sessionStorage.removeItem('servico_selecionado');
                 sessionStorage.removeItem('preco_selecionado');
-                setTimeout(() => {
+                setTimeout(function() {
                     navegarPara('dashboard');
-                    // Clicar na aba "Novo Pedido" após carregar
-                    setTimeout(() => {
-                        const tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
+                    setTimeout(function() {
+                        var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
                         if (tabUpload) tabUpload.click();
                     }, 500);
                 }, 1000);
             } else {
-                setTimeout(() => navegarPara('dashboard'), 1000);
+                setTimeout(function() { navegarPara('dashboard'); }, 1000);
             }
         } else {
             mostrarToast(data.erro || 'Credenciais inválidas', 'error');
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
+        fecharLoading();
         console.error('Erro no login:', error);
         mostrarToast('Erro de conexão', 'error');
-    }
-    
-    fecharLoading();
+    });
 }
 
-async function fazerCadastro() {
-    const nome = document.getElementById('cadastroNome')?.value.trim();
-    const telefone = document.getElementById('cadastroTelefone')?.value.trim();
-    const senha = document.getElementById('cadastroSenha')?.value;
-    const confirmar = document.getElementById('cadastroSenhaConfirm')?.value;
+function fazerCadastro() {
+    var nome = document.getElementById('cadastroNome')?.value.trim();
+    var telefone = document.getElementById('cadastroTelefone')?.value.trim();
+    var senha = document.getElementById('cadastroSenha')?.value;
+    var confirmar = document.getElementById('cadastroSenhaConfirm')?.value;
     
     if (!nome || !telefone || !senha || !confirmar) {
         mostrarToast('Preencha todos os campos', 'error');
@@ -285,15 +288,14 @@ async function fazerCadastro() {
     
     mostrarLoading('Cadastrando...');
     
-    try {
-        const response = await fetch(`${API_URL}/api/cadastrar`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nome, telefone, senha })
-        });
-        
-        const data = await response.json();
-        
+    fetch(API_URL + '/api/cadastrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nome, telefone: telefone, senha: senha })
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        fecharLoading();
         if (data.success) {
             usuarioLogado = data.usuario;
             localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
@@ -301,32 +303,31 @@ async function fazerCadastro() {
             atualizarHeaderLogado();
             mostrarToast('Cadastro realizado com sucesso!', 'success');
             
-            // Verificar se veio de um serviço
-            const servicoSelecionado = sessionStorage.getItem('servico_selecionado');
-            const precoSelecionado = sessionStorage.getItem('preco_selecionado');
+            var servicoSelecionado = sessionStorage.getItem('servico_selecionado');
+            var precoSelecionado = sessionStorage.getItem('preco_selecionado');
             
             if (servicoSelecionado && precoSelecionado) {
                 sessionStorage.removeItem('servico_selecionado');
                 sessionStorage.removeItem('preco_selecionado');
-                setTimeout(() => {
+                setTimeout(function() {
                     navegarPara('dashboard');
-                    setTimeout(() => {
-                        const tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
+                    setTimeout(function() {
+                        var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
                         if (tabUpload) tabUpload.click();
                     }, 500);
                 }, 1000);
             } else {
-                setTimeout(() => navegarPara('dashboard'), 1000);
+                setTimeout(function() { navegarPara('dashboard'); }, 1000);
             }
         } else {
             mostrarToast(data.erro || 'Erro ao cadastrar', 'error');
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
+        fecharLoading();
         console.error('Erro no cadastro:', error);
         mostrarToast('Erro de conexão', 'error');
-    }
-    
-    fecharLoading();
+    });
 }
 
 function fazerLogout() {
@@ -339,15 +340,15 @@ function fazerLogout() {
 }
 
 function mostrarCadastro() {
-    const formLogin = document.getElementById('formLogin');
-    const formCadastro = document.getElementById('formCadastro');
+    var formLogin = document.getElementById('formLogin');
+    var formCadastro = document.getElementById('formCadastro');
     if (formLogin) formLogin.style.display = 'none';
     if (formCadastro) formCadastro.style.display = 'block';
 }
 
 function mostrarLogin() {
-    const formLogin = document.getElementById('formLogin');
-    const formCadastro = document.getElementById('formCadastro');
+    var formLogin = document.getElementById('formLogin');
+    var formCadastro = document.getElementById('formCadastro');
     if (formCadastro) formCadastro.style.display = 'none';
     if (formLogin) formLogin.style.display = 'block';
 }
@@ -356,24 +357,20 @@ function mostrarLogin() {
 // BOTÕES DE SERVIÇO - CORRIGIDO
 // ============================================
 function verificarELogar(tipo, preco) {
-    // Verificar se o usuário está logado
-    const tokenSalvo = localStorage.getItem('token_facilitaki');
-    const usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
+    var tokenSalvo = localStorage.getItem('token_facilitaki');
+    var usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
     
     if (tokenSalvo && usuarioSalvo) {
         try {
             usuarioLogado = JSON.parse(usuarioSalvo);
-            // Usuário logado - vai direto para o dashboard com a aba de upload
             selecionarPlano(tipo, preco);
         } catch (e) {
-            // Erro ao parsear - fazer login
             sessionStorage.setItem('servico_selecionado', tipo);
             sessionStorage.setItem('preco_selecionado', preco);
             mostrarToast('Faça login para continuar', 'info');
             navegarPara('login');
         }
     } else {
-        // Usuário NÃO logado - salvar serviço e redirecionar para login
         sessionStorage.setItem('servico_selecionado', tipo);
         sessionStorage.setItem('preco_selecionado', preco);
         mostrarToast('Faça login ou cadastre-se para continuar', 'info');
@@ -382,29 +379,26 @@ function verificarELogar(tipo, preco) {
 }
 
 function selecionarPlano(tipo, preco) {
-    const planos = {
+    var planos = {
         'formatacao': { nome: 'Formatação de trabalhos', preco: 100 },
         'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 },
         'monografia': { nome: 'Monografia/TCC', preco: 10000 }
     };
-    const plano = planos[tipo] || { nome: 'Serviço', preco: parseFloat(preco) };
+    var plano = planos[tipo] || { nome: 'Serviço', preco: parseFloat(preco) };
     carrinho = { plano: tipo, nomePlano: plano.nome, preco: plano.preco, metodoPagamento: null };
     
-    // Redirecionar para o dashboard e abrir a aba de upload
     navegarPara('dashboard');
     
-    // Aguardar o DOM carregar e clicar na aba "Novo Pedido"
-    setTimeout(() => {
-        const tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
+    setTimeout(function() {
+        var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
         if (tabUpload) {
             tabUpload.click();
-            // Preencher o serviço selecionado automaticamente
-            const selectServico = document.getElementById('uploadServico');
+            var selectServico = document.getElementById('uploadServico');
             if (selectServico) {
                 selectServico.value = tipo;
                 atualizarPrecoUpload();
             }
-            mostrarToast(`Serviço selecionado: ${plano.nome}`, 'success');
+            mostrarToast('Serviço selecionado: ' + plano.nome, 'success');
         }
     }, 500);
 }
@@ -413,30 +407,32 @@ function selecionarPlano(tipo, preco) {
 // CHECKOUT
 // ============================================
 function selecionarMetodo(metodo) {
-    document.querySelectorAll('.metodo-pagamento').forEach(btn => btn.classList.remove('ativo'));
-    const btnSelecionado = document.querySelector(`[data-metodo="${metodo}"]`);
+    document.querySelectorAll('.metodo-pagamento').forEach(function(btn) {
+        btn.classList.remove('ativo');
+    });
+    var btnSelecionado = document.querySelector('[data-metodo="' + metodo + '"]');
     if (btnSelecionado) btnSelecionado.classList.add('ativo');
     carrinho.metodoPagamento = metodo;
-    const btnFinalizar = document.getElementById('btnFinalizarCompra');
+    var btnFinalizar = document.getElementById('btnFinalizarCompra');
     if (btnFinalizar) btnFinalizar.disabled = false;
 }
 
 function atualizarResumoPedido() {
-    const resumoDiv = document.getElementById('resumoPedido');
+    var resumoDiv = document.getElementById('resumoPedido');
     if (!resumoDiv) return;
     
     if (carrinho.plano && carrinho.preco > 0) {
-        resumoDiv.innerHTML = `<div class="servico-resumo">
-            <div class="resumo-item"><span>Serviço:</span><strong>${carrinho.nomePlano}</strong></div>
-            <div class="resumo-item"><span>Valor Total:</span><strong>${carrinho.preco.toLocaleString('pt-MZ')} MT</strong></div>
-            <div class="resumo-item"><span>Entrada (50%):</span><strong>${Math.ceil(carrinho.preco * 0.5).toLocaleString('pt-MZ')} MT</strong></div>
-        </div>`;
+        resumoDiv.innerHTML = '<div class="servico-resumo">' +
+            '<div class="resumo-item"><span>Serviço:</span><strong>' + carrinho.nomePlano + '</strong></div>' +
+            '<div class="resumo-item"><span>Valor Total:</span><strong>' + carrinho.preco.toLocaleString('pt-MZ') + ' MT</strong></div>' +
+            '<div class="resumo-item"><span>Entrada (50%):</span><strong>' + Math.ceil(carrinho.preco * 0.5).toLocaleString('pt-MZ') + ' MT</strong></div>' +
+        '</div>';
     } else {
-        resumoDiv.innerHTML = `<div class="empty-state">
-            <i class="fas fa-shopping-cart"></i>
-            <p>Nenhum serviço selecionado</p>
-            <button class="btn-link" onclick="navegarPara('planos')">Escolher Serviço</button>
-        </div>`;
+        resumoDiv.innerHTML = '<div class="empty-state">' +
+            '<i class="fas fa-shopping-cart"></i>' +
+            '<p>Nenhum serviço selecionado</p>' +
+            '<button class="btn-link" onclick="navegarPara(\'planos\')">Escolher Serviço</button>' +
+        '</div>';
     }
 }
 
@@ -458,112 +454,116 @@ function finalizarCompra() {
 }
 
 function mostrarInstrucoesPagamento() {
-    const valorTotal = carrinho.preco;
-    const valorEntrada = Math.ceil(valorTotal * 0.5);
-    let instrucoes = '';
+    var valorTotal = carrinho.preco;
+    var valorEntrada = Math.ceil(valorTotal * 0.5);
+    var instrucoes = '';
     
     switch(carrinho.metodoPagamento) {
         case 'mpesa':
-            instrucoes = `<div class="instrucoes-pagamento-box">
-                <h4><i class="fab fa-m-pesa"></i> M-Pesa</h4>
-                <ol>
-                    <li>Acesse M-Pesa</li>
-                    <li>Selecione "Transferir Dinheiro"</li>
-                    <li>Digite o número: <strong>84 728 6665</strong></li>
-                    <li>Valor: <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong></li>
-                    <li>Nome: <strong>Aguinaldo Anli</strong></li>
-                </ol>
-                <div class="alerta">
-                    <i class="fas fa-info-circle"></i>
-                    Envie o comprovativo para WhatsApp: <strong>86 728 6665</strong>
-                </div>
-            </div>`;
+            instrucoes = '<div class="instrucoes-pagamento-box">' +
+                '<h4><i class="fab fa-m-pesa"></i> M-Pesa</h4>' +
+                '<ol>' +
+                    '<li>Acesse M-Pesa</li>' +
+                    '<li>Selecione "Transferir Dinheiro"</li>' +
+                    '<li>Digite o número: <strong>84 728 6665</strong></li>' +
+                    '<li>Valor: <strong>' + valorEntrada.toLocaleString('pt-MZ') + ' MT</strong></li>' +
+                    '<li>Nome: <strong>Aguinaldo Anli</strong></li>' +
+                '</ol>' +
+                '<div class="alerta">' +
+                    '<i class="fas fa-info-circle"></i>' +
+                    'Envie o comprovativo para WhatsApp: <strong>86 728 6665</strong>' +
+                '</div>' +
+            '</div>';
             break;
         case 'emola':
-            instrucoes = `<div class="instrucoes-pagamento-box">
-                <h4><i class="fas fa-wallet"></i> e-Mola</h4>
-                <ol>
-                    <li>Acesse e-Mola</li>
-                    <li>Selecione "Transferir"</li>
-                    <li>Digite o número: <strong>86 728 6665</strong></li>
-                    <li>Valor: <strong>${valorEntrada.toLocaleString('pt-MZ')} MT</strong></li>
-                    <li>Nome: <strong>Aguinaldo Anli Mahadura</strong></li>
-                </ol>
-            </div>`;
+            instrucoes = '<div class="instrucoes-pagamento-box">' +
+                '<h4><i class="fas fa-wallet"></i> e-Mola</h4>' +
+                '<ol>' +
+                    '<li>Acesse e-Mola</li>' +
+                    '<li>Selecione "Transferir"</li>' +
+                    '<li>Digite o número: <strong>86 728 6665</strong></li>' +
+                    '<li>Valor: <strong>' + valorEntrada.toLocaleString('pt-MZ') + ' MT</strong></li>' +
+                    '<li>Nome: <strong>Aguinaldo Anli Mahadura</strong></li>' +
+                '</ol>' +
+            '</div>';
             break;
         case 'deposito':
-            instrucoes = `<div class="instrucoes-pagamento-box">
-                <h4><i class="fas fa-university"></i> Depósito Bancário</h4>
-                <p><strong>Banco:</strong> MOZABANCO</p>
-                <p><strong>NIB:</strong> 00340000358480311018</p>
-                <p><strong>Nome:</strong> Aguinaldo Anli Mahadura</p>
-                <p><strong>Valor:</strong> ${valorEntrada.toLocaleString('pt-MZ')} MT</p>
-            </div>`;
+            instrucoes = '<div class="instrucoes-pagamento-box">' +
+                '<h4><i class="fas fa-university"></i> Depósito Bancário</h4>' +
+                '<p><strong>Banco:</strong> MOZABANCO</p>' +
+                '<p><strong>NIB:</strong> 00340000358480311018</p>' +
+                '<p><strong>Nome:</strong> Aguinaldo Anli Mahadura</p>' +
+                '<p><strong>Valor:</strong> ' + valorEntrada.toLocaleString('pt-MZ') + ' MT</p>' +
+            '</div>';
             break;
     }
     
-    const instrucoesDiv = document.getElementById('instrucoesDetalhadas');
-    const resumoDiv = document.getElementById('resumoPagamento');
+    var instrucoesDiv = document.getElementById('instrucoesDetalhadas');
+    var resumoDiv = document.getElementById('resumoPagamento');
     
     if (instrucoesDiv) instrucoesDiv.innerHTML = instrucoes;
     if (resumoDiv) {
-        resumoDiv.innerHTML = `<div class="servico-resumo">
-            <div class="resumo-item"><span>Serviço:</span><strong>${carrinho.nomePlano}</strong></div>
-            <div class="resumo-item"><span>Valor Total:</span><strong>${valorTotal.toLocaleString('pt-MZ')} MT</strong></div>
-            <div class="resumo-item"><span>Entrada (50%):</span><strong style="color:var(--success-600);">${valorEntrada.toLocaleString('pt-MZ')} MT</strong></div>
-            <div class="resumo-item"><span>Método:</span><strong>${carrinho.metodoPagamento.toUpperCase()}</strong></div>
-        </div>`;
+        resumoDiv.innerHTML = '<div class="servico-resumo">' +
+            '<div class="resumo-item"><span>Serviço:</span><strong>' + carrinho.nomePlano + '</strong></div>' +
+            '<div class="resumo-item"><span>Valor Total:</span><strong>' + valorTotal.toLocaleString('pt-MZ') + ' MT</strong></div>' +
+            '<div class="resumo-item"><span>Entrada (50%):</span><strong style="color:var(--success-600);">' + valorEntrada.toLocaleString('pt-MZ') + ' MT</strong></div>' +
+            '<div class="resumo-item"><span>Método:</span><strong>' + carrinho.metodoPagamento.toUpperCase() + '</strong></div>' +
+        '</div>';
     }
 }
 
 // ============================================
 // DASHBOARD - PERFIL
 // ============================================
-async function carregarPerfilUsuario() {
-    const token = localStorage.getItem('token_facilitaki');
+function carregarPerfilUsuario() {
+    var token = localStorage.getItem('token_facilitaki');
     if (!token) return;
     
-    try {
-        const response = await fetch('/api/perfil', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
+    fetch('/api/perfil', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(response) {
         if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.usuario) {
-                const welcomeName = document.getElementById('welcomeUserName');
-                if (welcomeName) {
-                    welcomeName.innerHTML = `Olá, ${data.usuario.nome.split(' ')[0]}! 👋`;
-                }
-                
-                const perfilNome = document.getElementById('perfilNome');
-                const perfilNomeCompleto = document.getElementById('perfilNomeCompleto');
-                const perfilTelefone = document.getElementById('perfilTelefone');
-                const perfilEmail = document.getElementById('perfilEmail');
-                
-                if (perfilNome) perfilNome.textContent = data.usuario.nome;
-                if (perfilNomeCompleto) perfilNomeCompleto.value = data.usuario.nome;
-                if (perfilTelefone) perfilTelefone.value = data.usuario.telefone;
-                if (perfilEmail) perfilEmail.value = data.usuario.email || '';
-                
-                const avatarImg = document.querySelector('.user-avatar img');
-                if (avatarImg) {
-                    avatarImg.src = `https://ui-avatars.com/api/?background=2563eb&color=fff&name=${encodeURIComponent(data.usuario.nome)}`;
-                }
-                
-                const usuarioSalvo = JSON.parse(localStorage.getItem('usuarioLogado_facilitaki') || '{}');
-                usuarioSalvo.nome = data.usuario.nome;
-                localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioSalvo));
-            }
+            return response.json();
         }
-    } catch (error) {
+        return null;
+    })
+    .then(function(data) {
+        if (data && data.success && data.usuario) {
+            var welcomeName = document.getElementById('welcomeUserName');
+            if (welcomeName) {
+                var nomeParts = data.usuario.nome.split(' ');
+                welcomeName.innerHTML = 'Olá, ' + nomeParts[0] + '! 👋';
+            }
+            
+            var perfilNome = document.getElementById('perfilNome');
+            var perfilNomeCompleto = document.getElementById('perfilNomeCompleto');
+            var perfilTelefone = document.getElementById('perfilTelefone');
+            var perfilEmail = document.getElementById('perfilEmail');
+            
+            if (perfilNome) perfilNome.textContent = data.usuario.nome;
+            if (perfilNomeCompleto) perfilNomeCompleto.value = data.usuario.nome;
+            if (perfilTelefone) perfilTelefone.value = data.usuario.telefone;
+            if (perfilEmail) perfilEmail.value = data.usuario.email || '';
+            
+            var avatarImg = document.querySelector('.user-avatar img');
+            if (avatarImg) {
+                avatarImg.src = 'https://ui-avatars.com/api/?background=2563eb&color=fff&name=' + encodeURIComponent(data.usuario.nome);
+            }
+            
+            var usuarioSalvo = JSON.parse(localStorage.getItem('usuarioLogado_facilitaki') || '{}');
+            usuarioSalvo.nome = data.usuario.nome;
+            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioSalvo));
+        }
+    })
+    .catch(function(error) {
         console.error('Erro ao carregar perfil:', error);
-    }
+    });
 }
 
 function salvarPerfil() {
-    const nome = document.getElementById('perfilNomeCompleto')?.value;
-    const email = document.getElementById('perfilEmail')?.value;
+    var nome = document.getElementById('perfilNomeCompleto')?.value;
+    var email = document.getElementById('perfilEmail')?.value;
     
     if (usuarioLogado && nome) {
         usuarioLogado.nome = nome;
@@ -588,42 +588,47 @@ function abrirNotificacoes() {
 }
 
 function abrirConfiguracoes() {
-    const perfilTab = document.querySelector('.tab-btn[data-tab="perfil"]');
+    var perfilTab = document.querySelector('.tab-btn[data-tab="perfil"]');
     if (perfilTab) perfilTab.click();
 }
 
 // ============================================
 // DASHBOARD - PEDIDOS
 // ============================================
-async function carregarPedidos() {
-    try {
-        const token = localStorage.getItem('token_facilitaki');
-        if (!token) return;
-        
-        const response = await fetch(`${API_URL}/api/meus-pedidos`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
+function carregarPedidos() {
+    var token = localStorage.getItem('token_facilitaki');
+    if (!token) return;
+    
+    fetch(API_URL + '/api/meus-pedidos', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(response) {
         if (response.ok) {
-            const data = await response.json();
+            return response.json();
+        }
+        return null;
+    })
+    .then(function(data) {
+        if (data) {
             pedidosOriginais = data.pedidos || [];
             aplicarFiltros();
             atualizarMetricas();
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
         console.error('Erro ao carregar pedidos:', error);
-    }
+    });
 }
 
 function aplicarFiltros() {
-    const searchTerm = document.getElementById('searchPedido')?.value.toLowerCase() || '';
-    const statusFilter = document.getElementById('filtroStatus')?.value || 'todos';
+    var searchTerm = document.getElementById('searchPedido')?.value.toLowerCase() || '';
+    var statusFilter = document.getElementById('filtroStatus')?.value || 'todos';
     
-    const filtrados = pedidosOriginais.filter(pedido => {
-        const matchSearch = (pedido.nome_plano || '').toLowerCase().includes(searchTerm) || 
+    var filtrados = pedidosOriginais.filter(function(pedido) {
+        var matchSearch = (pedido.nome_plano || '').toLowerCase().includes(searchTerm) || 
                            (pedido.descricao || '').toLowerCase().includes(searchTerm) ||
                            (pedido.tema || '').toLowerCase().includes(searchTerm);
-        const matchStatus = statusFilter === 'todos' || pedido.status === statusFilter;
+        var matchStatus = statusFilter === 'todos' || pedido.status === statusFilter;
         return matchSearch && matchStatus;
     });
     
@@ -631,23 +636,24 @@ function aplicarFiltros() {
 }
 
 function renderizarPedidos(pedidos) {
-    const container = document.getElementById('listaPedidos');
+    var container = document.getElementById('listaPedidos');
     if (!container) return;
     
     if (pedidos.length === 0) {
-        container.innerHTML = `<div class="empty-state">
-            <i class="fas fa-inbox"></i>
-            <p>Nenhum pedido encontrado</p>
-            <button class="btn-primary" onclick="document.querySelector('.tab-btn[data-tab=\"upload\"]').click()">
-                Solicitar Serviço
-            </button>
-        </div>`;
+        container.innerHTML = '<div class="empty-state">' +
+            '<i class="fas fa-inbox"></i>' +
+            '<p>Nenhum pedido encontrado</p>' +
+            '<button class="btn-primary" onclick="document.querySelector(\'.tab-btn[data-tab=\\"upload\\"]\').click()">' +
+                'Solicitar Serviço' +
+            '</button>' +
+        '</div>';
         return;
     }
     
-    container.innerHTML = pedidos.map(pedido => {
-        let statusClass = 'pendente';
-        let statusText = 'Pendente';
+    var html = '';
+    pedidos.forEach(function(pedido) {
+        var statusClass = 'pendente';
+        var statusText = 'Pendente';
         
         switch(pedido.status) {
             case 'pendente': statusClass = 'pendente'; statusText = 'Pendente'; break;
@@ -657,32 +663,34 @@ function renderizarPedidos(pedidos) {
             default: statusClass = 'pendente'; statusText = pedido.status;
         }
         
-        return `<div class="pedido-card">
-            <div class="pedido-header">
-                <h4 class="pedido-titulo">${pedido.nome_plano || 'Serviço'}</h4>
-                <span class="pedido-status ${statusClass}">${statusText}</span>
-            </div>
-            <div class="pedido-body">
-                <div class="pedido-detalhes">
-                    <p><i class="far fa-calendar"></i> ${new Date(pedido.data_pedido).toLocaleDateString('pt-MZ')}</p>
-                    ${pedido.tema ? `<p><i class="fas fa-tag"></i> ${pedido.tema.substring(0, 50)}</p>` : ''}
-                </div>
-                <div class="pedido-valor">${(parseFloat(pedido.preco) || 0).toLocaleString('pt-MZ')} MT</div>
-            </div>
-        </div>`;
-    }).join('');
+        html += '<div class="pedido-card">' +
+            '<div class="pedido-header">' +
+                '<h4 class="pedido-titulo">' + (pedido.nome_plano || 'Serviço') + '</h4>' +
+                '<span class="pedido-status ' + statusClass + '">' + statusText + '</span>' +
+            '</div>' +
+            '<div class="pedido-body">' +
+                '<div class="pedido-detalhes">' +
+                    '<p><i class="far fa-calendar"></i> ' + new Date(pedido.data_pedido).toLocaleDateString('pt-MZ') + '</p>' +
+                    (pedido.tema ? '<p><i class="fas fa-tag"></i> ' + pedido.tema.substring(0, 50) + '</p>' : '') +
+                '</div>' +
+                '<div class="pedido-valor">' + (parseFloat(pedido.preco) || 0).toLocaleString('pt-MZ') + ' MT</div>' +
+            '</div>' +
+        '</div>';
+    });
+    
+    container.innerHTML = html;
 }
 
 function atualizarMetricas() {
-    const total = pedidosOriginais.length;
-    const pendentes = pedidosOriginais.filter(p => p.status === 'pendente' || p.status === 'pago').length;
-    const concluidos = pedidosOriginais.filter(p => p.status === 'concluido').length;
-    const totalGasto = pedidosOriginais.reduce((sum, p) => sum + (parseFloat(p.preco) || 0), 0);
+    var total = pedidosOriginais.length;
+    var pendentes = pedidosOriginais.filter(function(p) { return p.status === 'pendente' || p.status === 'pago'; }).length;
+    var concluidos = pedidosOriginais.filter(function(p) { return p.status === 'concluido'; }).length;
+    var totalGasto = pedidosOriginais.reduce(function(sum, p) { return sum + (parseFloat(p.preco) || 0); }, 0);
     
-    const totalEl = document.getElementById('totalPedidos');
-    const pendentesEl = document.getElementById('pedidosPendentes');
-    const concluidosEl = document.getElementById('pedidosConcluidos');
-    const totalGastoEl = document.getElementById('totalGasto');
+    var totalEl = document.getElementById('totalPedidos');
+    var pendentesEl = document.getElementById('pedidosPendentes');
+    var concluidosEl = document.getElementById('pedidosConcluidos');
+    var totalGastoEl = document.getElementById('totalGasto');
     
     if (totalEl) totalEl.textContent = total;
     if (pendentesEl) pendentesEl.textContent = pendentes;
@@ -694,19 +702,19 @@ function atualizarMetricas() {
 // DASHBOARD - UPLOAD
 // ============================================
 function atualizarPrecoUpload() {
-    const servico = document.getElementById('uploadServico').value;
-    const resumoDiv = document.getElementById('uploadResumo');
-    const precos = { 
+    var servico = document.getElementById('uploadServico').value;
+    var resumoDiv = document.getElementById('uploadResumo');
+    var precos = { 
         'formatacao': { nome: 'Formatação de trabalhos', preco: 100 }, 
         'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 }, 
         'monografia': { nome: 'Monografia/TCC', preco: 10000 } 
     };
     
     if (servico && precos[servico]) {
-        const valorTotal = precos[servico].preco;
-        const resumoServico = document.getElementById('resumoServico');
-        const resumoValorTotal = document.getElementById('resumoValorTotal');
-        const resumoEntrada = document.getElementById('resumoEntrada');
+        var valorTotal = precos[servico].preco;
+        var resumoServico = document.getElementById('resumoServico');
+        var resumoValorTotal = document.getElementById('resumoValorTotal');
+        var resumoEntrada = document.getElementById('resumoEntrada');
         
         if (resumoServico) resumoServico.textContent = precos[servico].nome;
         if (resumoValorTotal) resumoValorTotal.textContent = valorTotal.toLocaleString('pt-MZ') + ' MT';
@@ -715,18 +723,20 @@ function atualizarPrecoUpload() {
         verificarHabilitarBotaoUpload();
     } else {
         if (resumoDiv) resumoDiv.style.display = 'none';
-        const btnEnviar = document.getElementById('btnEnviarUpload');
+        var btnEnviar = document.getElementById('btnEnviarUpload');
         if (btnEnviar) btnEnviar.disabled = true;
     }
 }
 
 function selecionarMetodoUpload(metodo) {
     uploadMetodoSelecionado = metodo;
-    document.querySelectorAll('.metodo-radio').forEach(el => el.classList.remove('active'));
-    const target = document.querySelector(`.metodo-radio[onclick*="${metodo}"]`);
+    document.querySelectorAll('.metodo-radio').forEach(function(el) {
+        el.classList.remove('active');
+    });
+    var target = document.querySelector('.metodo-radio[onclick*="' + metodo + '"]');
     if (target) target.classList.add('active');
     
-    const resumoMetodo = document.getElementById('resumoMetodo');
+    var resumoMetodo = document.getElementById('resumoMetodo');
     if (resumoMetodo) {
         resumoMetodo.textContent = metodo === 'mpesa' ? 'M-Pesa' : metodo === 'emola' ? 'e-Mola' : 'Depósito Bancário';
     }
@@ -734,7 +744,7 @@ function selecionarMetodoUpload(metodo) {
 }
 
 function handleUploadFileSelect(event) {
-    const file = event.target.files[0];
+    var file = event.target.files[0];
     if (!file) return;
     
     if (file.size > 50 * 1024 * 1024) {
@@ -743,8 +753,8 @@ function handleUploadFileSelect(event) {
     }
     
     uploadArquivoSelecionado = file;
-    const preview = document.getElementById('uploadFilePreview');
-    const fileName = document.getElementById('uploadFileName');
+    var preview = document.getElementById('uploadFilePreview');
+    var fileName = document.getElementById('uploadFileName');
     
     if (preview && fileName) {
         fileName.textContent = file.name;
@@ -755,8 +765,8 @@ function handleUploadFileSelect(event) {
 
 function removerUploadFile() {
     uploadArquivoSelecionado = null;
-    const fileInput = document.getElementById('uploadFileInput');
-    const preview = document.getElementById('uploadFilePreview');
+    var fileInput = document.getElementById('uploadFileInput');
+    var preview = document.getElementById('uploadFilePreview');
     
     if (fileInput) fileInput.value = '';
     if (preview) preview.style.display = 'none';
@@ -764,23 +774,23 @@ function removerUploadFile() {
 }
 
 function verificarHabilitarBotaoUpload() {
-    const servico = document.getElementById('uploadServico')?.value;
-    const descricao = document.getElementById('uploadDescricao')?.value.trim();
-    const termos = document.getElementById('uploadTermos')?.checked || false;
-    const metodoSelecionado = uploadMetodoSelecionado;
-    const btn = document.getElementById('btnEnviarUpload');
+    var servico = document.getElementById('uploadServico')?.value;
+    var descricao = document.getElementById('uploadDescricao')?.value.trim();
+    var termos = document.getElementById('uploadTermos')?.checked || false;
+    var metodoSelecionado = uploadMetodoSelecionado;
+    var btn = document.getElementById('btnEnviarUpload');
     
-    const podeEnviar = servico && descricao && termos && metodoSelecionado;
+    var podeEnviar = servico && descricao && termos && metodoSelecionado;
     
     if (btn) {
         btn.disabled = !podeEnviar;
     }
 }
 
-async function enviarUploadPedido() {
-    const servico = document.getElementById('uploadServico').value;
-    const descricao = document.getElementById('uploadDescricao').value;
-    const prazo = document.getElementById('uploadPrazo').value;
+function enviarUploadPedido() {
+    var servico = document.getElementById('uploadServico').value;
+    var descricao = document.getElementById('uploadDescricao').value;
+    var prazo = document.getElementById('uploadPrazo').value;
     
     if (!servico) {
         mostrarToast('❌ Selecione um serviço', 'error');
@@ -797,20 +807,20 @@ async function enviarUploadPedido() {
         return;
     }
     
-    const termosCheck = document.getElementById('uploadTermos');
+    var termosCheck = document.getElementById('uploadTermos');
     if (!termosCheck || !termosCheck.checked) {
         mostrarToast('❌ Aceite os Termos de Serviço', 'error');
         return;
     }
     
-    const servicosInfo = { 
+    var servicosInfo = { 
         'formatacao': { nome: 'Formatação de trabalhos', preco: 100 }, 
         'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 }, 
         'monografia': { nome: 'Monografia/TCC', preco: 10000 } 
     };
-    const info = servicosInfo[servico];
+    var info = servicosInfo[servico];
     
-    const formData = new FormData();
+    var formData = new FormData();
     if (uploadArquivoSelecionado) {
         formData.append('arquivo', uploadArquivoSelecionado);
     }
@@ -826,19 +836,17 @@ async function enviarUploadPedido() {
     
     mostrarLoading('Enviando solicitação...');
     
-    const token = localStorage.getItem('token_facilitaki');
+    var token = localStorage.getItem('token_facilitaki');
     
-    try {
-        const response = await fetch('/api/pedidos/upload', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-        
-        const data = await response.json();
-        
+    fetch('/api/pedidos/upload', {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Bearer ' + token
+        },
+        body: formData
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
         fecharLoading();
         
         if (data.success) {
@@ -860,44 +868,49 @@ async function enviarUploadPedido() {
             document.getElementById('btnEnviarUpload').disabled = true;
             
             uploadMetodoSelecionado = null;
-            document.querySelectorAll('.metodo-radio').forEach(el => {
+            document.querySelectorAll('.metodo-radio').forEach(function(el) {
                 el.classList.remove('active');
             });
             
-            setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
+            setTimeout(function() { navegarPara('pagamento-sucesso'); }, 1500);
             carregarPedidos();
             carregarDadosFinanceiros();
         } else {
             mostrarToast(data.erro || '❌ Erro ao enviar solicitação', 'error');
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
         fecharLoading();
         console.error('Erro no upload:', error);
         mostrarToast('❌ Erro de conexão: ' + error.message, 'error');
-    }
+    });
 }
 
 // ============================================
 // DASHBOARD - FINANCEIRO
 // ============================================
-async function carregarDadosFinanceiros() {
-    try {
-        const token = localStorage.getItem('token_facilitaki');
-        if (!token) return;
-        
-        const response = await fetch(`${API_URL}/api/meus-pedidos`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
+function carregarDadosFinanceiros() {
+    var token = localStorage.getItem('token_facilitaki');
+    if (!token) return;
+    
+    fetch(API_URL + '/api/meus-pedidos', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(response) {
         if (response.ok) {
-            const data = await response.json();
-            const pedidos = data.pedidos || [];
+            return response.json();
+        }
+        return null;
+    })
+    .then(function(data) {
+        if (data) {
+            var pedidos = data.pedidos || [];
             
-            let totalInvestido = 0, totalPago = 0, saldoPendente = 0;
-            const historico = [];
+            var totalInvestido = 0, totalPago = 0, saldoPendente = 0;
+            var historico = [];
             
-            pedidos.forEach(pedido => {
-                const valor = parseFloat(pedido.preco) || 0;
+            pedidos.forEach(function(pedido) {
+                var valor = parseFloat(pedido.preco) || 0;
                 totalInvestido += valor;
                 
                 if (pedido.status === 'pago' || pedido.status === 'confirmado' || pedido.status === 'concluido') {
@@ -912,65 +925,68 @@ async function carregarDadosFinanceiros() {
                     valor: valor, 
                     tipo: 'Pedido', 
                     status: pedido.status === 'pago' || pedido.status === 'concluido' ? 'confirmado' : 'pendente', 
-                    referencia: `FAC-${pedido.id}` 
+                    referencia: 'FAC-' + pedido.id 
                 });
             });
             
-            const totalInvestidoEl = document.getElementById('financeiroTotalInvestido');
-            const totalPagoEl = document.getElementById('financeiroTotalPago');
-            const saldoPendenteEl = document.getElementById('financeiroSaldoPendente');
+            var totalInvestidoEl = document.getElementById('financeiroTotalInvestido');
+            var totalPagoEl = document.getElementById('financeiroTotalPago');
+            var saldoPendenteEl = document.getElementById('financeiroSaldoPendente');
             
             if (totalInvestidoEl) totalInvestidoEl.textContent = totalInvestido.toLocaleString('pt-MZ') + ' MT';
             if (totalPagoEl) totalPagoEl.textContent = totalPago.toLocaleString('pt-MZ') + ' MT';
             if (saldoPendenteEl) saldoPendenteEl.textContent = saldoPendente.toLocaleString('pt-MZ') + ' MT';
             
-            const tbody = document.getElementById('historicoPagamentosBody');
+            var tbody = document.getElementById('historicoPagamentosBody');
             if (tbody) {
                 if (historico.length > 0) {
-                    tbody.innerHTML = historico.map(t => `
-                        <tr>
-                            <td>${new Date(t.data).toLocaleDateString('pt-MZ')}</td>
-                            <td>${t.servico}</td>
-                            <td><strong>${t.valor.toLocaleString('pt-MZ')} MT</strong></td>
-                            <td>${t.tipo}</td>
-                            <td><span class="status-pagamento ${t.status === 'confirmado' ? 'confirmado' : 'pendente'}">${t.status === 'confirmado' ? 'Confirmado' : 'Pendente'}</span></td>
-                            <td><small>${t.referencia}</small></td>
-                        </tr>
-                    `).join('');
+                    var html = '';
+                    historico.forEach(function(t) {
+                        html += '<tr>' +
+                            '<td>' + new Date(t.data).toLocaleDateString('pt-MZ') + '</td>' +
+                            '<td>' + t.servico + '</td>' +
+                            '<td><strong>' + t.valor.toLocaleString('pt-MZ') + ' MT</strong></td>' +
+                            '<td>' + t.tipo + '</td>' +
+                            '<td><span class="status-pagamento ' + (t.status === 'confirmado' ? 'confirmado' : 'pendente') + '">' + (t.status === 'confirmado' ? 'Confirmado' : 'Pendente') + '</span></td>' +
+                            '<td><small>' + t.referencia + '</small></td>' +
+                        '</tr>';
+                    });
+                    tbody.innerHTML = html;
                 } else {
-                    tbody.innerHTML = `<tr class="empty-row">
-                        <td colspan="6">
-                            <div class="empty-state">
-                                <i class="fas fa-receipt"></i>
-                                <p>Nenhum pagamento registrado</p>
-                                <button class="btn-primary" onclick="document.querySelector('.tab-btn[data-tab=\\"upload\\"]').click()">
-                                    Fazer primeiro pedido
-                                </button>
-                            </div>
-                        </td>
-                    </tr>`;
+                    tbody.innerHTML = '<tr class="empty-row">' +
+                        '<td colspan="6">' +
+                            '<div class="empty-state">' +
+                                '<i class="fas fa-receipt"></i>' +
+                                '<p>Nenhum pagamento registrado</p>' +
+                                '<button class="btn-primary" onclick="document.querySelector(\'.tab-btn[data-tab=\\"upload\\"]\').click()">' +
+                                    'Fazer primeiro pedido' +
+                                '</button>' +
+                            '</div>' +
+                        '</td>' +
+                    '</tr>';
                 }
             }
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
         console.error('Erro ao carregar dados financeiros:', error);
-    }
+    });
 }
 
 function exportarHistorico() {
-    const rows = document.querySelectorAll('#historicoPagamentosBody tr:not(.empty-row)');
-    let csv = "Data,Serviço,Valor,Tipo,Status,Referência\n";
-    rows.forEach(row => {
-        const cols = row.querySelectorAll('td');
+    var rows = document.querySelectorAll('#historicoPagamentosBody tr:not(.empty-row)');
+    var csv = "Data,Serviço,Valor,Tipo,Status,Referência\n";
+    rows.forEach(function(row) {
+        var cols = row.querySelectorAll('td');
         if (cols.length >= 6) {
-            csv += `"${cols[0].innerText}","${cols[1].innerText}","${cols[2].innerText.replace(' MT', '')}","${cols[3].innerText}","${cols[4].innerText}","${cols[5].innerText}"\n`;
+            csv += '"' + cols[0].innerText + '","' + cols[1].innerText + '","' + cols[2].innerText.replace(' MT', '') + '","' + cols[3].innerText + '","' + cols[4].innerText + '","' + cols[5].innerText + '"\n';
         }
     });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var link = document.createElement('a');
+    var url = URL.createObjectURL(blob);
     link.href = url;
-    link.setAttribute('download', `historico_facilitaki_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', 'historico_facilitaki_' + new Date().toISOString().split('T')[0] + '.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -981,10 +997,10 @@ function exportarHistorico() {
 // ============================================
 // CONTATO
 // ============================================
-async function enviarContato() {
-    const nome = document.getElementById('contatoNome')?.value.trim();
-    const telefone = document.getElementById('contatoTelefone')?.value.trim();
-    const mensagem = document.getElementById('contatoMensagem')?.value.trim();
+function enviarContato() {
+    var nome = document.getElementById('contatoNome')?.value.trim();
+    var telefone = document.getElementById('contatoTelefone')?.value.trim();
+    var mensagem = document.getElementById('contatoMensagem')?.value.trim();
     
     if (!nome || !telefone || !mensagem) {
         mostrarToast('Preencha todos os campos', 'error');
@@ -993,15 +1009,14 @@ async function enviarContato() {
     
     mostrarLoading('Enviando mensagem...');
     
-    try {
-        const response = await fetch(`${API_URL}/api/contato`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nome, telefone, mensagem })
-        });
-        
-        const data = await response.json();
-        
+    fetch(API_URL + '/api/contato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nome, telefone: telefone, mensagem: mensagem })
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        fecharLoading();
         if (data.success) {
             mostrarToast('Mensagem enviada com sucesso!', 'success');
             document.getElementById('contatoNome').value = '';
@@ -1010,12 +1025,12 @@ async function enviarContato() {
         } else {
             mostrarToast(data.erro || 'Erro ao enviar mensagem', 'error');
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
+        fecharLoading();
         console.error('Erro no contato:', error);
         mostrarToast('Erro de conexão. Tente novamente.', 'error');
-    }
-    
-    fecharLoading();
+    });
 }
 
 // ============================================
@@ -1057,7 +1072,7 @@ function mostrarFAQ() {
 function registrarDownloadAPK() {
     console.log('📱 Download APK iniciado');
     mostrarToast('Baixando aplicativo Facilitaki...', 'success');
-    setTimeout(() => {
+    setTimeout(function() {
         mostrarToast('📱 Aplicativo baixado com sucesso!', 'success');
     }, 2000);
 }
