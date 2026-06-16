@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO SIMPLIFICADA PARA DEPLOY)
+// server.js - Facilitaki Backend (PAINEL ADMIN SEM MÉTODO DE PAGAMENTO)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -28,18 +28,19 @@ try {
     });
 } catch (error) {
     console.error('❌ Erro ao conectar ao banco:', error.message);
-    process.exit(1);
+    pool = new Pool({
+        connectionString: 'postgresql://localhost:5432/facilitaki',
+    });
 }
 
 // ============================================
-// MIDDLEWARES BÁSICOS
+// MIDDLEWARES
 // ============================================
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('.'));
 
-// Logger simples
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
@@ -70,13 +71,15 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const allowed = [
             'application/pdf',
             'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'text/plain'
+            'text/plain',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         ];
         if (allowed.includes(file.mimetype)) {
             cb(null, true);
@@ -136,39 +139,6 @@ function validarTelefone(telefone) {
     return limpo.length >= 9 && limpo.length <= 12;
 }
 
-function validarPedido(req, res, next) {
-    const { cliente, telefone, tema, descricao, plano, preco, metodoPagamento } = req.body;
-    
-    if (!cliente || cliente.trim().length < 2) {
-        return res.status(400).json({ success: false, erro: 'Nome do cliente inválido' });
-    }
-    
-    if (!telefone || !validarTelefone(telefone)) {
-        return res.status(400).json({ success: false, erro: 'Telefone inválido' });
-    }
-    
-    const textoDescricao = tema || descricao;
-    if (!textoDescricao || textoDescricao.trim().length < 5) {
-        return res.status(400).json({ success: false, erro: 'Descreva o tema do trabalho (mínimo 5 caracteres)' });
-    }
-    
-    if (!plano) {
-        return res.status(400).json({ success: false, erro: 'Serviço não selecionado' });
-    }
-    
-    const precoNum = parseFloat(preco);
-    if (isNaN(precoNum) || precoNum <= 0) {
-        return res.status(400).json({ success: false, erro: 'Preço inválido' });
-    }
-    
-    const metodosValidos = ['mpesa', 'emola', 'deposito'];
-    if (!metodoPagamento || !metodosValidos.includes(metodoPagamento)) {
-        return res.status(400).json({ success: false, erro: 'Método de pagamento inválido' });
-    }
-    
-    next();
-}
-
 // ============================================
 // INICIALIZAÇÃO DO BANCO
 // ============================================
@@ -194,7 +164,7 @@ async function initDatabase() {
                 usuario_id INTEGER REFERENCES usuarios(id),
                 cliente VARCHAR(100) NOT NULL,
                 telefone VARCHAR(100) NOT NULL,
-                descricao TEXT NOT NULL,
+                descricao TEXT,
                 tema TEXT,
                 plano VARCHAR(50) NOT NULL,
                 nome_plano VARCHAR(100) NOT NULL,
@@ -218,7 +188,6 @@ async function initDatabase() {
             )
         `);
         
-        // Verificar se existe admin
         const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
         if (parseInt(adminCheck.rows[0].count) === 0) {
             const hash = await bcrypt.hash('Admin123!@#', 10);
@@ -235,6 +204,43 @@ async function initDatabase() {
         console.error('❌ Erro ao inicializar banco:', error.message);
     }
 }
+
+// ============================================
+// ROTA DE REPARAR TABELA
+// ============================================
+app.get('/admin/reparar-tabela', async (req, res) => {
+    try {
+        await pool.query(`
+            ALTER TABLE pedidos 
+            ADD COLUMN IF NOT EXISTS descricao TEXT,
+            ADD COLUMN IF NOT EXISTS tema TEXT,
+            ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS prazo_entrega DATE
+        `);
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Tabela Reparada</title>
+            <style>
+                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+            </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>✅ TABELA REPARADA!</h1>
+                    <p>Todas as colunas necessárias foram adicionadas.</p>
+                    <a href="/">Voltar ao site</a>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        res.send(`Erro: ${error.message}`);
+    }
+});
 
 // ============================================
 // ROTAS PÚBLICAS
@@ -411,29 +417,66 @@ app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
 app.post('/api/pedidos/upload', 
     authenticateToken, 
     upload.single('arquivo'), 
-    validarPedido, 
     async (req, res) => {
-    console.log('📤 UPLOAD RECEBIDO - Usuário:', req.user?.id);
+    console.log('📤 UPLOAD RECEBIDO');
+    console.log('Usuário ID:', req.user?.id);
+    console.log('Body:', req.body);
+    console.log('Arquivo:', req.file ? req.file.originalname : 'NENHUM');
     
     try {
         const { 
-            cliente, telefone, tema, descricao, 
-            plano, nomePlano, preco, metodoPagamento, prazo 
+            cliente, 
+            telefone, 
+            tema, 
+            descricao, 
+            plano, 
+            nomePlano, 
+            preco, 
+            metodoPagamento, 
+            prazo 
         } = req.body;
         
-        const textoDescricao = tema || descricao;
-        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-        const precoNumero = parseFloat(preco);
-        const nomeCliente = cliente || req.user.nome;
+        // VALIDAÇÕES
+        if (!cliente || cliente.trim().length < 2) {
+            return res.status(400).json({ success: false, erro: 'Nome do cliente inválido' });
+        }
         
+        if (!telefone || !validarTelefone(telefone)) {
+            return res.status(400).json({ success: false, erro: 'Telefone inválido' });
+        }
+        
+        const textoDescricao = tema || descricao;
+        if (!textoDescricao || textoDescricao.trim().length < 5) {
+            return res.status(400).json({ success: false, erro: 'Descreva o tema do trabalho (mínimo 5 caracteres)' });
+        }
+        
+        if (!plano) {
+            return res.status(400).json({ success: false, erro: 'Serviço não selecionado' });
+        }
+        
+        const precoNumero = parseFloat(preco);
+        if (isNaN(precoNumero) || precoNumero <= 0) {
+            return res.status(400).json({ success: false, erro: 'Preço inválido' });
+        }
+        
+        const metodosValidos = ['mpesa', 'emola', 'deposito'];
+        if (!metodoPagamento || !metodosValidos.includes(metodoPagamento)) {
+            return res.status(400).json({ success: false, erro: 'Método de pagamento inválido' });
+        }
+        
+        // PROCESSAR ARQUIVO
         let arquivoNome = null;
         let arquivoOriginal = null;
         
         if (req.file) {
             arquivoNome = req.file.filename;
             arquivoOriginal = req.file.originalname;
-            console.log('📎 Arquivo salvo:', arquivoNome);
+            console.log('📎 Arquivo salvo como:', arquivoNome);
         }
+        
+        // SALVAR NO BANCO
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        const nomeCliente = cliente || req.user.nome;
         
         const result = await pool.query(
             `INSERT INTO pedidos 
@@ -442,9 +485,18 @@ app.post('/api/pedidos/upload',
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pendente')
              RETURNING id`,
             [
-                req.user.id, nomeCliente, telefoneLimpo, textoDescricao, textoDescricao,
-                plano, nomePlano, precoNumero, metodoPagamento,
-                arquivoNome, arquivoOriginal, prazo || null
+                req.user.id, 
+                nomeCliente, 
+                telefoneLimpo, 
+                textoDescricao, 
+                textoDescricao,
+                plano, 
+                nomePlano, 
+                precoNumero, 
+                metodoPagamento,
+                arquivoNome, 
+                arquivoOriginal, 
+                prazo || null
             ]
         );
         
@@ -465,6 +517,9 @@ app.post('/api/pedidos/upload',
     }
 });
 
+// ============================================
+// ROTA PARA BAIXAR ARQUIVO
+// ============================================
 app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
     try {
         const pedidoId = req.params.id;
@@ -641,11 +696,14 @@ app.delete('/admin/api/remover-cliente/:id', authenticateAdmin, async (req, res)
     }
 });
 
+// ============================================
+// ROTA DASHBOARD - SEM MÉTODO DE PAGAMENTO
+// ============================================
 app.get('/admin/api/dashboard', authenticateAdmin, async (req, res) => {
     try {
         const pedidos = await pool.query(
             `SELECT id, cliente, telefone, descricao, tema, plano, nome_plano, preco, 
-                    metodo_pagamento, arquivo_nome, arquivo_original, prazo_entrega, 
+                    arquivo_nome, arquivo_original, prazo_entrega, 
                     status, data_pedido, usuario_id 
              FROM pedidos ORDER BY data_pedido DESC LIMIT 100`
         );
@@ -760,6 +818,9 @@ app.get('/admin/login', (req, res) => {
     `);
 });
 
+// ============================================
+// PAINEL ADMIN - SEM MÉTODO DE PAGAMENTO
+// ============================================
 app.get('/admin/painel', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -795,13 +856,18 @@ app.get('/admin/painel', (req, res) => {
             .badge-status.em_andamento{background:#ede9fe;color:#5b21b6}
             .badge-status.concluido{background:#d1fae5;color:#065f46}
             .btn-ver-detalhes{padding:4px 12px;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer}
+            
             .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
             .pedido-detalhes-modal.active{display:flex}
             .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
-            .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
-            .pedido-detalhes-content td:first-child{font-weight:600;width:150px}
+            .pedido-detalhes-content h2{margin-bottom:1rem;color:#333}
+            .pedido-detalhes-content table{width:100%;border-collapse:collapse}
+            .pedido-detalhes-content td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top}
+            .pedido-detalhes-content td:first-child{font-weight:600;color:#555;width:180px}
             .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
+            .arquivo-link:hover{text-decoration:underline}
             .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
+            .valor-destaque{font-size:1.2rem;color:#2563eb;font-weight:700}
         </style>
         </head>
         <body>
@@ -834,7 +900,7 @@ app.get('/admin/painel', (req, res) => {
             
             <div class="pedido-detalhes-modal" id="modalDetalhes">
                 <div class="pedido-detalhes-content">
-                    <h2 style="margin-bottom:1rem;">📄 Detalhes do Pedido</h2>
+                    <h2>📄 Detalhes do Pedido</h2>
                     <div id="detalhesPedido"></div>
                     <button class="btn-fechar-modal" onclick="fecharModal()">Fechar</button>
                 </div>
@@ -879,6 +945,11 @@ app.get('/admin/painel', (req, res) => {
                     try { return new Date(data).toLocaleDateString('pt-MZ'); } catch(e) { return '-'; }
                 }
                 
+                function formatarDataHora(data) {
+                    if (!data) return '-';
+                    try { return new Date(data).toLocaleString('pt-MZ'); } catch(e) { return '-'; }
+                }
+                
                 function getStatusBadge(status) {
                     const labels = { 'pendente':'Pendente', 'pago':'Pago', 'em_andamento':'Em andamento', 'concluido':'Concluído' };
                     return \`<span class="badge-status \${status}">\${labels[status] || status}</span>\`;
@@ -888,12 +959,24 @@ app.get('/admin/painel', (req, res) => {
                     if(!pedidos || !pedidos.length) return '<p>Nenhum pedido</p>';
                     return \`
                         <table>
-                            <thead><tr><th>ID</th><th>Cliente</th><th>Serviço</th><th>Valor</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Cliente</th>
+                                    <th>WhatsApp</th>
+                                    <th>Serviço</th>
+                                    <th>Valor</th>
+                                    <th>Prazo</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
                             <tbody>
                                 \${pedidos.map(p => \`
                                     <tr>
                                         <td>\${p.id}</td>
                                         <td>\${p.cliente}</td>
+                                        <td>\${p.telefone}</td>
                                         <td>\${p.nome_plano}</td>
                                         <td>\${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</td>
                                         <td>\${formatarData(p.prazo_entrega)}</td>
@@ -965,7 +1048,7 @@ app.get('/admin/painel', (req, res) => {
                                         <td>\${c.nome}</td>
                                         <td>\${c.telefone}</td>
                                         <td style="max-width:300px;word-wrap:break-word;">\${(c.mensagem||'').substring(0,150)}\${(c.mensagem||'').length > 150 ? '...' : ''}</td>
-                                        <td>\${new Date(c.data_envio).toLocaleString()}</td>
+                                        <td>\${formatarDataHora(c.data_envio)}</td>
                                     </tr>
                                 \`).join('')}
                             </tbody>
@@ -973,40 +1056,75 @@ app.get('/admin/painel', (req, res) => {
                     \`;
                 }
                 
+                // ============================================
+                // DETALHES DO PEDIDO - SEM MÉTODO DE PAGAMENTO
+                // ============================================
                 async function verDetalhes(id) {
                     const modal = document.getElementById('modalDetalhes');
                     const content = document.getElementById('detalhesPedido');
                     try {
                         const data = await fetchWithAuth('/admin/api/dashboard');
                         const pedido = (data.pedidos || []).find(p => p.id === id);
-                        if (!pedido) { content.innerHTML = '<p>Pedido não encontrado</p>'; modal.classList.add('active'); return; }
+                        if (!pedido) { 
+                            content.innerHTML = '<p style="color:red;">Pedido não encontrado</p>'; 
+                            modal.classList.add('active'); 
+                            return; 
+                        }
                         
                         content.innerHTML = \`
                             <table>
-                                <tr><td>ID</td><td><strong>#\${pedido.id}</strong></td></tr>
-                                <tr><td>Cliente</td><td><strong>\${pedido.cliente}</strong></td></tr>
-                                <tr><td>WhatsApp</td><td><strong>\${pedido.telefone}</strong></td></tr>
-                                <tr><td>Serviço</td><td><strong>\${pedido.nome_plano}</strong></td></tr>
-                                <tr><td>Valor</td><td><strong>\${parseFloat(pedido.preco||0).toLocaleString('pt-MZ')} MT</strong></td></tr>
-                                <tr><td>Status</td><td>\${getStatusBadge(pedido.status)}</td></tr>
-                                <tr><td>Método Pagamento</td><td><strong>\${(pedido.metodo_pagamento||'').toUpperCase()}</strong></td></tr>
-                                <tr><td>Data Pedido</td><td><strong>\${new Date(pedido.data_pedido).toLocaleString()}</strong></td></tr>
-                                <tr><td>Prazo Entrega</td><td><strong>\${formatarData(pedido.prazo_entrega) || 'Não definido'}</strong></td></tr>
-                                <tr><td>Tema/Descrição</td><td><strong style="white-space:pre-wrap;word-wrap:break-word;">\${pedido.descricao || pedido.tema || '-'}</strong></td></tr>
                                 <tr>
-                                    <td>Arquivo</td>
+                                    <td>🆔 ID do Pedido</td>
+                                    <td><strong>#\${pedido.id}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>👤 Cliente</td>
+                                    <td><strong>\${pedido.cliente}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>📱 WhatsApp</td>
+                                    <td><strong>\${pedido.telefone}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>📋 Serviço</td>
+                                    <td><strong>\${pedido.nome_plano}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>💰 Valor a Pagar</td>
+                                    <td><strong class="valor-destaque">\${parseFloat(pedido.preco||0).toLocaleString('pt-MZ')} MT</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>📝 Descrição do Trabalho</td>
+                                    <td><strong style="white-space:pre-wrap;word-wrap:break-word;">\${pedido.descricao || pedido.tema || 'Não informado'}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>📅 Prazo de Entrega</td>
+                                    <td><strong>\${formatarData(pedido.prazo_entrega) || 'Não definido'}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>📎 Ficheiro do Trabalho</td>
                                     <td>
                                         \${pedido.arquivo_nome ? 
-                                            \`<a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">📎 \${pedido.arquivo_original || pedido.arquivo_nome}</a>\` : 
+                                            \`<a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">
+                                                📄 \${pedido.arquivo_original || pedido.arquivo_nome}
+                                            </a>\` : 
                                             '<span style="color:#999;">Nenhum arquivo enviado</span>'
                                         }
                                     </td>
+                                </tr>
+                                <tr>
+                                    <td>📊 Status</td>
+                                    <td>\${getStatusBadge(pedido.status)}</td>
+                                </tr>
+                                <tr>
+                                    <td>📅 Data do Pedido</td>
+                                    <td><strong>\${formatarDataHora(pedido.data_pedido)}</strong></td>
                                 </tr>
                             </table>
                         \`;
                         modal.classList.add('active');
                     } catch (error) {
-                        content.innerHTML = '<p>Erro ao carregar detalhes</p>';
+                        content.innerHTML = '<p style="color:red;">Erro ao carregar detalhes</p>';
                         modal.classList.add('active');
                     }
                 }
