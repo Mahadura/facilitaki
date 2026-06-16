@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO SUPER ESTÁVEL)
+// server.js - Facilitaki Backend (VERSÃO FINAL CORRIGIDA)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -15,7 +15,10 @@ const PORT = process.env.PORT || 3000;
 // ============================================
 // CONFIGURAÇÕES
 // ============================================
-const JWT_SECRET = process.env.SECRET_KEY || 'chave-secreta-facilitaki-2026';
+const JWT_SECRET = process.env.SECRET_KEY;
+if (!JWT_SECRET) {
+    console.warn('⚠️ SECRET_KEY não definida, usando fallback apenas para desenvolvimento');
+}
 
 // ============================================
 // BANCO DE DADOS
@@ -29,10 +32,7 @@ try {
     console.log('✅ Conectado ao banco de dados');
 } catch (error) {
     console.error('❌ Erro ao conectar ao banco:', error.message);
-    // Fallback para desenvolvimento
-    pool = new Pool({
-        connectionString: 'postgresql://localhost:5432/facilitaki',
-    });
+    process.exit(1);
 }
 
 // ============================================
@@ -43,7 +43,6 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('.'));
 
-// Logger
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
@@ -155,7 +154,7 @@ function validarTelefone(telefone) {
 }
 
 // ============================================
-// INICIALIZAÇÃO DO BANCO
+// INICIALIZAÇÃO DO BANCO - SEM CREDENCIAL FIXA
 // ============================================
 async function initDatabase() {
     try {
@@ -214,15 +213,12 @@ async function initDatabase() {
             )
         `);
         
-        // Criar admin padrão se não existir
-        var adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        // VERIFICAR SE EXISTE ADMIN - NÃO CRIAR AUTOMATICAMENTE
+        const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
         if (parseInt(adminCheck.rows[0].count) === 0) {
-            var hash = await bcrypt.hash('Admin123!@#', 10);
-            await pool.query(
-                'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
-                ['Administrador', '840000000', hash]
-            );
-            console.log('✅ Admin padrão criado: 840000000 / Admin123!@#');
+            console.log('⚠️ Nenhum administrador encontrado. Use a rota /admin/criar-primeiro-admin para criar.');
+        } else {
+            console.log('✅ Administrador já existe no sistema');
         }
         
         console.log('✅ Banco inicializado com sucesso');
@@ -231,6 +227,94 @@ async function initDatabase() {
         console.error('❌ Erro ao inicializar banco:', error.message);
     }
 }
+
+// ============================================
+// ROTA PARA CRIAR PRIMEIRO ADMIN (VIA .ENV)
+// ============================================
+app.get('/admin/criar-primeiro-admin', async function(req, res) {
+    try {
+        // Verificar se já existe admin
+        const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        if (parseInt(adminCheck.rows[0].count) > 0) {
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>Admin já existe</title>
+                <style>
+                    body{font-family:Arial;background:#f59e0b;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                    a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+                </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>⚠️ ADMIN JÁ EXISTE</h1>
+                        <p>Já existe um administrador no sistema.</p>
+                        <a href="/admin/login">Ir para Login</a>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+        
+        // Verificar se a variável de ambiente ADMIN_PASSWORD está definida
+        const adminPassword = process.env.ADMIN_PASSWORD;
+        if (!adminPassword) {
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>Erro</title>
+                <style>
+                    body{font-family:Arial;background:#ef4444;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>❌ ERRO</h1>
+                        <p>Variável ADMIN_PASSWORD não definida no .env</p>
+                        <p style="color:#666;font-size:12px;">Adicione ADMIN_PASSWORD=suasenha no Render</p>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+        
+        // Criar admin com a senha do .env
+        const hash = await bcrypt.hash(adminPassword, 10);
+        await pool.query(
+            'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
+            ['Administrador', '840000000', hash]
+        );
+        
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Admin Criado</title>
+            <style>
+                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
+                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+            </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>✅ ADMIN CRIADO!</h1>
+                    <div class="info">
+                        <p><strong>Usuário:</strong> Administrador</p>
+                        <p><strong>WhatsApp:</strong> 840000000</p>
+                        <p><strong>Senha:</strong> (definida no .env)</p>
+                    </div>
+                    <a href="/admin/login">🔐 Fazer Login</a>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        res.send('Erro: ' + error.message);
+    }
+});
 
 // ============================================
 // ROTA DE REPARO
@@ -505,11 +589,12 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), fun
 });
 
 // ============================================
-// ROTA PARA BAIXAR ARQUIVO
+// ROTA PARA BAIXAR ARQUIVO - CORRIGIDA
 // ============================================
 app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
     try {
         var pedidoId = req.params.id;
+        console.log('📥 Download solicitado - Pedido:', pedidoId);
         
         pool.query('SELECT arquivo_nome, arquivo_original, usuario_id FROM pedidos WHERE id = $1', [pedidoId])
             .then(function(result) {
@@ -518,33 +603,40 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
                 }
                 
                 var pedido = result.rows[0];
+                console.log('📋 Pedido encontrado, arquivo:', pedido.arquivo_nome);
                 
+                // Verificar permissão
                 if (pedido.usuario_id !== req.user.id) {
                     pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.user.id])
                         .then(function(adminCheck) {
                             if (adminCheck.rows.length === 0 || !adminCheck.rows[0].is_admin) {
                                 return res.status(403).json({ success: false, erro: 'Acesso negado' });
                             }
-                            baixarArquivo(pedido, res);
+                            enviarArquivo(pedido, res);
                         });
                 } else {
-                    baixarArquivo(pedido, res);
+                    enviarArquivo(pedido, res);
                 }
             });
         
-        function baixarArquivo(pedido, res) {
+        function enviarArquivo(pedido, res) {
             if (!pedido.arquivo_nome) {
                 return res.status(404).json({ success: false, erro: 'Arquivo não disponível' });
             }
             
             var filePath = path.join(uploadDir, pedido.arquivo_nome);
+            console.log('📁 Caminho do arquivo:', filePath);
+            
+            // Verificar se o arquivo existe
             if (!fs.existsSync(filePath)) {
+                console.log('❌ Arquivo não encontrado no disco');
                 return res.status(404).json({ success: false, erro: 'Arquivo não encontrado' });
             }
             
             var stats = fs.statSync(filePath);
             var ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome).toLowerCase();
             
+            // Definir Content-Type correto
             var contentType = 'application/octet-stream';
             var mimeTypes = {
                 '.pdf': 'application/pdf',
@@ -556,11 +648,29 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
                 contentType = mimeTypes[ext];
             }
             
+            // Nome do arquivo para download
+            var fileName = pedido.arquivo_original || pedido.arquivo_nome;
+            
+            console.log('📤 Enviando arquivo:', fileName, 'Tamanho:', stats.size, 'bytes');
+            
+            // Headers para download
             res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Length', stats.size);
-            res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(pedido.arquivo_original || pedido.arquivo_nome) + '"');
+            res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(fileName) + '"');
             res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
-            res.sendFile(filePath);
+            res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+            
+            // Enviar arquivo
+            res.sendFile(filePath, function(err) {
+                if (err) {
+                    console.error('❌ Erro ao enviar arquivo:', err);
+                    if (!res.headersSent) {
+                        res.status(500).json({ success: false, erro: 'Erro ao enviar arquivo' });
+                    }
+                } else {
+                    console.log('✅ Arquivo enviado com sucesso!');
+                }
+            });
         }
         
     } catch (error) {
@@ -621,6 +731,9 @@ app.post('/admin/api/login', function(req, res) {
     }
 });
 
+// ============================================
+// DEMais ROTAS ADMIN (MANTIDAS IGUAIS)
+// ============================================
 app.get('/admin/api/usuarios', authenticateAdmin, function(req, res) {
     try {
         pool.query('SELECT id, nome, telefone, email, is_admin, created_at FROM usuarios ORDER BY is_admin DESC, created_at DESC')
@@ -830,6 +943,7 @@ app.get('/admin/login', function(req, res) {
             button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold}
             .error{color:#e74c3c;margin-top:10px}
             .info{margin-top:20px;padding:10px;background:#e8f4fd;border-radius:10px}
+            .warning{color:#856404;background:#fff3cd;padding:10px;border-radius:5px;margin-top:10px}
         </style>
         </head>
         <body>
@@ -839,7 +953,8 @@ app.get('/admin/login', function(req, res) {
                 <input type="password" id="password" placeholder="Senha">
                 <button onclick="login()">Entrar</button>
                 <div id="error" class="error"></div>
-                <div class="info">👑 Admin padrão: 840000000 / Admin123!@#</div>
+                <div class="warning">⚠️ Primeiro acesso? <a href="/admin/criar-primeiro-admin">Criar Administrador</a></div>
+                <div class="info">👑 Criar admin via /admin/criar-primeiro-admin</div>
             </div>
             <script>
                 async function login() {
@@ -1239,6 +1354,17 @@ app.get('/admin/painel', function(req, res) {
 });
 
 // ============================================
+// TRATAMENTO DE ERROS
+// ============================================
+process.on('uncaughtException', function(err) {
+    console.error('❌ Erro não capturado:', err);
+});
+
+process.on('unhandledRejection', function(err) {
+    console.error('❌ Promessa rejeitada não tratada:', err);
+});
+
+// ============================================
 // INICIAR SERVIDOR
 // ============================================
 initDatabase()
@@ -1248,7 +1374,9 @@ initDatabase()
             console.log('🌐 Site: http://localhost:' + PORT);
             console.log('🔐 Admin: http://localhost:' + PORT + '/admin/login');
             console.log('📱 APK disponível em: http://localhost:' + PORT + '/facilitaki.apk');
-            console.log('\n👑 Admin padrão: 840000000 / Admin123!@#');
+            console.log('\n⚠️ Para criar o primeiro administrador:');
+            console.log('1. Defina ADMIN_PASSWORD no .env');
+            console.log('2. Acesse: http://localhost:' + PORT + '/admin/criar-primeiro-admin');
         });
     })
     .catch(function(err) {
