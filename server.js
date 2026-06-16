@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO DEFINITIVA CORRIGIDA)
+// server.js - Facilitaki Backend (VERSÃO COMPLETA CORRIGIDA)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -7,38 +7,129 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const xss = require('xss');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ============================================
-// CONFIGURAÇÕES
+// CONFIGURAÇÕES DE SEGURANÇA
 // ============================================
-const JWT_SECRET = process.env.SECRET_KEY || 'chave-secreta-facilitaki';
+const JWT_SECRET = process.env.SECRET_KEY || 'chave-secreta-facilitaki-2026';
+if (!process.env.SECRET_KEY) {
+    console.warn('⚠️ SECRET_KEY não definida no .env, usando fallback. Configure para produção!');
+}
 
+// ============================================
+// BANCO DE DADOS
+// ============================================
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// ============================================
+// MIDDLEWARES DE SEGURANÇA
+// ============================================
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+            imgSrc: ["'self'", "data:", "https://ui-avatars.com"],
+            connectSrc: ["'self'"],
+        },
+    },
+}));
+
+// CORS restrito
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production' 
+        ? ['https://seu-dominio.com'] 
+        : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Rate limiting
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: { success: false, erro: 'Muitas requisições. Tente novamente mais tarde.' }
+});
+app.use('/api', globalLimiter);
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { success: false, erro: 'Muitas tentativas de login. Tente novamente em 15 minutos.' }
+});
+
+// Sanitização de entrada
+app.use((req, res, next) => {
+    if (req.body) {
+        for (let key in req.body) {
+            if (typeof req.body[key] === 'string') {
+                req.body[key] = xss(req.body[key].trim());
+            }
+        }
+    }
+    next();
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('.'));
 
-// Logger
+// Logger seguro (sem dados sensíveis)
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
 });
 
-// Configuração do multer
-const storage = multer.memoryStorage();
-const upload = multer({ 
-    storage: storage, 
-    limits: { fileSize: 50 * 1024 * 1024 }
+// ============================================
+// CONFIGURAÇÃO DO MULTER (UPLOAD)
+// ============================================
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, unique + ext);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowed = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Tipo de arquivo não permitido'), false);
+        }
+    }
 });
 
 // ============================================
@@ -56,6 +147,7 @@ const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ success: false, error: 'Token não fornecido' });
+    
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) return res.status(403).json({ success: false, error: 'Token inválido' });
         req.user = user;
@@ -67,6 +159,7 @@ const authenticateAdmin = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ success: false, error: 'Token não fornecido' });
+    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const result = await pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [decoded.id]);
@@ -79,6 +172,47 @@ const authenticateAdmin = async (req, res, next) => {
         return res.status(403).json({ success: false, error: 'Token inválido' });
     }
 };
+
+// ============================================
+// VALIDAÇÕES
+// ============================================
+function validarTelefone(telefone) {
+    const limpo = telefone.toString().replace(/\D/g, '');
+    return limpo.length >= 9 && limpo.length <= 12;
+}
+
+function validarPedido(req, res, next) {
+    const { cliente, telefone, tema, descricao, plano, preco, metodoPagamento, prazo } = req.body;
+    
+    if (!cliente || cliente.trim().length < 2) {
+        return res.status(400).json({ success: false, erro: 'Nome do cliente inválido' });
+    }
+    
+    if (!telefone || !validarTelefone(telefone)) {
+        return res.status(400).json({ success: false, erro: 'Telefone inválido' });
+    }
+    
+    const textoDescricao = tema || descricao;
+    if (!textoDescricao || textoDescricao.trim().length < 5) {
+        return res.status(400).json({ success: false, erro: 'Descreva o tema do trabalho (mínimo 5 caracteres)' });
+    }
+    
+    if (!plano) {
+        return res.status(400).json({ success: false, erro: 'Serviço não selecionado' });
+    }
+    
+    const precoNum = parseFloat(preco);
+    if (isNaN(precoNum) || precoNum <= 0) {
+        return res.status(400).json({ success: false, erro: 'Preço inválido' });
+    }
+    
+    const metodosValidos = ['mpesa', 'emola', 'deposito'];
+    if (!metodoPagamento || !metodosValidos.includes(metodoPagamento)) {
+        return res.status(400).json({ success: false, erro: 'Método de pagamento inválido' });
+    }
+    
+    next();
+}
 
 // ============================================
 // INICIALIZAÇÃO DO BANCO
@@ -100,21 +234,20 @@ async function initDatabase() {
         `);
         
         await pool.query(`
-            DROP TABLE IF EXISTS pedidos CASCADE
-        `);
-        
-        await pool.query(`
-            CREATE TABLE pedidos (
+            CREATE TABLE IF NOT EXISTS pedidos (
                 id SERIAL PRIMARY KEY,
                 usuario_id INTEGER REFERENCES usuarios(id),
                 cliente VARCHAR(100) NOT NULL,
                 telefone VARCHAR(100) NOT NULL,
                 descricao TEXT NOT NULL,
+                tema TEXT,
                 plano VARCHAR(50) NOT NULL,
                 nome_plano VARCHAR(100) NOT NULL,
                 preco DECIMAL(10,2) NOT NULL,
                 metodo_pagamento VARCHAR(50) NOT NULL,
-                arquivo TEXT,
+                arquivo_nome VARCHAR(255),
+                arquivo_original VARCHAR(255),
+                prazo_entrega DATE,
                 status VARCHAR(20) DEFAULT 'pendente',
                 data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -130,6 +263,17 @@ async function initDatabase() {
             )
         `);
         
+        // Verificar se existe admin, se não criar
+        const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        if (parseInt(adminCheck.rows[0].count) === 0) {
+            const hash = await bcrypt.hash('Admin123!@#', 10);
+            await pool.query(
+                'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
+                ['Administrador', '840000000', hash]
+            );
+            console.log('✅ Admin padrão criado: 840000000 / Admin123!@#');
+        }
+        
         console.log('✅ Banco inicializado com sucesso');
         
     } catch (error) {
@@ -138,27 +282,27 @@ async function initDatabase() {
 }
 
 // ============================================
-// ROTA DE EMERGÊNCIA - RECRIAR TABELA
+// ROTA DE EMERGÊNCIA - REPARAR TABELA
 // ============================================
 app.get('/admin/reparar-tabela', async (req, res) => {
     try {
-        await pool.query(`DROP TABLE IF EXISTS pedidos CASCADE`);
-        await pool.query(`
-            CREATE TABLE pedidos (
-                id SERIAL PRIMARY KEY,
-                usuario_id INTEGER REFERENCES usuarios(id),
-                cliente VARCHAR(100) NOT NULL,
-                telefone VARCHAR(100) NOT NULL,
-                descricao TEXT NOT NULL,
-                plano VARCHAR(50) NOT NULL,
-                nome_plano VARCHAR(100) NOT NULL,
-                preco DECIMAL(10,2) NOT NULL,
-                metodo_pagamento VARCHAR(50) NOT NULL,
-                arquivo TEXT,
-                status VARCHAR(20) DEFAULT 'pendente',
-                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+        // Verificar se já existe a estrutura correta
+        const checkCol = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'pedidos' AND column_name = 'tema'
         `);
+        
+        if (checkCol.rows.length === 0) {
+            await pool.query(`
+                ALTER TABLE pedidos 
+                ADD COLUMN tema TEXT,
+                ADD COLUMN arquivo_nome VARCHAR(255),
+                ADD COLUMN arquivo_original VARCHAR(255),
+                ADD COLUMN prazo_entrega DATE
+            `);
+        }
+        
         res.send(`
             <!DOCTYPE html>
             <html>
@@ -172,52 +316,8 @@ app.get('/admin/reparar-tabela', async (req, res) => {
             <body>
                 <div class="card">
                     <h1>✅ TABELA REPARADA!</h1>
-                    <p>A tabela pedidos foi recriada com a estrutura correta.</p>
+                    <p>Colunas adicionadas: tema, arquivo_nome, arquivo_original, prazo_entrega</p>
                     <a href="/">Voltar ao site</a>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        res.send(`Erro: ${error.message}`);
-    }
-});
-
-// ============================================
-// ROTA DE EMERGÊNCIA - CRIAR PRIMEIRO ADMIN
-// ============================================
-app.get('/admin/criar-fresco', async (req, res) => {
-    try {
-        await pool.query('DELETE FROM usuarios WHERE is_admin = true');
-        const hash = await bcrypt.hash('Admin123', 10);
-        await pool.query(
-            'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
-            ['Administrador', '840000000', hash]
-        );
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Admin Criado</title>
-            <style>
-                *{margin:0;padding:0;box-sizing:border-box}
-                body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;max-width:400px;text-align:center}
-                h1{color:#27ae60;margin-bottom:20px}
-                .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>✅ ADMIN CRIADO!</h1>
-                    <div class="info">
-                        <p><strong>Usuário:</strong> Administrador</p>
-                        <p><strong>WhatsApp:</strong> 840000000</p>
-                        <p><strong>Senha:</strong> Admin123</p>
-                    </div>
-                    <a href="/admin/login">🔐 Fazer Login</a>
-                    <br><br>
-                    <a href="/admin/reparar-tabela" style="background:#f59e0b">🔧 Reparar Tabela (se necessário)</a>
                 </div>
             </body>
             </html>
@@ -238,10 +338,52 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.post('/api/login', async (req, res) => {
+app.get('/facilitaki.apk', (req, res) => {
+    const apkPath = path.join(__dirname, 'facilitaki.apk');
+    
+    if (!fs.existsSync(apkPath)) {
+        return res.status(404).json({ error: 'APK não encontrado' });
+    }
+    
+    const stats = fs.statSync(apkPath);
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="facilitaki.apk"');
+    res.setHeader('Content-Length', stats.size);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(apkPath);
+});
+
+app.get('/api/apk-disponivel', (req, res) => {
+    const apkPath = path.join(__dirname, 'facilitaki.apk');
+    if (!fs.existsSync(apkPath)) {
+        return res.json({ disponivel: false, tamanho: 0, versao: '2.0.0' });
+    }
+    const stats = fs.statSync(apkPath);
+    res.json({ 
+        disponivel: true, 
+        tamanho: stats.size,
+        tamanhoMB: (stats.size / (1024 * 1024)).toFixed(1),
+        versao: '2.0.0',
+        nome: 'facilitaki.apk'
+    });
+});
+
+// ============================================
+// ROTAS DE AUTENTICAÇÃO
+// ============================================
+app.post('/api/login', loginLimiter, async (req, res) => {
     try {
         const { telefone, senha } = req.body;
+        
+        if (!telefone || !senha) {
+            return res.status(400).json({ success: false, erro: 'Preencha todos os campos' });
+        }
+        
         const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        if (!validarTelefone(telefoneLimpo)) {
+            return res.status(400).json({ success: false, erro: 'Telefone inválido' });
+        }
+        
         const result = await pool.query('SELECT * FROM usuarios WHERE telefone = $1', [telefoneLimpo]);
         
         if (result.rows.length === 0) {
@@ -266,7 +408,7 @@ app.post('/api/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Erro no login:', error);
-        res.status(500).json({ success: false, erro: error.message });
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
     }
 });
 
@@ -283,6 +425,9 @@ app.post('/api/cadastrar', async (req, res) => {
         }
         
         const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        if (!validarTelefone(telefoneLimpo)) {
+            return res.status(400).json({ success: false, erro: 'Telefone inválido' });
+        }
         
         const existe = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefoneLimpo]);
         if (existe.rows.length > 0) {
@@ -297,7 +442,6 @@ app.post('/api/cadastrar', async (req, res) => {
         
         const accessToken = generateAccessToken(result.rows[0]);
         
-        console.log('✅ Novo usuário cadastrado:', nome, telefoneLimpo);
         res.json({ 
             success: true, 
             accessToken, 
@@ -309,55 +453,8 @@ app.post('/api/cadastrar', async (req, res) => {
         });
     } catch (error) {
         console.error('Erro no cadastro:', error);
-        res.status(500).json({ success: false, erro: error.message });
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
     }
-});
-
-// ============================================
-// ROTA PARA SERVIAR O APK (4º ASPECTO)
-// ============================================
-app.get('/facilitaki.apk', (req, res) => {
-    const apkPath = path.join(__dirname, 'facilitaki.apk');
-    
-    if (!fs.existsSync(apkPath)) {
-        return res.status(404).json({ error: 'APK não encontrado' });
-    }
-    
-    const stats = fs.statSync(apkPath);
-    const fileSize = stats.size;
-    
-    console.log(`📱 Servindo APK: ${fileSize} bytes (${(fileSize / (1024 * 1024)).toFixed(1)} MB)`);
-    
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', 'attachment; filename="facilitaki.apk"');
-    res.setHeader('Content-Length', fileSize);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.setHeader('Accept-Ranges', 'bytes');
-    
-    res.sendFile(apkPath);
-});
-
-app.get('/api/apk-disponivel', (req, res) => {
-    const apkPath = path.join(__dirname, 'facilitaki.apk');
-    
-    if (!fs.existsSync(apkPath)) {
-        return res.json({ 
-            disponivel: false, 
-            tamanho: 0,
-            versao: '2.0.0'
-        });
-    }
-    
-    const stats = fs.statSync(apkPath);
-    const tamanhoMB = (stats.size / (1024 * 1024)).toFixed(1);
-    
-    res.json({ 
-        disponivel: true, 
-        tamanho: stats.size,
-        tamanhoMB: tamanhoMB,
-        versao: '2.0.0',
-        nome: 'facilitaki.apk'
-    });
 });
 
 // ============================================
@@ -374,82 +471,7 @@ app.get('/api/perfil', authenticateToken, async (req, res) => {
         }
         res.json({ success: true, usuario: result.rows[0] });
     } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
-    }
-});
-
-app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
-    try {
-        const result = await pool.query('SELECT * FROM pedidos WHERE usuario_id = $1 ORDER BY data_pedido DESC', [req.user.id]);
-        res.json({ success: true, pedidos: result.rows });
-    } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
-    }
-});
-
-// ============================================
-// ROTA DE UPLOAD
-// ============================================
-app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), async (req, res) => {
-    console.log('=== UPLOAD RECEBIDO ===');
-    console.log('Usuário ID:', req.user?.id);
-    console.log('Body:', req.body);
-    console.log('File:', req.file ? req.file.originalname : 'sem arquivo');
-    
-    try {
-        const { cliente, telefone, tema, descricao, plano, nomePlano, preco, metodoPagamento } = req.body;
-        
-        if (!plano) {
-            return res.status(400).json({ success: false, erro: 'Serviço não selecionado' });
-        }
-        if (!nomePlano) {
-            return res.status(400).json({ success: false, erro: 'Nome do plano não informado' });
-        }
-        if (!preco) {
-            return res.status(400).json({ success: false, erro: 'Preço não informado' });
-        }
-        if (!metodoPagamento) {
-            return res.status(400).json({ success: false, erro: 'Método de pagamento não selecionado' });
-        }
-        
-        const textoDescricao = tema || descricao;
-        if (!textoDescricao || textoDescricao.trim() === '') {
-            return res.status(400).json({ success: false, erro: 'Descreva o tema do seu trabalho' });
-        }
-        
-        let arquivoBase64 = null;
-        if (req.file) {
-            arquivoBase64 = req.file.buffer.toString('base64');
-            console.log('Arquivo convertido, tamanho:', Math.round(arquivoBase64.length / 1024), 'KB');
-        }
-        
-        const telefoneLimpo = telefone ? telefone.toString().replace(/\D/g, '') : req.user.telefone;
-        const precoNumero = parseFloat(preco);
-        const nomeCliente = cliente || req.user.nome;
-        
-        console.log('Inserindo no banco...');
-        
-        const result = await pool.query(
-            `INSERT INTO pedidos (usuario_id, cliente, telefone, descricao, plano, nome_plano, preco, metodo_pagamento, arquivo, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pendente')
-             RETURNING id`,
-            [req.user.id, nomeCliente, telefoneLimpo, textoDescricao, plano, nomePlano, precoNumero, metodoPagamento, arquivoBase64]
-        );
-        
-        console.log('✅ Pedido criado! ID:', result.rows[0].id);
-        
-        res.json({ 
-            success: true, 
-            pedido: result.rows[0],
-            message: 'Pedido registrado com sucesso!'
-        });
-        
-    } catch (error) {
-        console.error('❌ ERRO:', error);
-        res.status(500).json({ 
-            success: false, 
-            erro: 'Erro interno: ' + error.message
-        });
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
     }
 });
 
@@ -462,17 +484,134 @@ app.put('/api/perfil', authenticateToken, async (req, res) => {
         );
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM pedidos WHERE usuario_id = $1 ORDER BY data_pedido DESC',
+            [req.user.id]
+        );
+        res.json({ success: true, pedidos: result.rows });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+// ============================================
+// ROTA DE UPLOAD COMPLETA
+// ============================================
+app.post('/api/pedidos/upload', 
+    authenticateToken, 
+    upload.single('arquivo'), 
+    validarPedido, 
+    async (req, res) => {
+    console.log('📤 UPLOAD RECEBIDO - Usuário:', req.user?.id);
+    
+    try {
+        const { 
+            cliente, telefone, tema, descricao, 
+            plano, nomePlano, preco, metodoPagamento, prazo 
+        } = req.body;
+        
+        const textoDescricao = tema || descricao;
+        const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        const precoNumero = parseFloat(preco);
+        const nomeCliente = cliente || req.user.nome;
+        
+        let arquivoNome = null;
+        let arquivoOriginal = null;
+        
+        if (req.file) {
+            arquivoNome = req.file.filename;
+            arquivoOriginal = req.file.originalname;
+            console.log('📎 Arquivo salvo:', arquivoNome);
+        }
+        
+        const result = await pool.query(
+            `INSERT INTO pedidos 
+             (usuario_id, cliente, telefone, descricao, tema, plano, nome_plano, 
+              preco, metodo_pagamento, arquivo_nome, arquivo_original, prazo_entrega, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pendente')
+             RETURNING id`,
+            [
+                req.user.id, nomeCliente, telefoneLimpo, textoDescricao, textoDescricao,
+                plano, nomePlano, precoNumero, metodoPagamento,
+                arquivoNome, arquivoOriginal, prazo || null
+            ]
+        );
+        
+        console.log('✅ Pedido criado! ID:', result.rows[0].id);
+        
+        res.json({ 
+            success: true, 
+            pedido: result.rows[0],
+            message: 'Pedido registrado com sucesso!'
+        });
+        
+    } catch (error) {
+        console.error('❌ ERRO no upload:', error);
+        res.status(500).json({ 
+            success: false, 
+            erro: 'Erro interno: ' + error.message
+        });
+    }
+});
+
+// ============================================
+// ROTA PARA BAIXAR ARQUIVO DO PEDIDO
+// ============================================
+app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
+    try {
+        const pedidoId = req.params.id;
+        
+        const result = await pool.query(
+            'SELECT arquivo_nome, arquivo_original, usuario_id FROM pedidos WHERE id = $1',
+            [pedidoId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, erro: 'Pedido não encontrado' });
+        }
+        
+        const pedido = result.rows[0];
+        
+        // Verificar se o usuário é o dono do pedido
+        if (pedido.usuario_id !== req.user.id) {
+            // Verificar se é admin
+            const adminCheck = await pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.user.id]);
+            if (adminCheck.rows.length === 0 || !adminCheck.rows[0].is_admin) {
+                return res.status(403).json({ success: false, erro: 'Acesso negado' });
+            }
+        }
+        
+        if (!pedido.arquivo_nome) {
+            return res.status(404).json({ success: false, erro: 'Arquivo não disponível' });
+        }
+        
+        const filePath = path.join(uploadDir, pedido.arquivo_nome);
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ success: false, erro: 'Arquivo não encontrado' });
+        }
+        
+        res.setHeader('Content-Disposition', `attachment; filename="${pedido.arquivo_original || pedido.arquivo_nome}"`);
+        res.sendFile(filePath);
+        
+    } catch (error) {
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
     }
 });
 
 app.post('/api/contato', async (req, res) => {
     try {
         const { nome, telefone, mensagem } = req.body;
-        await pool.query('INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)', [nome, telefone, mensagem]);
+        await pool.query('INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)', 
+            [nome, telefone, mensagem]);
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ success: false, erro: error.message });
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
     }
 });
 
@@ -507,7 +646,9 @@ app.post('/admin/api/login', async (req, res) => {
 
 app.get('/admin/api/usuarios', authenticateAdmin, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, nome, telefone, email, is_admin, created_at FROM usuarios ORDER BY is_admin DESC, created_at DESC');
+        const result = await pool.query(
+            'SELECT id, nome, telefone, email, is_admin, created_at FROM usuarios ORDER BY is_admin DESC, created_at DESC'
+        );
         res.json({ success: true, usuarios: result.rows });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -515,22 +656,11 @@ app.get('/admin/api/usuarios', authenticateAdmin, async (req, res) => {
 });
 
 app.post('/admin/api/criar-admin', authenticateAdmin, async (req, res) => {
-    console.log('📝 Criando admin:', req.body);
-    
     try {
         const { nome, telefone, senha, confirmarSenha } = req.body;
         
-        if (!nome || nome.trim() === '') {
-            return res.status(400).json({ success: false, error: '❌ Nome é obrigatório' });
-        }
-        if (!telefone || telefone.trim() === '') {
-            return res.status(400).json({ success: false, error: '❌ WhatsApp é obrigatório' });
-        }
-        if (!senha || senha.trim() === '') {
-            return res.status(400).json({ success: false, error: '❌ Senha é obrigatória' });
-        }
-        if (!confirmarSenha || confirmarSenha.trim() === '') {
-            return res.status(400).json({ success: false, error: '❌ Confirmar senha é obrigatório' });
+        if (!nome || !telefone || !senha || !confirmarSenha) {
+            return res.status(400).json({ success: false, error: '❌ Preencha todos os campos' });
         }
         
         if (senha !== confirmarSenha) {
@@ -542,6 +672,9 @@ app.post('/admin/api/criar-admin', authenticateAdmin, async (req, res) => {
         }
         
         const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        if (!validarTelefone(telefoneLimpo)) {
+            return res.status(400).json({ success: false, error: '❌ Telefone inválido' });
+        }
         
         const existe = await pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefoneLimpo]);
         if (existe.rows.length > 0) {
@@ -549,16 +682,13 @@ app.post('/admin/api/criar-admin', authenticateAdmin, async (req, res) => {
         }
         
         const hash = await bcrypt.hash(senha, 10);
-        
         const result = await pool.query(
             'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true) RETURNING id, nome',
             [nome.trim(), telefoneLimpo, hash]
         );
         
-        console.log('✅ Admin criado:', result.rows[0]);
         res.json({ success: true, message: '✅ Administrador criado com sucesso!', admin: result.rows[0] });
     } catch (error) {
-        console.error('❌ Erro:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -585,7 +715,6 @@ app.delete('/admin/api/remover-admin/:id', authenticateAdmin, async (req, res) =
         }
         
         await pool.query('DELETE FROM usuarios WHERE id = $1', [adminId]);
-        
         res.json({ success: true, message: '✅ Administrador removido com sucesso!' });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -606,7 +735,6 @@ app.delete('/admin/api/remover-cliente/:id', authenticateAdmin, async (req, res)
         }
         
         await pool.query('DELETE FROM usuarios WHERE id = $1', [clienteId]);
-        
         res.json({ success: true, message: '✅ Cliente removido com sucesso!' });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -615,7 +743,13 @@ app.delete('/admin/api/remover-cliente/:id', authenticateAdmin, async (req, res)
 
 app.get('/admin/api/dashboard', authenticateAdmin, async (req, res) => {
     try {
-        const pedidos = await pool.query('SELECT * FROM pedidos ORDER BY data_pedido DESC LIMIT 100');
+        const pedidos = await pool.query(
+            `SELECT id, cliente, telefone, descricao, tema, plano, nome_plano, preco, 
+                    metodo_pagamento, arquivo_nome, arquivo_original, prazo_entrega, 
+                    status, data_pedido, usuario_id 
+             FROM pedidos ORDER BY data_pedido DESC LIMIT 100`
+        );
+        
         const contatos = await pool.query('SELECT * FROM contatos ORDER BY data_envio DESC LIMIT 100');
         const totalPedidos = (await pool.query('SELECT COUNT(*) FROM pedidos')).rows[0].count;
         const pedidosPendentes = (await pool.query("SELECT COUNT(*) FROM pedidos WHERE status = 'pendente'")).rows[0].count;
@@ -637,7 +771,14 @@ app.get('/admin/api/dashboard', authenticateAdmin, async (req, res) => {
 
 app.put('/admin/api/pedido/:id/status', authenticateAdmin, async (req, res) => {
     try {
-        await pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [req.body.status, req.params.id]);
+        const { status } = req.body;
+        const statusValidos = ['pendente', 'pago', 'em_andamento', 'concluido'];
+        
+        if (!status || !statusValidos.includes(status)) {
+            return res.status(400).json({ success: false, error: 'Status inválido' });
+        }
+        
+        await pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [status, req.params.id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -646,7 +787,18 @@ app.put('/admin/api/pedido/:id/status', authenticateAdmin, async (req, res) => {
 
 app.delete('/admin/api/pedido/:id', authenticateAdmin, async (req, res) => {
     try {
-        await pool.query('DELETE FROM pedidos WHERE id = $1', [req.params.id]);
+        const pedidoId = req.params.id;
+        
+        // Buscar arquivo para deletar
+        const result = await pool.query('SELECT arquivo_nome FROM pedidos WHERE id = $1', [pedidoId]);
+        if (result.rows.length > 0 && result.rows[0].arquivo_nome) {
+            const filePath = path.join(uploadDir, result.rows[0].arquivo_nome);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+        
+        await pool.query('DELETE FROM pedidos WHERE id = $1', [pedidoId]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -654,7 +806,7 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, async (req, res) => {
 });
 
 // ============================================
-// PÁGINAS ADMIN
+// PÁGINA ADMIN LOGIN
 // ============================================
 app.get('/admin/login', (req, res) => {
     res.send(`
@@ -679,7 +831,7 @@ app.get('/admin/login', (req, res) => {
                 <input type="password" id="password" placeholder="Senha">
                 <button onclick="login()">Entrar</button>
                 <div id="error" class="error"></div>
-                <div class="info">⚠️ Primeiro acesso? <a href="/admin/criar-fresco">Clique aqui</a></div>
+                <div class="info">👑 Admin padrão: 840000000 / Admin123!@#</div>
             </div>
             <script>
                 async function login() {
@@ -710,6 +862,9 @@ app.get('/admin/login', (req, res) => {
     `);
 });
 
+// ============================================
+// PÁGINA ADMIN PAINEL (COMPLETA COM DETALHES)
+// ============================================
 app.get('/admin/painel', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -727,9 +882,10 @@ app.get('/admin/painel', (req, res) => {
             .tab-btn.active{background:#667eea;color:#fff}
             .tab-content{display:none;background:#fff;border-radius:10px;padding:20px;overflow-x:auto}
             .tab-content.active{display:block}
-            table{width:100%;border-collapse:collapse}
-            th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}
-            .btn{padding:6px 12px;border:none;border-radius:5px;cursor:pointer;margin:2px}
+            table{width:100%;border-collapse:collapse;font-size:14px}
+            th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #ddd}
+            th{background:#f8f9fa;font-weight:600}
+            .btn{padding:5px 12px;border:none;border-radius:5px;cursor:pointer;margin:2px;font-size:12px}
             .btn-danger{background:#e74c3c;color:#fff}
             .btn-warning{background:#f39c12;color:#fff}
             .btn-primary{background:#667eea;color:#fff}
@@ -738,6 +894,25 @@ app.get('/admin/painel', (req, res) => {
             .form-admin input{margin:8px 0;padding:10px;border:1px solid #ddd;border-radius:5px;width:100%}
             .alert-success{background:#d4edda;color:#155724;padding:10px;border-radius:5px;margin-top:10px}
             .alert-error{background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-top:10px}
+            .alert-warning{background:#fff3cd;color:#856404;padding:10px;border-radius:5px;margin-bottom:10px}
+            
+            /* Modal Detalhes */
+            .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
+            .pedido-detalhes-modal.active{display:flex}
+            .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
+            .pedido-detalhes-content table{width:100%;border-collapse:collapse}
+            .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
+            .pedido-detalhes-content td:first-child{font-weight:600;color:#555;width:150px}
+            .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
+            .arquivo-link:hover{text-decoration:underline}
+            .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
+            .badge-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.75rem;font-weight:600}
+            .badge-status.pendente{background:#fef3c7;color:#92400e}
+            .badge-status.pago{background:#dbeafe;color:#1e40af}
+            .badge-status.em_andamento{background:#ede9fe;color:#5b21b6}
+            .badge-status.concluido{background:#d1fae5;color:#065f46}
+            .btn-ver-detalhes{padding:4px 12px;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px}
+            .btn-ver-detalhes:hover{background:#5a67d8}
         </style>
         </head>
         <body>
@@ -767,13 +942,32 @@ app.get('/admin/painel', (req, res) => {
                 <div id="admins-table">Carregando...</div>
             </div>
             <div id="tab-contatos" class="tab-content"><div id="contatos-table">Carregando...</div></div>
+            
+            <!-- Modal Detalhes -->
+            <div class="pedido-detalhes-modal" id="modalDetalhes">
+                <div class="pedido-detalhes-content">
+                    <h2 style="margin-bottom:1rem;">📄 Detalhes do Pedido</h2>
+                    <div id="detalhesPedido"></div>
+                    <button class="btn-fechar-modal" onclick="fecharModal()">Fechar</button>
+                </div>
+            </div>
+
             <script>
                 const token = localStorage.getItem('adminToken');
                 if(!token) window.location.href = '/admin/login';
+                const adminNome = localStorage.getItem('adminNome') || 'Admin';
+                document.getElementById('adminNome').textContent = adminNome;
                 
                 async function fetchWithAuth(url, options={}) {
-                    const res = await fetch(url, {...options, headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
-                    if(res.status===401){localStorage.clear();window.location.href='/admin/login';}
+                    const res = await fetch(url, {
+                        ...options,
+                        headers: {
+                            'Authorization': 'Bearer '+token,
+                            'Content-Type': 'application/json',
+                            ...(options.headers || {})
+                        }
+                    });
+                    if(res.status===401){ localStorage.clear(); window.location.href='/admin/login'; }
                     return res.json();
                 }
                 
@@ -785,12 +979,163 @@ app.get('/admin/painel', (req, res) => {
                         <div class="stat-card"><div class="stat-number">\${data.totalClientes}</div><div>Clientes</div></div>
                         <div class="stat-card"><div class="stat-number">\${data.totalAdmins}</div><div>Administradores</div></div>
                     \`;
-                    document.getElementById('pedidos-table').innerHTML = tablePedidos(data.pedidos);
-                    document.getElementById('contatos-table').innerHTML = tableContatos(data.contatos);
+                    document.getElementById('pedidos-table').innerHTML = tablePedidos(data.pedidos || []);
+                    document.getElementById('contatos-table').innerHTML = tableContatos(data.contatos || []);
                     carregarUsuarios();
                     carregarAdmins();
                 }
                 
+                function formatarData(data) {
+                    if (!data) return '-';
+                    return new Date(data).toLocaleDateString('pt-MZ');
+                }
+                
+                function getStatusBadge(status) {
+                    const labels = { 'pendente':'Pendente', 'pago':'Pago', 'em_andamento':'Em andamento', 'concluido':'Concluído' };
+                    return \`<span class="badge-status \${status}">\${labels[status] || status}</span>\`;
+                }
+                
+                function tablePedidos(pedidos) {
+                    if(!pedidos.length) return '<p>Nenhum pedido</p>';
+                    return \`
+                        <table>
+                            <thead><tr><th>ID</th><th>Cliente</th><th>Serviço</th><th>Valor</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                \${pedidos.map(p => \`
+                                    <tr>
+                                        <td>\${p.id}</td>
+                                        <td>\${p.cliente}</td>
+                                        <td>\${p.nome_plano}</td>
+                                        <td>\${parseFloat(p.preco).toLocaleString('pt-MZ')} MT</td>
+                                        <td>\${formatarData(p.prazo_entrega)}</td>
+                                        <td>\${getStatusBadge(p.status)}</td>
+                                        <td>
+                                            <button class="btn-ver-detalhes" onclick="verDetalhes(\${p.id})">👁️ Detalhes</button>
+                                            <button class="btn btn-warning" onclick="alterarStatus(\${p.id})">Status</button>
+                                            <button class="btn btn-danger" onclick="excluirPedido(\${p.id})">🗑️</button>
+                                        </td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                function tableClientes(clientes) {
+                    if(!clientes.length) return '<p>Nenhum cliente</p>';
+                    return \`
+                        <table>
+                            <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Email</th><th>Data</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                \${clientes.map(c => \`
+                                    <tr>
+                                        <td>\${c.id}</td>
+                                        <td>\${c.nome}</td>
+                                        <td>\${c.telefone}</td>
+                                        <td>\${c.email || '-'}</td>
+                                        <td>\${formatarData(c.created_at)}</td>
+                                        <td><button class="btn btn-danger" onclick="removerCliente(\${c.id})">Remover</button></td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                function tableAdmins(admins) {
+                    if(!admins.length) return '<p>Nenhum admin</p>';
+                    const adminIdAtual = parseInt(localStorage.getItem('adminId') || '0');
+                    return \`
+                        <p class="alert-warning">⚠️ Administrador ID 1 é protegido</p>
+                        <table>
+                            <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Data</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                \${admins.map(a => \`
+                                    <tr>
+                                        <td>\${a.id}\${a.id===1 ? ' 🔒' : ''}</td>
+                                        <td>\${a.nome}</td>
+                                        <td>\${a.telefone}</td>
+                                        <td>\${formatarData(a.created_at)}</td>
+                                        <td>\${(a.id!==1 && a.id!==adminIdAtual) ? \`<button class="btn btn-danger" onclick="removerAdmin(\${a.id})">Remover</button>\` : '-'}</td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                function tableContatos(contatos) {
+                    if(!contatos.length) return '<p>Nenhuma mensagem</p>';
+                    return \`
+                        <table>
+                            <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Mensagem</th><th>Data</th></tr></thead>
+                            <tbody>
+                                \${contatos.map(c => \`
+                                    <tr>
+                                        <td>\${c.id}</td>
+                                        <td>\${c.nome}</td>
+                                        <td>\${c.telefone}</td>
+                                        <td style="max-width:300px;word-wrap:break-word;">\${(c.mensagem||'').substring(0,150)}\${(c.mensagem||'').length > 150 ? '...' : ''}</td>
+                                        <td>\${new Date(c.data_envio).toLocaleString()}</td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                // ============================================
+                // DETALHES DO PEDIDO
+                // ============================================
+                async function verDetalhes(id) {
+                    const modal = document.getElementById('modalDetalhes');
+                    const content = document.getElementById('detalhesPedido');
+                    try {
+                        const data = await fetchWithAuth('/admin/api/dashboard');
+                        const pedido = (data.pedidos || []).find(p => p.id === id);
+                        if (!pedido) { content.innerHTML = '<p>Pedido não encontrado</p>'; modal.classList.add('active'); return; }
+                        
+                        content.innerHTML = \`
+                            <table>
+                                <tr><td>ID</td><td><strong>#\${pedido.id}</strong></td></tr>
+                                <tr><td>Cliente</td><td><strong>\${pedido.cliente}</strong></td></tr>
+                                <tr><td>WhatsApp</td><td><strong>\${pedido.telefone}</strong></td></tr>
+                                <tr><td>Serviço</td><td><strong>\${pedido.nome_plano}</strong></td></tr>
+                                <tr><td>Valor</td><td><strong>\${parseFloat(pedido.preco).toLocaleString('pt-MZ')} MT</strong></td></tr>
+                                <tr><td>Status</td><td>\${getStatusBadge(pedido.status)}</td></tr>
+                                <tr><td>Método Pagamento</td><td><strong>\${pedido.metodo_pagamento.toUpperCase()}</strong></td></tr>
+                                <tr><td>Data Pedido</td><td><strong>\${new Date(pedido.data_pedido).toLocaleString()}</strong></td></tr>
+                                <tr><td>Prazo Entrega</td><td><strong>\${formatarData(pedido.prazo_entrega) || 'Não definido'}</strong></td></tr>
+                                <tr><td>Tema/Descrição</td><td><strong style="white-space:pre-wrap;word-wrap:break-word;">\${pedido.descricao || pedido.tema || '-'}</strong></td></tr>
+                                <tr>
+                                    <td>Arquivo</td>
+                                    <td>
+                                        \${pedido.arquivo_nome ? 
+                                            \`<a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">
+                                                📎 \${pedido.arquivo_original || pedido.arquivo_nome}
+                                            </a>\` : 
+                                            '<span style="color:#999;">Nenhum arquivo enviado</span>'
+                                        }
+                                    </td>
+                                </tr>
+                            </table>
+                        \`;
+                        modal.classList.add('active');
+                    } catch (error) {
+                        content.innerHTML = '<p>Erro ao carregar detalhes</p>';
+                        modal.classList.add('active');
+                    }
+                }
+                
+                function fecharModal() { document.getElementById('modalDetalhes').classList.remove('active'); }
+                document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharModal(); });
+                document.getElementById('modalDetalhes').addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) fecharModal();
+                });
+                
+                // ============================================
+                // FUNÇÕES ADMIN
+                // ============================================
                 async function carregarUsuarios() {
                     const data = await fetchWithAuth('/admin/api/usuarios');
                     const clientes = (data.usuarios || []).filter(u => !u.is_admin);
@@ -801,36 +1146,6 @@ app.get('/admin/painel', (req, res) => {
                     const data = await fetchWithAuth('/admin/api/usuarios');
                     const admins = (data.usuarios || []).filter(u => u.is_admin);
                     document.getElementById('admins-table').innerHTML = tableAdmins(admins);
-                }
-                
-                function tablePedidos(pedidos) {
-                    if(!pedidos.length) return '<p>Nenhum pedido</p>';
-                    return '<table><thead><tr><th>ID</th><th>Cliente</th><th>Serviço</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody>' +
-                        pedidos.map(p => '<tr><td>'+p.id+'</td><td>'+p.cliente+'</td><td>'+p.nome_plano+'</td><td>'+p.preco+' MT</td><td>'+p.status+'</td><td><button class="btn btn-warning" onclick="alterarStatus('+p.id+')">Status</button> <button class="btn btn-danger" onclick="excluirPedido('+p.id+')">Excluir</button></td></tr>').join('') +
-                        '</tbody></table>';
-                }
-                
-                function tableClientes(clientes) {
-                    if(!clientes.length) return '<p>Nenhum cliente</p>';
-                    return '<table><thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Data</th><th>Ações</th></tr></thead><tbody>' +
-                        clientes.map(c => '<tr><td>'+c.id+'</td><td>'+c.nome+'</td><td>'+c.telefone+'</td><td>'+new Date(c.created_at).toLocaleDateString()+'</td><td><button class="btn btn-danger" onclick="removerCliente('+c.id+')">Remover</button></td></tr>').join('') +
-                        '</tbody></table>';
-                }
-                
-                function tableAdmins(admins) {
-                    if(!admins.length) return '<p>Nenhum admin</p>';
-                    const adminIdAtual = parseInt(localStorage.getItem('adminId'));
-                    return '<p class="alert-warning">⚠️ Administrador ID 1 é protegido</p>' +
-                        '<table><thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Data</th><th>Ações</th></tr></thead><tbody>' +
-                        admins.map(a => '<tr><td>'+a.id+'</td><td>'+a.nome+(a.id===1?' 🔒':'')+'</td><td>'+a.telefone+'</td><td>'+new Date(a.created_at).toLocaleDateString()+'</td><td>'+(a.id!==1 && a.id!==adminIdAtual ? '<button class="btn btn-danger" onclick="removerAdmin('+a.id+')">Remover</button>' : '-')+'</td></tr>').join('') +
-                        '</tbody></table>';
-                }
-                
-                function tableContatos(contatos) {
-                    if(!contatos.length) return '<p>Nenhuma mensagem</p>';
-                    return '<table><thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Mensagem</th><th>Data</th></tr></thead><tbody>' +
-                        contatos.map(c => '<tr><td>'+c.id+'</td><td>'+c.nome+'</td><td>'+c.telefone+'</td><td style="max-width:300px">'+(c.mensagem||'').substring(0,100)+'</td><td>'+new Date(c.data_envio).toLocaleString()+'</td></tr>').join('') +
-                        '</tbody></table>';
                 }
                 
                 async function criarAdmin() {
@@ -854,23 +1169,21 @@ app.get('/admin/painel', (req, res) => {
                     }
                     
                     msgDiv.innerHTML = '<div class="alert-success">⏳ Criando administrador...</div>';
-                    
                     try {
                         const data = await fetchWithAuth('/admin/api/criar-admin', {
                             method:'POST',
                             body:JSON.stringify({nome, telefone, senha, confirmarSenha:confirmar})
                         });
-                        
                         if(data.success) {
-                            msgDiv.innerHTML = '<div class="alert-success">✅ '+data.message+'</div>';
+                            msgDiv.innerHTML = \`<div class="alert-success">✅ \${data.message}</div>\`;
                             document.getElementById('adminNomeInput').value = '';
                             document.getElementById('adminTelefoneInput').value = '';
                             document.getElementById('adminSenhaInput').value = '';
                             document.getElementById('adminConfirmarSenhaInput').value = '';
                             carregarAdmins();
-                            setTimeout(()=>msgDiv.innerHTML='',3000);
+                            setTimeout(()=>msgDiv.innerHTML='', 5000);
                         } else {
-                            msgDiv.innerHTML = '<div class="alert-error">❌ '+data.error+'</div>';
+                            msgDiv.innerHTML = \`<div class="alert-error">❌ \${data.error}</div>\`;
                         }
                     } catch(e) {
                         msgDiv.innerHTML = '<div class="alert-error">❌ Erro de conexão</div>';
@@ -879,7 +1192,7 @@ app.get('/admin/painel', (req, res) => {
                 
                 async function removerAdmin(id) {
                     if(confirm('Remover este administrador?')) {
-                        const data = await fetchWithAuth('/admin/api/remover-admin/'+id,{method:'DELETE'});
+                        const data = await fetchWithAuth('/admin/api/remover-admin/'+id, {method:'DELETE'});
                         alert(data.success ? '✅ Removido!' : '❌ '+data.error);
                         if(data.success) carregarAdmins();
                     }
@@ -887,7 +1200,7 @@ app.get('/admin/painel', (req, res) => {
                 
                 async function removerCliente(id) {
                     if(confirm('Remover este cliente?')) {
-                        const data = await fetchWithAuth('/admin/api/remover-cliente/'+id,{method:'DELETE'});
+                        const data = await fetchWithAuth('/admin/api/remover-cliente/'+id, {method:'DELETE'});
                         alert(data.success ? '✅ Removido!' : '❌ '+data.error);
                         if(data.success) carregarUsuarios();
                     }
@@ -896,15 +1209,18 @@ app.get('/admin/painel', (req, res) => {
                 async function alterarStatus(id) {
                     const status = prompt('Status: pendente, pago, em_andamento, concluido');
                     if(status) {
-                        const data = await fetchWithAuth('/admin/api/pedido/'+id+'/status',{method:'PUT',body:JSON.stringify({status})});
+                        const data = await fetchWithAuth('/admin/api/pedido/'+id+'/status', {
+                            method:'PUT',
+                            body:JSON.stringify({status})
+                        });
                         alert(data.success ? '✅ Atualizado!' : '❌ '+data.error);
                         if(data.success) loadDashboard();
                     }
                 }
                 
                 async function excluirPedido(id) {
-                    if(confirm('Excluir pedido?')) {
-                        const data = await fetchWithAuth('/admin/api/pedido/'+id,{method:'DELETE'});
+                    if(confirm('Excluir pedido? Esta ação não pode ser desfeita.')) {
+                        const data = await fetchWithAuth('/admin/api/pedido/'+id, {method:'DELETE'});
                         alert(data.success ? '✅ Excluído!' : '❌ '+data.error);
                         if(data.success) loadDashboard();
                     }
@@ -937,9 +1253,9 @@ async function startServer() {
         console.log(`\n✅ Servidor rodando na porta ${PORT}`);
         console.log(`🌐 Site: http://localhost:${PORT}`);
         console.log(`🔐 Admin: http://localhost:${PORT}/admin/login`);
-        console.log(`👑 Criar Admin: http://localhost:${PORT}/admin/criar-fresco`);
         console.log(`🔧 Reparar Tabela: http://localhost:${PORT}/admin/reparar-tabela`);
         console.log(`📱 APK disponível em: http://localhost:${PORT}/facilitaki.apk`);
+        console.log(`\n👑 Admin padrão: 840000000 / Admin123!@#`);
     });
 }
 
