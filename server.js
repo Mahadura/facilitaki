@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (CORRIGIDO - DOWNLOAD DE ARQUIVOS)
+// server.js - Facilitaki Backend (CORRIGIDO - UPLOAD E DOWNLOAD DE ARQUIVOS)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -47,31 +47,42 @@ app.use((req, res, next) => {
 });
 
 // ============================================
-// CONFIGURAÇÃO DO MULTER
+// CONFIGURAÇÃO DO MULTER - CORRIGIDA
 // ============================================
 const uploadDir = path.join(__dirname, 'uploads');
 try {
     if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
+        console.log('📁 Diretório uploads criado:', uploadDir);
+    } else {
+        console.log('📁 Diretório uploads já existe:', uploadDir);
     }
 } catch (error) {
     console.warn('⚠️ Não foi possível criar diretório uploads:', error.message);
 }
 
+// Configuração de storage com verificação
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
+        // Garantir que o diretório existe
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
+        // Gerar nome único mantendo a extensão original
         const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const ext = path.extname(file.originalname);
-        cb(null, unique + ext);
+        const filename = unique + ext;
+        console.log('📎 Salvando arquivo como:', filename);
+        cb(null, filename);
     }
 });
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 },
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
     fileFilter: (req, file, cb) => {
         const allowed = [
             'application/pdf',
@@ -79,11 +90,16 @@ const upload = multer({
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'text/plain',
             'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/rtf',
+            'application/vnd.oasis.opendocument.text'
         ];
         if (allowed.includes(file.mimetype)) {
             cb(null, true);
         } else {
+            console.log('⚠️ Tipo de arquivo não permitido:', file.mimetype);
             cb(new Error('Tipo de arquivo não permitido'), false);
         }
     }
@@ -175,6 +191,7 @@ async function initDatabase() {
                 metodo_pagamento VARCHAR(50) NOT NULL,
                 arquivo_nome VARCHAR(255),
                 arquivo_original VARCHAR(255),
+                arquivo_tamanho BIGINT,
                 prazo_entrega DATE,
                 status VARCHAR(20) DEFAULT 'pendente',
                 data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -235,26 +252,12 @@ app.get('/admin/reparar-tabela', async (req, res) => {
                     metodo_pagamento VARCHAR(50) NOT NULL,
                     arquivo_nome VARCHAR(255),
                     arquivo_original VARCHAR(255),
+                    arquivo_tamanho BIGINT,
                     prazo_entrega DATE,
                     status VARCHAR(20) DEFAULT 'pendente',
                     data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
-        } else {
-            const columns = ['descricao', 'tema', 'arquivo_nome', 'arquivo_original', 'prazo_entrega'];
-            for (const col of columns) {
-                const colCheck = await pool.query(`
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.columns 
-                        WHERE table_name = 'pedidos' AND column_name = $1
-                    )
-                `, [col]);
-                
-                if (!colCheck.rows[0].exists) {
-                    await pool.query(`ALTER TABLE pedidos ADD COLUMN ${col} TEXT`);
-                    console.log(`✅ Coluna ${col} adicionada`);
-                }
-            }
         }
         
         res.send(`
@@ -271,52 +274,6 @@ app.get('/admin/reparar-tabela', async (req, res) => {
                 <div class="card">
                     <h1>✅ TABELA REPARADA!</h1>
                     <p>Todas as colunas foram adicionadas com sucesso.</p>
-                    <a href="/">Voltar ao site</a>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        res.send(`Erro: ${error.message}`);
-    }
-});
-
-app.get('/admin/reparar-completo', async (req, res) => {
-    try {
-        await pool.query(`DROP TABLE IF EXISTS pedidos CASCADE`);
-        await pool.query(`
-            CREATE TABLE pedidos (
-                id SERIAL PRIMARY KEY,
-                usuario_id INTEGER REFERENCES usuarios(id),
-                cliente VARCHAR(100) NOT NULL,
-                telefone VARCHAR(100) NOT NULL,
-                descricao TEXT,
-                tema TEXT,
-                plano VARCHAR(50) NOT NULL,
-                nome_plano VARCHAR(100) NOT NULL,
-                preco DECIMAL(10,2) NOT NULL,
-                metodo_pagamento VARCHAR(50) NOT NULL,
-                arquivo_nome VARCHAR(255),
-                arquivo_original VARCHAR(255),
-                prazo_entrega DATE,
-                status VARCHAR(20) DEFAULT 'pendente',
-                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Tabela Recriada</title>
-            <style>
-                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>✅ TABELA RECRIADA!</h1>
-                    <p>A tabela pedidos foi recriada com todas as colunas.</p>
                     <a href="/">Voltar ao site</a>
                 </div>
             </body>
@@ -497,7 +454,7 @@ app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
 });
 
 // ============================================
-// ROTA DE UPLOAD
+// ROTA DE UPLOAD - CORRIGIDA
 // ============================================
 app.post('/api/pedidos/upload', 
     authenticateToken, 
@@ -507,6 +464,7 @@ app.post('/api/pedidos/upload',
     console.log('Usuário ID:', req.user?.id);
     console.log('Body:', req.body);
     console.log('Arquivo:', req.file ? req.file.originalname : 'NENHUM');
+    console.log('Arquivo salvo em:', req.file ? req.file.path : 'NENHUM');
     
     try {
         const { 
@@ -521,6 +479,7 @@ app.post('/api/pedidos/upload',
             prazo 
         } = req.body;
         
+        // VALIDAÇÕES
         if (!cliente || cliente.trim().length < 2) {
             return res.status(400).json({ success: false, erro: 'Nome do cliente inválido' });
         }
@@ -548,23 +507,28 @@ app.post('/api/pedidos/upload',
             return res.status(400).json({ success: false, erro: 'Método de pagamento inválido' });
         }
         
+        // PROCESSAR ARQUIVO
         let arquivoNome = null;
         let arquivoOriginal = null;
+        let arquivoTamanho = null;
         
         if (req.file) {
             arquivoNome = req.file.filename;
             arquivoOriginal = req.file.originalname;
+            arquivoTamanho = req.file.size;
             console.log('📎 Arquivo salvo como:', arquivoNome);
+            console.log('📊 Tamanho:', arquivoTamanho, 'bytes');
         }
         
+        // SALVAR NO BANCO
         const telefoneLimpo = telefone.toString().replace(/\D/g, '');
         const nomeCliente = cliente || req.user.nome;
         
         const result = await pool.query(
             `INSERT INTO pedidos 
              (usuario_id, cliente, telefone, descricao, tema, plano, nome_plano, 
-              preco, metodo_pagamento, arquivo_nome, arquivo_original, prazo_entrega, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pendente')
+              preco, metodo_pagamento, arquivo_nome, arquivo_original, arquivo_tamanho, prazo_entrega, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pendente')
              RETURNING id`,
             [
                 req.user.id, 
@@ -578,6 +542,7 @@ app.post('/api/pedidos/upload',
                 metodoPagamento,
                 arquivoNome, 
                 arquivoOriginal, 
+                arquivoTamanho,
                 prazo || null
             ]
         );
@@ -605,7 +570,7 @@ app.post('/api/pedidos/upload',
 app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
     try {
         const pedidoId = req.params.id;
-        console.log('📥 Solicitando arquivo do pedido:', pedidoId);
+        console.log('📥 Solicitando download do pedido:', pedidoId);
         
         const result = await pool.query(
             'SELECT arquivo_nome, arquivo_original, usuario_id, cliente FROM pedidos WHERE id = $1',
@@ -618,6 +583,7 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
         
         const pedido = result.rows[0];
         console.log('📋 Pedido encontrado:', pedido.id, 'Cliente:', pedido.cliente);
+        console.log('📎 Arquivo no banco:', pedido.arquivo_nome);
         
         // Verificar permissão
         if (pedido.usuario_id !== req.user.id) {
@@ -631,18 +597,63 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
             return res.status(404).json({ success: false, erro: 'Arquivo não disponível' });
         }
         
+        // Verificar se o arquivo existe no disco
         const filePath = path.join(uploadDir, pedido.arquivo_nome);
-        console.log('📁 Caminho do arquivo:', filePath);
+        console.log('📁 Caminho completo:', filePath);
         
         if (!fs.existsSync(filePath)) {
-            console.log('❌ Arquivo não encontrado no disco');
-            return res.status(404).json({ success: false, erro: 'Arquivo não encontrado no servidor' });
+            console.log('❌ Arquivo NÃO encontrado no disco');
+            
+            // Tentar encontrar o arquivo com outras extensões
+            const files = fs.readdirSync(uploadDir);
+            console.log('📂 Arquivos no diretório:', files);
+            
+            // Tentar encontrar por nome parcial
+            const baseName = pedido.arquivo_nome.split('.')[0];
+            const foundFile = files.find(f => f.startsWith(baseName));
+            
+            if (foundFile) {
+                const foundPath = path.join(uploadDir, foundFile);
+                console.log('✅ Arquivo encontrado com nome diferente:', foundFile);
+                
+                const stats = fs.statSync(foundPath);
+                const ext = path.extname(foundFile);
+                let contentType = 'application/octet-stream';
+                const mimeTypes = {
+                    '.pdf': 'application/pdf',
+                    '.doc': 'application/msword',
+                    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    '.txt': 'text/plain',
+                    '.xls': 'application/vnd.ms-excel',
+                    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    '.ppt': 'application/vnd.ms-powerpoint',
+                    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                };
+                if (mimeTypes[ext]) {
+                    contentType = mimeTypes[ext];
+                }
+                
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Content-Length', stats.size);
+                res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pedido.arquivo_original || foundFile)}"`);
+                res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+                
+                const fileStream = fs.createReadStream(foundPath);
+                fileStream.pipe(res);
+                return;
+            }
+            
+            return res.status(404).json({ 
+                success: false, 
+                erro: 'Arquivo não encontrado no servidor',
+                debug: { arquivo: pedido.arquivo_nome, arquivos: files }
+            });
         }
         
+        // Arquivo encontrado, enviar
         const stats = fs.statSync(filePath);
         console.log('📊 Tamanho do arquivo:', stats.size, 'bytes');
         
-        // Determinar o tipo de conteúdo
         const ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome).toLowerCase();
         let contentType = 'application/octet-stream';
         const mimeTypes = {
@@ -659,19 +670,20 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
             contentType = mimeTypes[ext];
         }
         
-        // Configurar headers para download
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Length', stats.size);
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pedido.arquivo_original || pedido.arquivo_nome)}"`);
         res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
         
-        // Enviar arquivo
         const fileStream = fs.createReadStream(filePath);
         fileStream.pipe(res);
         
         fileStream.on('error', (error) => {
             console.error('❌ Erro ao enviar arquivo:', error);
-            res.status(500).json({ success: false, erro: 'Erro ao enviar arquivo' });
+            if (!res.headersSent) {
+                res.status(500).json({ success: false, erro: 'Erro ao enviar arquivo' });
+            }
         });
         
         console.log('✅ Arquivo enviado com sucesso!');
@@ -683,7 +695,7 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
 });
 
 // ============================================
-// ROTA PARA VISUALIZAR ARQUIVO (PDF no navegador)
+// ROTA PARA VISUALIZAR ARQUIVO
 // ============================================
 app.get('/api/pedidos/:id/visualizar', authenticateToken, async (req, res) => {
     try {
@@ -718,13 +730,11 @@ app.get('/api/pedidos/:id/visualizar', authenticateToken, async (req, res) => {
         
         const ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome).toLowerCase();
         
-        // Se for PDF, exibe no navegador
         if (ext === '.pdf') {
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(pedido.arquivo_original || pedido.arquivo_nome)}"`);
             res.sendFile(filePath);
         } else {
-            // Para outros tipos, força download
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pedido.arquivo_original || pedido.arquivo_nome)}"`);
             res.sendFile(filePath);
         }
@@ -879,7 +889,7 @@ app.get('/admin/api/dashboard', authenticateAdmin, async (req, res) => {
     try {
         const pedidos = await pool.query(
             `SELECT id, cliente, telefone, descricao, tema, plano, nome_plano, preco, 
-                    arquivo_nome, arquivo_original, prazo_entrega, 
+                    arquivo_nome, arquivo_original, arquivo_tamanho, prazo_entrega, 
                     status, data_pedido, usuario_id 
              FROM pedidos ORDER BY data_pedido DESC LIMIT 100`
         );
@@ -939,7 +949,7 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, async (req, res) => {
 });
 
 // ============================================
-// PÁGINAS ADMIN
+// PÁGINAS ADMIN (MANTIDAS IGUAIS)
 // ============================================
 app.get('/admin/login', (req, res) => {
     res.send(`
@@ -995,7 +1005,7 @@ app.get('/admin/login', (req, res) => {
 });
 
 // ============================================
-// PAINEL ADMIN
+// PAINEL ADMIN - COM DEBUG DE ARQUIVOS
 // ============================================
 app.get('/admin/painel', (req, res) => {
     res.send(`
@@ -1045,6 +1055,7 @@ app.get('/admin/painel', (req, res) => {
             .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
             .valor-destaque{font-size:1.2rem;color:#2563eb;font-weight:700}
             .reparo-link{display:inline-block;margin-top:10px;padding:8px 16px;background:#f39c12;color:#fff;border-radius:5px;text-decoration:none;font-size:12px}
+            .debug-info{background:#f8f9fa;padding:10px;border-radius:5px;font-size:12px;color:#666;margin-top:5px}
         </style>
         </head>
         <body>
@@ -1062,7 +1073,6 @@ app.get('/admin/painel', (req, res) => {
             <div id="tab-pedidos" class="tab-content active">
                 <div style="margin-bottom:10px;">
                     <a href="/admin/reparar-tabela" class="reparo-link">🔧 Reparar Tabela</a>
-                    <a href="/admin/reparar-completo" class="reparo-link" style="background:#e74c3c;">⚠️ Recriar Tabela</a>
                 </div>
                 <div id="pedidos-table">Carregando...</div>
             </div>
@@ -1139,6 +1149,13 @@ app.get('/admin/painel', (req, res) => {
                     try { return new Date(data).toLocaleString('pt-MZ'); } catch(e) { return '-'; }
                 }
                 
+                function formatarTamanho(bytes) {
+                    if (!bytes) return '-';
+                    if (bytes < 1024) return bytes + ' B';
+                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+                }
+                
                 function getStatusBadge(status) {
                     const labels = { 'pendente':'Pendente', 'pago':'Pago', 'em_andamento':'Em andamento', 'concluido':'Concluído' };
                     return \`<span class="badge-status \${status}">\${labels[status] || status}</span>\`;
@@ -1156,6 +1173,7 @@ app.get('/admin/painel', (req, res) => {
                                     <th>Serviço</th>
                                     <th>Valor</th>
                                     <th>Prazo</th>
+                                    <th>Arquivo</th>
                                     <th>Status</th>
                                     <th>Ações</th>
                                 </tr>
@@ -1169,6 +1187,7 @@ app.get('/admin/painel', (req, res) => {
                                         <td>\${p.nome_plano}</td>
                                         <td>\${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</td>
                                         <td>\${formatarData(p.prazo_entrega)}</td>
+                                        <td>\${p.arquivo_nome ? '📎 Sim' : '❌ Não'}</td>
                                         <td>\${getStatusBadge(p.status)}</td>
                                         <td>
                                             <button class="btn-ver-detalhes" onclick="verDetalhes(\${p.id})">👁️ Detalhes</button>
@@ -1257,27 +1276,21 @@ app.get('/admin/painel', (req, res) => {
                             return; 
                         }
                         
-                        // Verificar se tem arquivo
                         let arquivoHtml = '<span style="color:#999;">Nenhum arquivo enviado</span>';
                         if (pedido.arquivo_nome) {
-                            const ext = (pedido.arquivo_original || pedido.arquivo_nome).split('.').pop().toLowerCase();
-                            if (ext === 'pdf') {
-                                arquivoHtml = \`
-                                    <a href="/api/pedidos/\${pedido.id}/visualizar" class="arquivo-link" target="_blank">
-                                        👁️ Visualizar PDF
-                                    </a>
-                                    <br>
+                            arquivoHtml = \`
+                                <div>
                                     <a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" download>
                                         📥 Baixar \${pedido.arquivo_original || pedido.arquivo_nome}
                                     </a>
-                                \`;
-                            } else {
-                                arquivoHtml = \`
-                                    <a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" download>
-                                        📥 Baixar \${pedido.arquivo_original || pedido.arquivo_nome}
+                                    <span style="font-size:12px;color:#999;margin-left:10px;">(\${formatarTamanho(pedido.arquivo_tamanho)})</span>
+                                </div>
+                                <div style="margin-top:5px;">
+                                    <a href="/api/pedidos/\${pedido.id}/visualizar" class="arquivo-link" target="_blank" style="font-size:12px;">
+                                        👁️ Visualizar (PDF)
                                     </a>
-                                \`;
-                            }
+                                </div>
+                            \`;
                         }
                         
                         content.innerHTML = \`
@@ -1293,6 +1306,9 @@ app.get('/admin/painel', (req, res) => {
                                 <tr><td>📊 Status</td><td>\${getStatusBadge(pedido.status)}</td></tr>
                                 <tr><td>📅 Data do Pedido</td><td><strong>\${formatarDataHora(pedido.data_pedido)}</strong></td></tr>
                             </table>
+                            <div class="debug-info">
+                                <strong>Debug:</strong> arquivo_nome=\${pedido.arquivo_nome || 'null'}
+                            </div>
                         \`;
                         modal.classList.add('active');
                     } catch (error) {
@@ -1431,6 +1447,7 @@ async function startServer() {
         console.log(`🔧 Reparar Tabela: http://localhost:${PORT}/admin/reparar-tabela`);
         console.log(`📱 APK disponível em: http://localhost:${PORT}/facilitaki.apk`);
         console.log(`\n👑 Admin padrão: 840000000 / Admin123!@#`);
+        console.log(`\n📁 Diretório de uploads: ${uploadDir}`);
     });
 }
 
