@@ -1,1078 +1,1257 @@
-// script.js - FACILITAKI (VERSÃO COMPATÍVEL COM DEPLOY)
-// ============================================
-// FACILITAKI - SCRIPT COMPLETO V2.0
-// ============================================
+// server.js - Facilitaki Backend (VERSÃO SUPER ESTÁVEL)
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config();
 
-var usuarioLogado = null;
-var carrinho = {
-    plano: null,
-    nomePlano: '',
-    preco: 0,
-    metodoPagamento: null
-};
-var pedidosOriginais = [];
-var uploadArquivoSelecionado = null;
-var uploadMetodoSelecionado = null;
-
-var API_URL = '';
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 // ============================================
-// INICIALIZAÇÃO
+// CONFIGURAÇÕES
 // ============================================
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Facilitaki inicializado');
-    
-    var usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
-    var tokenSalvo = localStorage.getItem('token_facilitaki');
-    
-    if (usuarioSalvo && tokenSalvo) {
-        try {
-            usuarioLogado = JSON.parse(usuarioSalvo);
-            atualizarHeaderLogado();
-            carregarPerfilUsuario();
-            carregarPedidos();
-            carregarDadosFinanceiros();
-        } catch (e) {
-            console.error('Erro ao parsear usuário:', e);
-        }
-    }
-    
-    // Menu mobile
-    var mobileBtn = document.getElementById('mobileMenuBtn');
-    var navMenu = document.getElementById('navMenu');
-    if (mobileBtn) {
-        mobileBtn.addEventListener('click', function() {
-            navMenu.classList.toggle('active');
-        });
-    }
-    
-    // Animações
-    var observerOptions = { threshold: 0.1 };
-    var observer = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('active');
-            }
-        });
-    }, observerOptions);
-    document.querySelectorAll('.reveal').forEach(function(el) {
-        observer.observe(el);
+const JWT_SECRET = process.env.SECRET_KEY || 'chave-secreta-facilitaki-2026';
+
+// ============================================
+// BANCO DE DADOS
+// ============================================
+let pool;
+try {
+    pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     });
-    
-    // Header scroll
-    window.addEventListener('scroll', function() {
-        var header = document.getElementById('mainHeader');
-        if (window.scrollY > 50) {
-            header.classList.add('scrolled');
-        } else {
-            header.classList.remove('scrolled');
-        }
+    console.log('✅ Conectado ao banco de dados');
+} catch (error) {
+    console.error('❌ Erro ao conectar ao banco:', error.message);
+    // Fallback para desenvolvimento
+    pool = new Pool({
+        connectionString: 'postgresql://localhost:5432/facilitaki',
     });
-    
-    // Estatísticas animadas
-    var statNumbers = document.querySelectorAll('.stat-number');
-    statNumbers.forEach(function(stat) {
-        var target = parseInt(stat.dataset.target);
-        if (target) {
-            var current = 0;
-            var increment = target / 50;
-            var timer = setInterval(function() {
-                current += increment;
-                if (current >= target) {
-                    stat.textContent = target;
-                    clearInterval(timer);
-                } else {
-                    stat.textContent = Math.floor(current);
-                }
-            }, 30);
-        }
-    });
-    
-    // Tabs do dashboard
-    document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var tabId = btn.dataset.tab;
-            document.querySelectorAll('.tab-btn').forEach(function(b) {
-                b.classList.remove('active');
-            });
-            btn.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach(function(content) {
-                content.classList.remove('active');
-            });
-            var targetTab = document.getElementById('tab-' + tabId);
-            if (targetTab) targetTab.classList.add('active');
-            
-            if (tabId === 'pedidos') carregarPedidos();
-            if (tabId === 'financeiro') carregarDadosFinanceiros();
-            if (tabId === 'perfil') carregarPerfilUsuario();
-        });
-    });
-    
-    // Filtros
-    var searchInput = document.getElementById('searchPedido');
-    var statusFilter = document.getElementById('filtroStatus');
-    if (searchInput) searchInput.addEventListener('input', function() { aplicarFiltros(); });
-    if (statusFilter) statusFilter.addEventListener('change', function() { aplicarFiltros(); });
-    
-    // Upload
-    var uploadDescricao = document.getElementById('uploadDescricao');
-    var uploadTermos = document.getElementById('uploadTermos');
-    if (uploadDescricao) uploadDescricao.addEventListener('input', verificarHabilitarBotaoUpload);
-    if (uploadTermos) uploadTermos.addEventListener('change', verificarHabilitarBotaoUpload);
+}
+
+// ============================================
+// MIDDLEWARES
+// ============================================
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.static('.'));
+
+// Logger
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
 });
 
 // ============================================
-// NAVEGAÇÃO
+// CONFIGURAÇÃO DO MULTER
 // ============================================
-function navegarPara(sectionId) {
-    document.querySelectorAll('.section').forEach(function(section) {
-        section.classList.remove('active');
-    });
-    
-    document.querySelectorAll('.nav-link').forEach(function(link) {
-        link.classList.remove('active');
-    });
-    
-    var section = document.getElementById(sectionId);
-    if (section) {
-        section.classList.add('active');
-        
-        var navLink = document.querySelector('[onclick*="' + sectionId + '"]');
-        if (navLink && navLink.classList.contains('nav-link')) {
-            navLink.classList.add('active');
-        }
-        
-        if (sectionId === 'dashboard' && usuarioLogado) {
-            carregarPedidos();
-            carregarDadosFinanceiros();
-            carregarPerfilUsuario();
-            // Garantir que a aba "Novo Pedido" seja a padrão quando vier dos serviços
-            var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
-            if (tabUpload && sessionStorage.getItem('servico_selecionado')) {
-                setTimeout(function() {
-                    tabUpload.click();
-                    sessionStorage.removeItem('servico_selecionado');
-                }, 300);
-            }
-        }
-        if (sectionId === 'checkout') atualizarResumoPedido();
-        if (sectionId === 'pagamento-sucesso' && carrinho.plano) mostrarInstrucoesPagamento();
-    }
-    
-    var navMenu = document.getElementById('navMenu');
-    if (navMenu && navMenu.classList.contains('active')) {
-        navMenu.classList.remove('active');
-    }
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// ============================================
-// AUTENTICAÇÃO
-// ============================================
-function atualizarHeaderLogado() {
-    var btnHeader = document.getElementById('btnLoginHeader');
-    if (btnHeader && usuarioLogado) {
-        btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
-        btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    try {
+        fs.mkdirSync(uploadDir, { recursive: true });
+        console.log('📁 Diretório uploads criado');
+    } catch (error) {
+        console.warn('⚠️ Não foi possível criar diretório uploads:', error.message);
     }
 }
 
-function mostrarToast(mensagem, tipo) {
-    if (tipo === undefined) tipo = 'info';
-    var container = document.getElementById('toastContainer');
-    if (!container) return;
-    
-    var toast = document.createElement('div');
-    toast.className = 'toast ' + tipo;
-    var icon = tipo === 'success' ? 'fa-check-circle' : tipo === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
-    toast.innerHTML = '<i class="fas ' + icon + '"></i><span class="toast-message">' + mensagem + '</span><button class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>';
-    container.appendChild(toast);
-    setTimeout(function() { toast.remove(); }, 5000);
-}
-
-function mostrarLoading(mensagem) {
-    if (mensagem === undefined) mensagem = 'Carregando...';
-    var loading = document.getElementById('globalLoading');
-    if (loading) loading.remove();
-    
-    loading = document.createElement('div');
-    loading.id = 'globalLoading';
-    loading.className = 'global-loading';
-    loading.innerHTML = '<div class="loading-content"><div class="spinner"></div><p>' + mensagem + '</p></div>';
-    document.body.appendChild(loading);
-}
-
-function fecharLoading() {
-    var loading = document.getElementById('globalLoading');
-    if (loading) loading.remove();
-}
-
-// ============================================
-// LOGIN E CADASTRO - CORRIGIDO
-// ============================================
-function fazerLogin() {
-    var telefone = document.getElementById('loginTelefone')?.value.trim();
-    var senha = document.getElementById('loginSenha')?.value;
-    
-    if (!telefone || !senha) {
-        mostrarToast('Preencha todos os campos', 'error');
-        return;
+const storage = multer.diskStorage({
+    destination: function(req, file, cb) {
+        cb(null, uploadDir);
+    },
+    filename: function(req, file, cb) {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, unique + ext);
     }
-    
-    mostrarLoading('Entrando...');
-    
-    fetch(API_URL + '/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telefone: telefone, senha: senha })
-    })
-    .then(function(response) { return response.json(); })
-    .then(function(data) {
-        fecharLoading();
-        if (data.success) {
-            usuarioLogado = data.usuario;
-            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
-            localStorage.setItem('token_facilitaki', data.accessToken);
-            atualizarHeaderLogado();
-            mostrarToast('Login realizado com sucesso!', 'success');
-            
-            // Verificar se veio de um serviço
-            var servicoSelecionado = sessionStorage.getItem('servico_selecionado');
-            var precoSelecionado = sessionStorage.getItem('preco_selecionado');
-            
-            if (servicoSelecionado && precoSelecionado) {
-                sessionStorage.removeItem('servico_selecionado');
-                sessionStorage.removeItem('preco_selecionado');
-                setTimeout(function() {
-                    navegarPara('dashboard');
-                    setTimeout(function() {
-                        var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
-                        if (tabUpload) tabUpload.click();
-                    }, 500);
-                }, 1000);
-            } else {
-                setTimeout(function() { navegarPara('dashboard'); }, 1000);
-            }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: function(req, file, cb) {
+        const allowed = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
         } else {
-            mostrarToast(data.erro || 'Credenciais inválidas', 'error');
+            cb(new Error('Tipo de arquivo não permitido'), false);
         }
-    })
-    .catch(function(error) {
-        fecharLoading();
-        console.error('Erro no login:', error);
-        mostrarToast('Erro de conexão', 'error');
+    }
+});
+
+// ============================================
+// FUNÇÕES DE AUTENTICAÇÃO
+// ============================================
+function generateAccessToken(user) {
+    return jwt.sign(
+        { id: user.id, nome: user.nome, telefone: user.telefone },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+    );
+}
+
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ success: false, error: 'Token não fornecido' });
+    }
+    
+    jwt.verify(token, JWT_SECRET, function(err, user) {
+        if (err) {
+            return res.status(403).json({ success: false, error: 'Token inválido' });
+        }
+        req.user = user;
+        next();
     });
 }
 
-function fazerCadastro() {
-    var nome = document.getElementById('cadastroNome')?.value.trim();
-    var telefone = document.getElementById('cadastroTelefone')?.value.trim();
-    var senha = document.getElementById('cadastroSenha')?.value;
-    var confirmar = document.getElementById('cadastroSenhaConfirm')?.value;
-    
-    if (!nome || !telefone || !senha || !confirmar) {
-        mostrarToast('Preencha todos os campos', 'error');
-        return;
+function authenticateAdmin(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ success: false, error: 'Token não fornecido' });
     }
     
-    if (senha !== confirmar) {
-        mostrarToast('As senhas não coincidem', 'error');
-        return;
-    }
-    
-    if (senha.length < 6) {
-        mostrarToast('A senha deve ter pelo menos 6 caracteres', 'error');
-        return;
-    }
-    
-    mostrarLoading('Cadastrando...');
-    
-    fetch(API_URL + '/api/cadastrar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nome, telefone: telefone, senha: senha })
-    })
-    .then(function(response) { return response.json(); })
-    .then(function(data) {
-        fecharLoading();
-        if (data.success) {
-            usuarioLogado = data.usuario;
-            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(data.usuario));
-            localStorage.setItem('token_facilitaki', data.accessToken);
-            atualizarHeaderLogado();
-            mostrarToast('Cadastro realizado com sucesso!', 'success');
-            
-            var servicoSelecionado = sessionStorage.getItem('servico_selecionado');
-            var precoSelecionado = sessionStorage.getItem('preco_selecionado');
-            
-            if (servicoSelecionado && precoSelecionado) {
-                sessionStorage.removeItem('servico_selecionado');
-                sessionStorage.removeItem('preco_selecionado');
-                setTimeout(function() {
-                    navegarPara('dashboard');
-                    setTimeout(function() {
-                        var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
-                        if (tabUpload) tabUpload.click();
-                    }, 500);
-                }, 1000);
-            } else {
-                setTimeout(function() { navegarPara('dashboard'); }, 1000);
-            }
-        } else {
-            mostrarToast(data.erro || 'Erro ao cadastrar', 'error');
+    jwt.verify(token, JWT_SECRET, function(err, user) {
+        if (err) {
+            return res.status(403).json({ success: false, error: 'Token inválido' });
         }
-    })
-    .catch(function(error) {
-        fecharLoading();
-        console.error('Erro no cadastro:', error);
-        mostrarToast('Erro de conexão', 'error');
+        
+        pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [user.id])
+            .then(function(result) {
+                if (result.rows.length === 0 || !result.rows[0].is_admin) {
+                    return res.status(403).json({ success: false, error: 'Acesso negado' });
+                }
+                req.user = user;
+                next();
+            })
+            .catch(function(err) {
+                console.error('Erro ao verificar admin:', err);
+                return res.status(500).json({ success: false, error: 'Erro interno' });
+            });
     });
 }
 
-function fazerLogout() {
-    localStorage.removeItem('usuarioLogado_facilitaki');
-    localStorage.removeItem('token_facilitaki');
-    usuarioLogado = null;
-    atualizarHeaderLogado();
-    mostrarToast('Logout realizado com sucesso!', 'success');
-    navegarPara('home');
-}
-
-function mostrarCadastro() {
-    var formLogin = document.getElementById('formLogin');
-    var formCadastro = document.getElementById('formCadastro');
-    if (formLogin) formLogin.style.display = 'none';
-    if (formCadastro) formCadastro.style.display = 'block';
-}
-
-function mostrarLogin() {
-    var formLogin = document.getElementById('formLogin');
-    var formCadastro = document.getElementById('formCadastro');
-    if (formCadastro) formCadastro.style.display = 'none';
-    if (formLogin) formLogin.style.display = 'block';
+// ============================================
+// VALIDAÇÕES
+// ============================================
+function validarTelefone(telefone) {
+    if (!telefone) return false;
+    var limpo = telefone.toString().replace(/\D/g, '');
+    return limpo.length >= 9 && limpo.length <= 12;
 }
 
 // ============================================
-// BOTÕES DE SERVIÇO - CORRIGIDO
+// INICIALIZAÇÃO DO BANCO
 // ============================================
-function verificarELogar(tipo, preco) {
-    var tokenSalvo = localStorage.getItem('token_facilitaki');
-    var usuarioSalvo = localStorage.getItem('usuarioLogado_facilitaki');
-    
-    if (tokenSalvo && usuarioSalvo) {
+async function initDatabase() {
+    try {
+        console.log('🔧 Inicializando banco...');
+        
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                telefone VARCHAR(100) UNIQUE NOT NULL,
+                email VARCHAR(100),
+                senha_hash VARCHAR(255) NOT NULL,
+                is_admin BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS pedidos (
+                id SERIAL PRIMARY KEY,
+                usuario_id INTEGER REFERENCES usuarios(id),
+                cliente VARCHAR(100) NOT NULL,
+                telefone VARCHAR(100) NOT NULL,
+                descricao TEXT,
+                tema TEXT,
+                plano VARCHAR(50) NOT NULL,
+                nome_plano VARCHAR(100) NOT NULL,
+                preco DECIMAL(10,2) NOT NULL,
+                metodo_pagamento VARCHAR(50) NOT NULL,
+                arquivo_nome VARCHAR(255),
+                arquivo_original VARCHAR(255),
+                prazo_entrega DATE,
+                status VARCHAR(20) DEFAULT 'pendente',
+                data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        // Adicionar colunas se não existirem
         try {
-            usuarioLogado = JSON.parse(usuarioSalvo);
-            selecionarPlano(tipo, preco);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS descricao TEXT`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tema TEXT`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255)`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255)`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prazo_entrega DATE`);
         } catch (e) {
-            sessionStorage.setItem('servico_selecionado', tipo);
-            sessionStorage.setItem('preco_selecionado', preco);
-            mostrarToast('Faça login para continuar', 'info');
-            navegarPara('login');
-        }
-    } else {
-        sessionStorage.setItem('servico_selecionado', tipo);
-        sessionStorage.setItem('preco_selecionado', preco);
-        mostrarToast('Faça login ou cadastre-se para continuar', 'info');
-        navegarPara('login');
-    }
-}
-
-function selecionarPlano(tipo, preco) {
-    var planos = {
-        'formatacao': { nome: 'Formatação de trabalhos', preco: 100 },
-        'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 },
-        'monografia': { nome: 'Monografia/TCC', preco: 10000 }
-    };
-    var plano = planos[tipo] || { nome: 'Serviço', preco: parseFloat(preco) };
-    carrinho = { plano: tipo, nomePlano: plano.nome, preco: plano.preco, metodoPagamento: null };
-    
-    navegarPara('dashboard');
-    
-    setTimeout(function() {
-        var tabUpload = document.querySelector('.tab-btn[data-tab="upload"]');
-        if (tabUpload) {
-            tabUpload.click();
-            var selectServico = document.getElementById('uploadServico');
-            if (selectServico) {
-                selectServico.value = tipo;
-                atualizarPrecoUpload();
-            }
-            mostrarToast('Serviço selecionado: ' + plano.nome, 'success');
-        }
-    }, 500);
-}
-
-// ============================================
-// CHECKOUT
-// ============================================
-function selecionarMetodo(metodo) {
-    document.querySelectorAll('.metodo-pagamento').forEach(function(btn) {
-        btn.classList.remove('ativo');
-    });
-    var btnSelecionado = document.querySelector('[data-metodo="' + metodo + '"]');
-    if (btnSelecionado) btnSelecionado.classList.add('ativo');
-    carrinho.metodoPagamento = metodo;
-    var btnFinalizar = document.getElementById('btnFinalizarCompra');
-    if (btnFinalizar) btnFinalizar.disabled = false;
-}
-
-function atualizarResumoPedido() {
-    var resumoDiv = document.getElementById('resumoPedido');
-    if (!resumoDiv) return;
-    
-    if (carrinho.plano && carrinho.preco > 0) {
-        resumoDiv.innerHTML = '<div class="servico-resumo">' +
-            '<div class="resumo-item"><span>Serviço:</span><strong>' + carrinho.nomePlano + '</strong></div>' +
-            '<div class="resumo-item"><span>Valor Total:</span><strong>' + carrinho.preco.toLocaleString('pt-MZ') + ' MT</strong></div>' +
-            '<div class="resumo-item"><span>Entrada (50%):</span><strong>' + Math.ceil(carrinho.preco * 0.5).toLocaleString('pt-MZ') + ' MT</strong></div>' +
-        '</div>';
-    } else {
-        resumoDiv.innerHTML = '<div class="empty-state">' +
-            '<i class="fas fa-shopping-cart"></i>' +
-            '<p>Nenhum serviço selecionado</p>' +
-            '<button class="btn-link" onclick="navegarPara(\'planos\')">Escolher Serviço</button>' +
-        '</div>';
-    }
-}
-
-function finalizarCompra() {
-    if (!carrinho.plano) {
-        mostrarToast('Selecione um serviço', 'error');
-        return;
-    }
-    if (!carrinho.metodoPagamento) {
-        mostrarToast('Selecione um método de pagamento', 'error');
-        return;
-    }
-    if (!usuarioLogado) {
-        mostrarToast('Faça login para continuar', 'info');
-        navegarPara('login');
-        return;
-    }
-    navegarPara('pagamento-sucesso');
-}
-
-function mostrarInstrucoesPagamento() {
-    var valorTotal = carrinho.preco;
-    var valorEntrada = Math.ceil(valorTotal * 0.5);
-    var instrucoes = '';
-    
-    switch(carrinho.metodoPagamento) {
-        case 'mpesa':
-            instrucoes = '<div class="instrucoes-pagamento-box">' +
-                '<h4><i class="fab fa-m-pesa"></i> M-Pesa</h4>' +
-                '<ol>' +
-                    '<li>Acesse M-Pesa</li>' +
-                    '<li>Selecione "Transferir Dinheiro"</li>' +
-                    '<li>Digite o número: <strong>84 728 6665</strong></li>' +
-                    '<li>Valor: <strong>' + valorEntrada.toLocaleString('pt-MZ') + ' MT</strong></li>' +
-                    '<li>Nome: <strong>Aguinaldo Anli</strong></li>' +
-                '</ol>' +
-                '<div class="alerta">' +
-                    '<i class="fas fa-info-circle"></i>' +
-                    'Envie o comprovativo para WhatsApp: <strong>86 728 6665</strong>' +
-                '</div>' +
-            '</div>';
-            break;
-        case 'emola':
-            instrucoes = '<div class="instrucoes-pagamento-box">' +
-                '<h4><i class="fas fa-wallet"></i> e-Mola</h4>' +
-                '<ol>' +
-                    '<li>Acesse e-Mola</li>' +
-                    '<li>Selecione "Transferir"</li>' +
-                    '<li>Digite o número: <strong>86 728 6665</strong></li>' +
-                    '<li>Valor: <strong>' + valorEntrada.toLocaleString('pt-MZ') + ' MT</strong></li>' +
-                    '<li>Nome: <strong>Aguinaldo Anli Mahadura</strong></li>' +
-                '</ol>' +
-            '</div>';
-            break;
-        case 'deposito':
-            instrucoes = '<div class="instrucoes-pagamento-box">' +
-                '<h4><i class="fas fa-university"></i> Depósito Bancário</h4>' +
-                '<p><strong>Banco:</strong> MOZABANCO</p>' +
-                '<p><strong>NIB:</strong> 00340000358480311018</p>' +
-                '<p><strong>Nome:</strong> Aguinaldo Anli Mahadura</p>' +
-                '<p><strong>Valor:</strong> ' + valorEntrada.toLocaleString('pt-MZ') + ' MT</p>' +
-            '</div>';
-            break;
-    }
-    
-    var instrucoesDiv = document.getElementById('instrucoesDetalhadas');
-    var resumoDiv = document.getElementById('resumoPagamento');
-    
-    if (instrucoesDiv) instrucoesDiv.innerHTML = instrucoes;
-    if (resumoDiv) {
-        resumoDiv.innerHTML = '<div class="servico-resumo">' +
-            '<div class="resumo-item"><span>Serviço:</span><strong>' + carrinho.nomePlano + '</strong></div>' +
-            '<div class="resumo-item"><span>Valor Total:</span><strong>' + valorTotal.toLocaleString('pt-MZ') + ' MT</strong></div>' +
-            '<div class="resumo-item"><span>Entrada (50%):</span><strong style="color:var(--success-600);">' + valorEntrada.toLocaleString('pt-MZ') + ' MT</strong></div>' +
-            '<div class="resumo-item"><span>Método:</span><strong>' + carrinho.metodoPagamento.toUpperCase() + '</strong></div>' +
-        '</div>';
-    }
-}
-
-// ============================================
-// DASHBOARD - PERFIL
-// ============================================
-function carregarPerfilUsuario() {
-    var token = localStorage.getItem('token_facilitaki');
-    if (!token) return;
-    
-    fetch('/api/perfil', {
-        headers: { 'Authorization': 'Bearer ' + token }
-    })
-    .then(function(response) {
-        if (response.ok) {
-            return response.json();
-        }
-        return null;
-    })
-    .then(function(data) {
-        if (data && data.success && data.usuario) {
-            var welcomeName = document.getElementById('welcomeUserName');
-            if (welcomeName) {
-                var nomeParts = data.usuario.nome.split(' ');
-                welcomeName.innerHTML = 'Olá, ' + nomeParts[0] + '! 👋';
-            }
-            
-            var perfilNome = document.getElementById('perfilNome');
-            var perfilNomeCompleto = document.getElementById('perfilNomeCompleto');
-            var perfilTelefone = document.getElementById('perfilTelefone');
-            var perfilEmail = document.getElementById('perfilEmail');
-            
-            if (perfilNome) perfilNome.textContent = data.usuario.nome;
-            if (perfilNomeCompleto) perfilNomeCompleto.value = data.usuario.nome;
-            if (perfilTelefone) perfilTelefone.value = data.usuario.telefone;
-            if (perfilEmail) perfilEmail.value = data.usuario.email || '';
-            
-            var avatarImg = document.querySelector('.user-avatar img');
-            if (avatarImg) {
-                avatarImg.src = 'https://ui-avatars.com/api/?background=2563eb&color=fff&name=' + encodeURIComponent(data.usuario.nome);
-            }
-            
-            var usuarioSalvo = JSON.parse(localStorage.getItem('usuarioLogado_facilitaki') || '{}');
-            usuarioSalvo.nome = data.usuario.nome;
-            localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioSalvo));
-        }
-    })
-    .catch(function(error) {
-        console.error('Erro ao carregar perfil:', error);
-    });
-}
-
-function salvarPerfil() {
-    var nome = document.getElementById('perfilNomeCompleto')?.value;
-    var email = document.getElementById('perfilEmail')?.value;
-    
-    if (usuarioLogado && nome) {
-        usuarioLogado.nome = nome;
-        localStorage.setItem('usuarioLogado_facilitaki', JSON.stringify(usuarioLogado));
-        carregarPerfilUsuario();
-        mostrarToast('Perfil atualizado com sucesso!', 'success');
-    } else {
-        mostrarToast('Preencha o nome corretamente', 'error');
-    }
-}
-
-function alterarSenha() {
-    mostrarToast('Funcionalidade em desenvolvimento. Contate o suporte.', 'info');
-}
-
-function mudarAvatar() {
-    mostrarToast('Funcionalidade em desenvolvimento', 'info');
-}
-
-function abrirNotificacoes() {
-    mostrarToast('Nenhuma notificação no momento', 'info');
-}
-
-function abrirConfiguracoes() {
-    var perfilTab = document.querySelector('.tab-btn[data-tab="perfil"]');
-    if (perfilTab) perfilTab.click();
-}
-
-// ============================================
-// DASHBOARD - PEDIDOS
-// ============================================
-function carregarPedidos() {
-    var token = localStorage.getItem('token_facilitaki');
-    if (!token) return;
-    
-    fetch(API_URL + '/api/meus-pedidos', {
-        headers: { 'Authorization': 'Bearer ' + token }
-    })
-    .then(function(response) {
-        if (response.ok) {
-            return response.json();
-        }
-        return null;
-    })
-    .then(function(data) {
-        if (data) {
-            pedidosOriginais = data.pedidos || [];
-            aplicarFiltros();
-            atualizarMetricas();
-        }
-    })
-    .catch(function(error) {
-        console.error('Erro ao carregar pedidos:', error);
-    });
-}
-
-function aplicarFiltros() {
-    var searchTerm = document.getElementById('searchPedido')?.value.toLowerCase() || '';
-    var statusFilter = document.getElementById('filtroStatus')?.value || 'todos';
-    
-    var filtrados = pedidosOriginais.filter(function(pedido) {
-        var matchSearch = (pedido.nome_plano || '').toLowerCase().includes(searchTerm) || 
-                           (pedido.descricao || '').toLowerCase().includes(searchTerm) ||
-                           (pedido.tema || '').toLowerCase().includes(searchTerm);
-        var matchStatus = statusFilter === 'todos' || pedido.status === statusFilter;
-        return matchSearch && matchStatus;
-    });
-    
-    renderizarPedidos(filtrados);
-}
-
-function renderizarPedidos(pedidos) {
-    var container = document.getElementById('listaPedidos');
-    if (!container) return;
-    
-    if (pedidos.length === 0) {
-        container.innerHTML = '<div class="empty-state">' +
-            '<i class="fas fa-inbox"></i>' +
-            '<p>Nenhum pedido encontrado</p>' +
-            '<button class="btn-primary" onclick="document.querySelector(\'.tab-btn[data-tab=\\"upload\\"]\').click()">' +
-                'Solicitar Serviço' +
-            '</button>' +
-        '</div>';
-        return;
-    }
-    
-    var html = '';
-    pedidos.forEach(function(pedido) {
-        var statusClass = 'pendente';
-        var statusText = 'Pendente';
-        
-        switch(pedido.status) {
-            case 'pendente': statusClass = 'pendente'; statusText = 'Pendente'; break;
-            case 'pago': statusClass = 'pago'; statusText = 'Pago'; break;
-            case 'em_andamento': statusClass = 'em_andamento'; statusText = 'Em andamento'; break;
-            case 'concluido': statusClass = 'concluido'; statusText = 'Concluído'; break;
-            default: statusClass = 'pendente'; statusText = pedido.status;
+            console.log('⚠️ Colunas já existem ou erro ao adicionar:', e.message);
         }
         
-        html += '<div class="pedido-card">' +
-            '<div class="pedido-header">' +
-                '<h4 class="pedido-titulo">' + (pedido.nome_plano || 'Serviço') + '</h4>' +
-                '<span class="pedido-status ' + statusClass + '">' + statusText + '</span>' +
-            '</div>' +
-            '<div class="pedido-body">' +
-                '<div class="pedido-detalhes">' +
-                    '<p><i class="far fa-calendar"></i> ' + new Date(pedido.data_pedido).toLocaleDateString('pt-MZ') + '</p>' +
-                    (pedido.tema ? '<p><i class="fas fa-tag"></i> ' + pedido.tema.substring(0, 50) + '</p>' : '') +
-                '</div>' +
-                '<div class="pedido-valor">' + (parseFloat(pedido.preco) || 0).toLocaleString('pt-MZ') + ' MT</div>' +
-            '</div>' +
-        '</div>';
-    });
-    
-    container.innerHTML = html;
-}
-
-function atualizarMetricas() {
-    var total = pedidosOriginais.length;
-    var pendentes = pedidosOriginais.filter(function(p) { return p.status === 'pendente' || p.status === 'pago'; }).length;
-    var concluidos = pedidosOriginais.filter(function(p) { return p.status === 'concluido'; }).length;
-    var totalGasto = pedidosOriginais.reduce(function(sum, p) { return sum + (parseFloat(p.preco) || 0); }, 0);
-    
-    var totalEl = document.getElementById('totalPedidos');
-    var pendentesEl = document.getElementById('pedidosPendentes');
-    var concluidosEl = document.getElementById('pedidosConcluidos');
-    var totalGastoEl = document.getElementById('totalGasto');
-    
-    if (totalEl) totalEl.textContent = total;
-    if (pendentesEl) pendentesEl.textContent = pendentes;
-    if (concluidosEl) concluidosEl.textContent = concluidos;
-    if (totalGastoEl) totalGastoEl.textContent = totalGasto.toLocaleString('pt-MZ') + ' MT';
-}
-
-// ============================================
-// DASHBOARD - UPLOAD
-// ============================================
-function atualizarPrecoUpload() {
-    var servico = document.getElementById('uploadServico').value;
-    var resumoDiv = document.getElementById('uploadResumo');
-    var precos = { 
-        'formatacao': { nome: 'Formatação de trabalhos', preco: 100 }, 
-        'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 }, 
-        'monografia': { nome: 'Monografia/TCC', preco: 10000 } 
-    };
-    
-    if (servico && precos[servico]) {
-        var valorTotal = precos[servico].preco;
-        var resumoServico = document.getElementById('resumoServico');
-        var resumoValorTotal = document.getElementById('resumoValorTotal');
-        var resumoEntrada = document.getElementById('resumoEntrada');
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS contatos (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100),
+                telefone VARCHAR(100),
+                mensagem TEXT,
+                data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
         
-        if (resumoServico) resumoServico.textContent = precos[servico].nome;
-        if (resumoValorTotal) resumoValorTotal.textContent = valorTotal.toLocaleString('pt-MZ') + ' MT';
-        if (resumoEntrada) resumoEntrada.textContent = Math.ceil(valorTotal * 0.5).toLocaleString('pt-MZ') + ' MT';
-        if (resumoDiv) resumoDiv.style.display = 'block';
-        verificarHabilitarBotaoUpload();
-    } else {
-        if (resumoDiv) resumoDiv.style.display = 'none';
-        var btnEnviar = document.getElementById('btnEnviarUpload');
-        if (btnEnviar) btnEnviar.disabled = true;
-    }
-}
-
-function selecionarMetodoUpload(metodo) {
-    uploadMetodoSelecionado = metodo;
-    document.querySelectorAll('.metodo-radio').forEach(function(el) {
-        el.classList.remove('active');
-    });
-    var target = document.querySelector('.metodo-radio[onclick*="' + metodo + '"]');
-    if (target) target.classList.add('active');
-    
-    var resumoMetodo = document.getElementById('resumoMetodo');
-    if (resumoMetodo) {
-        resumoMetodo.textContent = metodo === 'mpesa' ? 'M-Pesa' : metodo === 'emola' ? 'e-Mola' : 'Depósito Bancário';
-    }
-    verificarHabilitarBotaoUpload();
-}
-
-function handleUploadFileSelect(event) {
-    var file = event.target.files[0];
-    if (!file) return;
-    
-    if (file.size > 50 * 1024 * 1024) {
-        mostrarToast('Arquivo muito grande (máximo 50MB)', 'error');
-        return;
-    }
-    
-    uploadArquivoSelecionado = file;
-    var preview = document.getElementById('uploadFilePreview');
-    var fileName = document.getElementById('uploadFileName');
-    
-    if (preview && fileName) {
-        fileName.textContent = file.name;
-        preview.style.display = 'block';
-    }
-    verificarHabilitarBotaoUpload();
-}
-
-function removerUploadFile() {
-    uploadArquivoSelecionado = null;
-    var fileInput = document.getElementById('uploadFileInput');
-    var preview = document.getElementById('uploadFilePreview');
-    
-    if (fileInput) fileInput.value = '';
-    if (preview) preview.style.display = 'none';
-    verificarHabilitarBotaoUpload();
-}
-
-function verificarHabilitarBotaoUpload() {
-    var servico = document.getElementById('uploadServico')?.value;
-    var descricao = document.getElementById('uploadDescricao')?.value.trim();
-    var termos = document.getElementById('uploadTermos')?.checked || false;
-    var metodoSelecionado = uploadMetodoSelecionado;
-    var btn = document.getElementById('btnEnviarUpload');
-    
-    var podeEnviar = servico && descricao && termos && metodoSelecionado;
-    
-    if (btn) {
-        btn.disabled = !podeEnviar;
-    }
-}
-
-function enviarUploadPedido() {
-    var servico = document.getElementById('uploadServico').value;
-    var descricao = document.getElementById('uploadDescricao').value;
-    var prazo = document.getElementById('uploadPrazo').value;
-    
-    if (!servico) {
-        mostrarToast('❌ Selecione um serviço', 'error');
-        return;
-    }
-    
-    if (!descricao || descricao.trim() === '') {
-        mostrarToast('❌ Descreva o tema do seu trabalho', 'error');
-        return;
-    }
-    
-    if (!uploadMetodoSelecionado) {
-        mostrarToast('❌ Selecione um método de pagamento', 'error');
-        return;
-    }
-    
-    var termosCheck = document.getElementById('uploadTermos');
-    if (!termosCheck || !termosCheck.checked) {
-        mostrarToast('❌ Aceite os Termos de Serviço', 'error');
-        return;
-    }
-    
-    var servicosInfo = { 
-        'formatacao': { nome: 'Formatação de trabalhos', preco: 100 }, 
-        'trabalho-campo': { nome: 'Trabalho de campo (pesquisa)', preco: 350 }, 
-        'monografia': { nome: 'Monografia/TCC', preco: 10000 } 
-    };
-    var info = servicosInfo[servico];
-    
-    var formData = new FormData();
-    if (uploadArquivoSelecionado) {
-        formData.append('arquivo', uploadArquivoSelecionado);
-    }
-    formData.append('cliente', usuarioLogado.nome);
-    formData.append('telefone', usuarioLogado.telefone);
-    formData.append('tema', descricao);
-    formData.append('descricao', descricao);
-    formData.append('prazo', prazo || '');
-    formData.append('plano', servico);
-    formData.append('nomePlano', info.nome);
-    formData.append('preco', info.preco.toString());
-    formData.append('metodoPagamento', uploadMetodoSelecionado);
-    
-    mostrarLoading('Enviando solicitação...');
-    
-    var token = localStorage.getItem('token_facilitaki');
-    
-    fetch('/api/pedidos/upload', {
-        method: 'POST',
-        headers: {
-            'Authorization': 'Bearer ' + token
-        },
-        body: formData
-    })
-    .then(function(response) { return response.json(); })
-    .then(function(data) {
-        fecharLoading();
+        // Criar admin padrão se não existir
+        var adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
+        if (parseInt(adminCheck.rows[0].count) === 0) {
+            var hash = await bcrypt.hash('Admin123!@#', 10);
+            await pool.query(
+                'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
+                ['Administrador', '840000000', hash]
+            );
+            console.log('✅ Admin padrão criado: 840000000 / Admin123!@#');
+        }
         
-        if (data.success) {
-            carrinho = { 
-                plano: servico, 
-                nomePlano: info.nome, 
-                preco: info.preco, 
-                metodoPagamento: uploadMetodoSelecionado 
-            };
-            
-            mostrarToast('✅ Solicitação enviada com sucesso!', 'success');
-            
-            document.getElementById('uploadServico').value = '';
-            document.getElementById('uploadDescricao').value = '';
-            document.getElementById('uploadPrazo').value = '';
-            document.getElementById('uploadTermos').checked = false;
-            removerUploadFile();
-            document.getElementById('uploadResumo').style.display = 'none';
-            document.getElementById('btnEnviarUpload').disabled = true;
-            
-            uploadMetodoSelecionado = null;
-            document.querySelectorAll('.metodo-radio').forEach(function(el) {
-                el.classList.remove('active');
-            });
-            
-            setTimeout(function() { navegarPara('pagamento-sucesso'); }, 1500);
-            carregarPedidos();
-            carregarDadosFinanceiros();
-        } else {
-            mostrarToast(data.erro || '❌ Erro ao enviar solicitação', 'error');
-        }
-    })
-    .catch(function(error) {
-        fecharLoading();
-        console.error('Erro no upload:', error);
-        mostrarToast('❌ Erro de conexão: ' + error.message, 'error');
-    });
+        console.log('✅ Banco inicializado com sucesso');
+        
+    } catch (error) {
+        console.error('❌ Erro ao inicializar banco:', error.message);
+    }
 }
 
 // ============================================
-// DASHBOARD - FINANCEIRO
+// ROTA DE REPARO
 // ============================================
-function carregarDadosFinanceiros() {
-    var token = localStorage.getItem('token_facilitaki');
-    if (!token) return;
-    
-    fetch(API_URL + '/api/meus-pedidos', {
-        headers: { 'Authorization': 'Bearer ' + token }
-    })
-    .then(function(response) {
-        if (response.ok) {
-            return response.json();
+app.get('/admin/reparar-tabela', function(req, res) {
+    try {
+        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS descricao TEXT`);
+        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tema TEXT`);
+        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255)`);
+        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255)`);
+        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prazo_entrega DATE`);
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Tabela Reparada</title>
+            <style>
+                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+            </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>✅ TABELA REPARADA!</h1>
+                    <p>Todas as colunas foram adicionadas com sucesso.</p>
+                    <a href="/">Voltar ao site</a>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        res.send('Erro: ' + error.message);
+    }
+});
+
+// ============================================
+// ROTAS PÚBLICAS
+// ============================================
+app.get('/status', function(req, res) {
+    res.json({ status: 'online', timestamp: new Date().toISOString() });
+});
+
+app.get('/', function(req, res) {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/facilitaki.apk', function(req, res) {
+    var apkPath = path.join(__dirname, 'facilitaki.apk');
+    if (!fs.existsSync(apkPath)) {
+        return res.status(404).json({ error: 'APK não encontrado' });
+    }
+    var stats = fs.statSync(apkPath);
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="facilitaki.apk"');
+    res.setHeader('Content-Length', stats.size);
+    res.sendFile(apkPath);
+});
+
+app.get('/api/apk-disponivel', function(req, res) {
+    var apkPath = path.join(__dirname, 'facilitaki.apk');
+    if (!fs.existsSync(apkPath)) {
+        return res.json({ disponivel: false, tamanho: 0, versao: '2.0.0' });
+    }
+    var stats = fs.statSync(apkPath);
+    res.json({ 
+        disponivel: true, 
+        tamanho: stats.size,
+        tamanhoMB: (stats.size / (1024 * 1024)).toFixed(1),
+        versao: '2.0.0'
+    });
+});
+
+// ============================================
+// ROTAS DE AUTENTICAÇÃO
+// ============================================
+app.post('/api/login', function(req, res) {
+    try {
+        var telefone = req.body.telefone;
+        var senha = req.body.senha;
+        
+        if (!telefone || !senha) {
+            return res.status(400).json({ success: false, erro: 'Preencha todos os campos' });
         }
-        return null;
-    })
-    .then(function(data) {
-        if (data) {
-            var pedidos = data.pedidos || [];
-            
-            var totalInvestido = 0, totalPago = 0, saldoPendente = 0;
-            var historico = [];
-            
-            pedidos.forEach(function(pedido) {
-                var valor = parseFloat(pedido.preco) || 0;
-                totalInvestido += valor;
-                
-                if (pedido.status === 'pago' || pedido.status === 'confirmado' || pedido.status === 'concluido') {
-                    totalPago += valor;
-                } else if (pedido.status === 'pendente') {
-                    saldoPendente += valor;
+        
+        var telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        if (!validarTelefone(telefoneLimpo)) {
+            return res.status(400).json({ success: false, erro: 'Telefone inválido' });
+        }
+        
+        pool.query('SELECT * FROM usuarios WHERE telefone = $1', [telefoneLimpo])
+            .then(function(result) {
+                if (result.rows.length === 0) {
+                    return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
                 }
                 
-                historico.push({ 
-                    data: pedido.data_pedido, 
-                    servico: pedido.nome_plano, 
-                    valor: valor, 
-                    tipo: 'Pedido', 
-                    status: pedido.status === 'pago' || pedido.status === 'concluido' ? 'confirmado' : 'pendente', 
-                    referencia: 'FAC-' + pedido.id 
-                });
-            });
-            
-            var totalInvestidoEl = document.getElementById('financeiroTotalInvestido');
-            var totalPagoEl = document.getElementById('financeiroTotalPago');
-            var saldoPendenteEl = document.getElementById('financeiroSaldoPendente');
-            
-            if (totalInvestidoEl) totalInvestidoEl.textContent = totalInvestido.toLocaleString('pt-MZ') + ' MT';
-            if (totalPagoEl) totalPagoEl.textContent = totalPago.toLocaleString('pt-MZ') + ' MT';
-            if (saldoPendenteEl) saldoPendenteEl.textContent = saldoPendente.toLocaleString('pt-MZ') + ' MT';
-            
-            var tbody = document.getElementById('historicoPagamentosBody');
-            if (tbody) {
-                if (historico.length > 0) {
-                    var html = '';
-                    historico.forEach(function(t) {
-                        html += '<tr>' +
-                            '<td>' + new Date(t.data).toLocaleDateString('pt-MZ') + '</td>' +
-                            '<td>' + t.servico + '</td>' +
-                            '<td><strong>' + t.valor.toLocaleString('pt-MZ') + ' MT</strong></td>' +
-                            '<td>' + t.tipo + '</td>' +
-                            '<td><span class="status-pagamento ' + (t.status === 'confirmado' ? 'confirmado' : 'pendente') + '">' + (t.status === 'confirmado' ? 'Confirmado' : 'Pendente') + '</span></td>' +
-                            '<td><small>' + t.referencia + '</small></td>' +
-                        '</tr>';
+                bcrypt.compare(senha, result.rows[0].senha_hash)
+                    .then(function(valid) {
+                        if (!valid) {
+                            return res.status(401).json({ success: false, erro: 'Credenciais inválidas' });
+                        }
+                        
+                        var accessToken = generateAccessToken(result.rows[0]);
+                        res.json({ 
+                            success: true, 
+                            accessToken: accessToken,
+                            usuario: { 
+                                id: result.rows[0].id, 
+                                nome: result.rows[0].nome, 
+                                telefone: result.rows[0].telefone, 
+                                is_admin: result.rows[0].is_admin 
+                            }
+                        });
                     });
-                    tbody.innerHTML = html;
-                } else {
-                    tbody.innerHTML = '<tr class="empty-row">' +
-                        '<td colspan="6">' +
-                            '<div class="empty-state">' +
-                                '<i class="fas fa-receipt"></i>' +
-                                '<p>Nenhum pagamento registrado</p>' +
-                                '<button class="btn-primary" onclick="document.querySelector(\'.tab-btn[data-tab=\\"upload\\"]\').click()">' +
-                                    'Fazer primeiro pedido' +
-                                '</button>' +
-                            '</div>' +
-                        '</td>' +
-                    '</tr>';
-                }
-            }
-        }
-    })
-    .catch(function(error) {
-        console.error('Erro ao carregar dados financeiros:', error);
-    });
-}
-
-function exportarHistorico() {
-    var rows = document.querySelectorAll('#historicoPagamentosBody tr:not(.empty-row)');
-    var csv = "Data,Serviço,Valor,Tipo,Status,Referência\n";
-    rows.forEach(function(row) {
-        var cols = row.querySelectorAll('td');
-        if (cols.length >= 6) {
-            csv += '"' + cols[0].innerText + '","' + cols[1].innerText + '","' + cols[2].innerText.replace(' MT', '') + '","' + cols[3].innerText + '","' + cols[4].innerText + '","' + cols[5].innerText + '"\n';
-        }
-    });
-    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    var link = document.createElement('a');
-    var url = URL.createObjectURL(blob);
-    link.href = url;
-    link.setAttribute('download', 'historico_facilitaki_' + new Date().toISOString().split('T')[0] + '.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    mostrarToast('Histórico exportado com sucesso!', 'success');
-}
-
-// ============================================
-// CONTATO
-// ============================================
-function enviarContato() {
-    var nome = document.getElementById('contatoNome')?.value.trim();
-    var telefone = document.getElementById('contatoTelefone')?.value.trim();
-    var mensagem = document.getElementById('contatoMensagem')?.value.trim();
-    
-    if (!nome || !telefone || !mensagem) {
-        mostrarToast('Preencha todos os campos', 'error');
-        return;
+            });
+    } catch (error) {
+        console.error('Erro no login:', error);
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
     }
-    
-    mostrarLoading('Enviando mensagem...');
-    
-    fetch(API_URL + '/api/contato', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nome, telefone: telefone, mensagem: mensagem })
-    })
-    .then(function(response) { return response.json(); })
-    .then(function(data) {
-        fecharLoading();
-        if (data.success) {
-            mostrarToast('Mensagem enviada com sucesso!', 'success');
-            document.getElementById('contatoNome').value = '';
-            document.getElementById('contatoTelefone').value = '';
-            document.getElementById('contatoMensagem').value = '';
-        } else {
-            mostrarToast(data.erro || 'Erro ao enviar mensagem', 'error');
+});
+
+app.post('/api/cadastrar', function(req, res) {
+    try {
+        var nome = req.body.nome;
+        var telefone = req.body.telefone;
+        var senha = req.body.senha;
+        
+        if (!nome || !telefone || !senha) {
+            return res.status(400).json({ success: false, erro: 'Preencha todos os campos' });
         }
+        
+        if (senha.length < 6) {
+            return res.status(400).json({ success: false, erro: 'Senha deve ter pelo menos 6 caracteres' });
+        }
+        
+        var telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        if (!validarTelefone(telefoneLimpo)) {
+            return res.status(400).json({ success: false, erro: 'Telefone inválido' });
+        }
+        
+        pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefoneLimpo])
+            .then(function(existe) {
+                if (existe.rows.length > 0) {
+                    return res.status(400).json({ success: false, erro: 'Telefone já cadastrado' });
+                }
+                
+                bcrypt.hash(senha, 10)
+                    .then(function(hash) {
+                        pool.query(
+                            'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, false) RETURNING id, nome, telefone',
+                            [nome, telefoneLimpo, hash]
+                        )
+                        .then(function(result) {
+                            var accessToken = generateAccessToken(result.rows[0]);
+                            res.json({ 
+                                success: true, 
+                                accessToken: accessToken, 
+                                usuario: { 
+                                    id: result.rows[0].id, 
+                                    nome: result.rows[0].nome, 
+                                    telefone: result.rows[0].telefone 
+                                } 
+                            });
+                        });
+                    });
+            });
+    } catch (error) {
+        console.error('Erro no cadastro:', error);
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+// ============================================
+// ROTAS PROTEGIDAS
+// ============================================
+app.get('/api/perfil', authenticateToken, function(req, res) {
+    try {
+        pool.query('SELECT id, nome, telefone, email, created_at FROM usuarios WHERE id = $1', [req.user.id])
+            .then(function(result) {
+                if (result.rows.length === 0) {
+                    return res.status(404).json({ success: false, erro: 'Usuário não encontrado' });
+                }
+                res.json({ success: true, usuario: result.rows[0] });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+app.put('/api/perfil', authenticateToken, function(req, res) {
+    try {
+        var nome = req.body.nome;
+        var email = req.body.email;
+        pool.query('UPDATE usuarios SET nome = COALESCE($1, nome), email = COALESCE($2, email) WHERE id = $3', [nome, email, req.user.id])
+            .then(function() {
+                res.json({ success: true });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+app.get('/api/meus-pedidos', authenticateToken, function(req, res) {
+    try {
+        pool.query('SELECT * FROM pedidos WHERE usuario_id = $1 ORDER BY data_pedido DESC', [req.user.id])
+            .then(function(result) {
+                res.json({ success: true, pedidos: result.rows });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+// ============================================
+// ROTA DE UPLOAD
+// ============================================
+app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), function(req, res) {
+    console.log('📤 UPLOAD RECEBIDO - Usuário:', req.user?.id);
+    
+    try {
+        var cliente = req.body.cliente;
+        var telefone = req.body.telefone;
+        var tema = req.body.tema;
+        var descricao = req.body.descricao;
+        var plano = req.body.plano;
+        var nomePlano = req.body.nomePlano;
+        var preco = req.body.preco;
+        var metodoPagamento = req.body.metodoPagamento;
+        var prazo = req.body.prazo;
+        
+        var textoDescricao = tema || descricao;
+        var telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        var precoNumero = parseFloat(preco);
+        var nomeCliente = cliente || req.user.nome;
+        
+        var arquivoNome = null;
+        var arquivoOriginal = null;
+        
+        if (req.file) {
+            arquivoNome = req.file.filename;
+            arquivoOriginal = req.file.originalname;
+            console.log('📎 Arquivo salvo:', arquivoNome);
+        }
+        
+        pool.query(
+            `INSERT INTO pedidos 
+             (usuario_id, cliente, telefone, descricao, tema, plano, nome_plano, 
+              preco, metodo_pagamento, arquivo_nome, arquivo_original, prazo_entrega, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pendente')
+             RETURNING id`,
+            [
+                req.user.id, nomeCliente, telefoneLimpo, textoDescricao, textoDescricao,
+                plano, nomePlano, precoNumero, metodoPagamento,
+                arquivoNome, arquivoOriginal, prazo || null
+            ]
+        )
+        .then(function(result) {
+            console.log('✅ Pedido criado! ID:', result.rows[0].id);
+            res.json({ 
+                success: true, 
+                pedido: result.rows[0],
+                message: 'Pedido registrado com sucesso!'
+            });
+        });
+        
+    } catch (error) {
+        console.error('❌ ERRO no upload:', error);
+        res.status(500).json({ 
+            success: false, 
+            erro: 'Erro interno: ' + error.message
+        });
+    }
+});
+
+// ============================================
+// ROTA PARA BAIXAR ARQUIVO
+// ============================================
+app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
+    try {
+        var pedidoId = req.params.id;
+        
+        pool.query('SELECT arquivo_nome, arquivo_original, usuario_id FROM pedidos WHERE id = $1', [pedidoId])
+            .then(function(result) {
+                if (result.rows.length === 0) {
+                    return res.status(404).json({ success: false, erro: 'Pedido não encontrado' });
+                }
+                
+                var pedido = result.rows[0];
+                
+                if (pedido.usuario_id !== req.user.id) {
+                    pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.user.id])
+                        .then(function(adminCheck) {
+                            if (adminCheck.rows.length === 0 || !adminCheck.rows[0].is_admin) {
+                                return res.status(403).json({ success: false, erro: 'Acesso negado' });
+                            }
+                            baixarArquivo(pedido, res);
+                        });
+                } else {
+                    baixarArquivo(pedido, res);
+                }
+            });
+        
+        function baixarArquivo(pedido, res) {
+            if (!pedido.arquivo_nome) {
+                return res.status(404).json({ success: false, erro: 'Arquivo não disponível' });
+            }
+            
+            var filePath = path.join(uploadDir, pedido.arquivo_nome);
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ success: false, erro: 'Arquivo não encontrado' });
+            }
+            
+            var stats = fs.statSync(filePath);
+            var ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome).toLowerCase();
+            
+            var contentType = 'application/octet-stream';
+            var mimeTypes = {
+                '.pdf': 'application/pdf',
+                '.doc': 'application/msword',
+                '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                '.txt': 'text/plain'
+            };
+            if (mimeTypes[ext]) {
+                contentType = mimeTypes[ext];
+            }
+            
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Length', stats.size);
+            res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(pedido.arquivo_original || pedido.arquivo_nome) + '"');
+            res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+            res.sendFile(filePath);
+        }
+        
+    } catch (error) {
+        console.error('❌ ERRO ao baixar arquivo:', error);
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+app.post('/api/contato', function(req, res) {
+    try {
+        var nome = req.body.nome;
+        var telefone = req.body.telefone;
+        var mensagem = req.body.mensagem;
+        pool.query('INSERT INTO contatos (nome, telefone, mensagem) VALUES ($1, $2, $3)', [nome, telefone, mensagem])
+            .then(function() {
+                res.json({ success: true });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+    }
+});
+
+// ============================================
+// ROTAS ADMIN
+// ============================================
+app.post('/admin/api/login', function(req, res) {
+    try {
+        var usuario = req.body.usuario;
+        var senha = req.body.senha;
+        
+        if (!usuario || !senha) {
+            return res.status(400).json({ success: false, error: 'Preencha todos os campos' });
+        }
+        
+        pool.query('SELECT * FROM usuarios WHERE (nome = $1 OR telefone = $1) AND is_admin = true', [usuario])
+            .then(function(result) {
+                if (result.rows.length === 0) {
+                    return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+                }
+                
+                bcrypt.compare(senha, result.rows[0].senha_hash)
+                    .then(function(valid) {
+                        if (!valid) {
+                            return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+                        }
+                        
+                        var token = jwt.sign(
+                            { id: result.rows[0].id, nome: result.rows[0].nome, isAdmin: true },
+                            JWT_SECRET,
+                            { expiresIn: '8h' }
+                        );
+                        
+                        res.json({ success: true, token: token, admin: { id: result.rows[0].id, nome: result.rows[0].nome } });
+                    });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/admin/api/usuarios', authenticateAdmin, function(req, res) {
+    try {
+        pool.query('SELECT id, nome, telefone, email, is_admin, created_at FROM usuarios ORDER BY is_admin DESC, created_at DESC')
+            .then(function(result) {
+                res.json({ success: true, usuarios: result.rows });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/admin/api/criar-admin', authenticateAdmin, function(req, res) {
+    try {
+        var nome = req.body.nome;
+        var telefone = req.body.telefone;
+        var senha = req.body.senha;
+        var confirmarSenha = req.body.confirmarSenha;
+        
+        if (!nome || !telefone || !senha || !confirmarSenha) {
+            return res.status(400).json({ success: false, error: '❌ Preencha todos os campos' });
+        }
+        
+        if (senha !== confirmarSenha) {
+            return res.status(400).json({ success: false, error: '❌ As senhas não coincidem' });
+        }
+        
+        if (senha.length < 6) {
+            return res.status(400).json({ success: false, error: '❌ A senha deve ter pelo menos 6 caracteres' });
+        }
+        
+        var telefoneLimpo = telefone.toString().replace(/\D/g, '');
+        if (!validarTelefone(telefoneLimpo)) {
+            return res.status(400).json({ success: false, error: '❌ Telefone inválido' });
+        }
+        
+        pool.query('SELECT id FROM usuarios WHERE telefone = $1', [telefoneLimpo])
+            .then(function(existe) {
+                if (existe.rows.length > 0) {
+                    return res.status(400).json({ success: false, error: '❌ Este WhatsApp já está cadastrado' });
+                }
+                
+                bcrypt.hash(senha, 10)
+                    .then(function(hash) {
+                        pool.query(
+                            'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true) RETURNING id, nome',
+                            [nome.trim(), telefoneLimpo, hash]
+                        )
+                        .then(function(result) {
+                            res.json({ success: true, message: '✅ Administrador criado com sucesso!', admin: result.rows[0] });
+                        });
+                    });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.delete('/admin/api/remover-admin/:id', authenticateAdmin, function(req, res) {
+    try {
+        var adminId = parseInt(req.params.id);
+        
+        if (adminId === 1) {
+            return res.status(400).json({ success: false, error: '❌ O primeiro administrador não pode ser removido!' });
+        }
+        
+        if (adminId === req.user.id) {
+            return res.status(400).json({ success: false, error: '❌ Você não pode remover sua própria conta' });
+        }
+        
+        pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [adminId])
+            .then(function(userCheck) {
+                if (userCheck.rows.length === 0) {
+                    return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+                }
+                
+                if (!userCheck.rows[0].is_admin) {
+                    return res.status(400).json({ success: false, error: 'Este usuário não é administrador' });
+                }
+                
+                pool.query('DELETE FROM usuarios WHERE id = $1', [adminId])
+                    .then(function() {
+                        res.json({ success: true, message: '✅ Administrador removido com sucesso!' });
+                    });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.delete('/admin/api/remover-cliente/:id', authenticateAdmin, function(req, res) {
+    try {
+        var clienteId = parseInt(req.params.id);
+        
+        pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [clienteId])
+            .then(function(userCheck) {
+                if (userCheck.rows.length === 0) {
+                    return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+                }
+                
+                if (userCheck.rows[0].is_admin) {
+                    return res.status(400).json({ success: false, error: 'Use a opção "Remover Admin" para administradores' });
+                }
+                
+                pool.query('DELETE FROM usuarios WHERE id = $1', [clienteId])
+                    .then(function() {
+                        res.json({ success: true, message: '✅ Cliente removido com sucesso!' });
+                    });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/admin/api/dashboard', authenticateAdmin, function(req, res) {
+    try {
+        pool.query(
+            `SELECT id, cliente, telefone, descricao, tema, plano, nome_plano, preco, 
+                    metodo_pagamento, arquivo_nome, arquivo_original, prazo_entrega, 
+                    status, data_pedido, usuario_id 
+             FROM pedidos ORDER BY data_pedido DESC LIMIT 100`
+        )
+        .then(function(pedidos) {
+            pool.query('SELECT * FROM contatos ORDER BY data_envio DESC LIMIT 100')
+                .then(function(contatos) {
+                    pool.query('SELECT COUNT(*) FROM pedidos')
+                        .then(function(totalPedidos) {
+                            pool.query("SELECT COUNT(*) FROM pedidos WHERE status = 'pendente'")
+                                .then(function(pedidosPendentes) {
+                                    pool.query("SELECT COUNT(*) FROM usuarios WHERE is_admin = false")
+                                        .then(function(totalClientes) {
+                                            pool.query("SELECT COUNT(*) FROM usuarios WHERE is_admin = true")
+                                                .then(function(totalAdmins) {
+                                                    res.json({
+                                                        pedidos: pedidos.rows,
+                                                        contatos: contatos.rows,
+                                                        totalPedidos: parseInt(totalPedidos.rows[0].count),
+                                                        pedidosPendentes: parseInt(pedidosPendentes.rows[0].count),
+                                                        totalClientes: parseInt(totalClientes.rows[0].count),
+                                                        totalAdmins: parseInt(totalAdmins.rows[0].count)
+                                                    });
+                                                });
+                                        });
+                                });
+                        });
+                });
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/admin/api/pedido/:id/status', authenticateAdmin, function(req, res) {
+    try {
+        var status = req.body.status;
+        var statusValidos = ['pendente', 'pago', 'em_andamento', 'concluido'];
+        
+        if (!status || !statusValidos.includes(status)) {
+            return res.status(400).json({ success: false, error: 'Status inválido' });
+        }
+        
+        pool.query('UPDATE pedidos SET status = $1 WHERE id = $2', [status, req.params.id])
+            .then(function() {
+                res.json({ success: true });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.delete('/admin/api/pedido/:id', authenticateAdmin, function(req, res) {
+    try {
+        var pedidoId = req.params.id;
+        
+        pool.query('SELECT arquivo_nome FROM pedidos WHERE id = $1', [pedidoId])
+            .then(function(result) {
+                if (result.rows.length > 0 && result.rows[0].arquivo_nome) {
+                    var filePath = path.join(uploadDir, result.rows[0].arquivo_nome);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
+                }
+                
+                pool.query('DELETE FROM pedidos WHERE id = $1', [pedidoId])
+                    .then(function() {
+                        res.json({ success: true });
+                    });
+            });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================
+// PÁGINAS ADMIN
+// ============================================
+app.get('/admin/login', function(req, res) {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><title>Admin Login - Facilitaki</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;justify-content:center;align-items:center}
+            .container{background:#fff;padding:40px;border-radius:20px;width:400px;text-align:center}
+            h1{color:#333;margin-bottom:10px}
+            input{width:100%;padding:12px;margin:10px 0;border:2px solid #ddd;border-radius:10px}
+            button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold}
+            .error{color:#e74c3c;margin-top:10px}
+            .info{margin-top:20px;padding:10px;background:#e8f4fd;border-radius:10px}
+        </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔐 Admin Login</h1>
+                <input type="text" id="username" placeholder="Usuário ou WhatsApp">
+                <input type="password" id="password" placeholder="Senha">
+                <button onclick="login()">Entrar</button>
+                <div id="error" class="error"></div>
+                <div class="info">👑 Admin padrão: 840000000 / Admin123!@#</div>
+            </div>
+            <script>
+                async function login() {
+                    const username = document.getElementById('username').value;
+                    const password = document.getElementById('password').value;
+                    const errorDiv = document.getElementById('error');
+                    if(!username || !password) { errorDiv.textContent = 'Preencha todos os campos'; return; }
+                    try {
+                        const res = await fetch('/admin/api/login', {
+                            method:'POST',
+                            headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({usuario:username, senha:password})
+                        });
+                        const data = await res.json();
+                        if(data.success){
+                            localStorage.setItem('adminToken', data.token);
+                            localStorage.setItem('adminNome', data.admin.nome);
+                            localStorage.setItem('adminId', data.admin.id);
+                            window.location.href = '/admin/painel';
+                        } else {
+                            errorDiv.textContent = data.error;
+                        }
+                    } catch(e) { errorDiv.textContent = 'Erro de conexão'; }
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+app.get('/admin/painel', function(req, res) {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><title>Admin Painel - Facilitaki</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{font-family:Arial;background:#f0f2f5;padding:20px}
+            .header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+            .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:20px}
+            .stat-card{background:#fff;padding:20px;border-radius:10px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
+            .stat-number{font-size:32px;font-weight:bold;color:#667eea}
+            .tabs{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+            .tab-btn{background:#fff;border:none;padding:12px 24px;border-radius:10px;cursor:pointer;font-weight:bold}
+            .tab-btn.active{background:#667eea;color:#fff}
+            .tab-content{display:none;background:#fff;border-radius:10px;padding:20px;overflow-x:auto}
+            .tab-content.active{display:block}
+            table{width:100%;border-collapse:collapse;font-size:14px}
+            th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #ddd}
+            th{background:#f8f9fa;font-weight:600}
+            .btn{padding:5px 12px;border:none;border-radius:5px;cursor:pointer;margin:2px;font-size:12px}
+            .btn-danger{background:#e74c3c;color:#fff}
+            .btn-warning{background:#f39c12;color:#fff}
+            .btn-primary{background:#667eea;color:#fff}
+            .logout-btn{background:#e74c3c;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer}
+            .form-admin{background:#f8f9fa;padding:20px;border-radius:10px;margin-bottom:20px}
+            .form-admin input{margin:8px 0;padding:10px;border:1px solid #ddd;border-radius:5px;width:100%}
+            .alert-success{background:#d4edda;color:#155724;padding:10px;border-radius:5px;margin-top:10px}
+            .alert-error{background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-top:10px}
+            .badge-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.75rem;font-weight:600}
+            .badge-status.pendente{background:#fef3c7;color:#92400e}
+            .badge-status.pago{background:#dbeafe;color:#1e40af}
+            .badge-status.em_andamento{background:#ede9fe;color:#5b21b6}
+            .badge-status.concluido{background:#d1fae5;color:#065f46}
+            .btn-ver-detalhes{padding:4px 12px;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer}
+            .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
+            .pedido-detalhes-modal.active{display:flex}
+            .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
+            .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
+            .pedido-detalhes-content td:first-child{font-weight:600;width:150px}
+            .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
+            .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
+        </style>
+        </head>
+        <body>
+            <div class="header">
+                <div><h1>📊 Facilitaki Admin</h1><p>Bem-vindo, <span id="adminNome">Admin</span>!</p></div>
+                <button class="logout-btn" onclick="logout()">Sair</button>
+            </div>
+            <div class="stats" id="stats"></div>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="showTab('pedidos')">📦 Pedidos</button>
+                <button class="tab-btn" onclick="showTab('usuarios')">👥 Usuários</button>
+                <button class="tab-btn" onclick="showTab('admins')">👑 Administradores</button>
+                <button class="tab-btn" onclick="showTab('contatos')">📬 Contatos</button>
+            </div>
+            <div id="tab-pedidos" class="tab-content active"><div id="pedidos-table">Carregando...</div></div>
+            <div id="tab-usuarios" class="tab-content"><div id="usuarios-table">Carregando...</div></div>
+            <div id="tab-admins" class="tab-content">
+                <div class="form-admin">
+                    <h3>➕ Criar Administrador</h3>
+                    <input type="text" id="adminNomeInput" placeholder="Nome *">
+                    <input type="tel" id="adminTelefoneInput" placeholder="WhatsApp *">
+                    <input type="password" id="adminSenhaInput" placeholder="Senha *">
+                    <input type="password" id="adminConfirmarSenhaInput" placeholder="Confirmar senha *">
+                    <button class="btn btn-primary" onclick="criarAdmin()">Criar Administrador</button>
+                    <div id="adminMsg"></div>
+                </div>
+                <div id="admins-table">Carregando...</div>
+            </div>
+            <div id="tab-contatos" class="tab-content"><div id="contatos-table">Carregando...</div></div>
+            
+            <div class="pedido-detalhes-modal" id="modalDetalhes">
+                <div class="pedido-detalhes-content">
+                    <h2>📄 Detalhes do Pedido</h2>
+                    <div id="detalhesPedido"></div>
+                    <button class="btn-fechar-modal" onclick="fecharModal()">Fechar</button>
+                </div>
+            </div>
+
+            <script>
+                const token = localStorage.getItem('adminToken');
+                if(!token) window.location.href = '/admin/login';
+                document.getElementById('adminNome').textContent = localStorage.getItem('adminNome') || 'Admin';
+                
+                async function fetchWithAuth(url, options={}) {
+                    const res = await fetch(url, {
+                        ...options,
+                        headers: {
+                            'Authorization': 'Bearer '+token,
+                            'Content-Type': 'application/json',
+                            ...(options.headers || {})
+                        }
+                    });
+                    if(res.status===401){ localStorage.clear(); window.location.href='/admin/login'; }
+                    return res.json();
+                }
+                
+                async function loadDashboard() {
+                    try {
+                        const data = await fetchWithAuth('/admin/api/dashboard');
+                        document.getElementById('stats').innerHTML = \`
+                            <div class="stat-card"><div class="stat-number">\${data.totalPedidos||0}</div><div>Total Pedidos</div></div>
+                            <div class="stat-card"><div class="stat-number">\${data.pedidosPendentes||0}</div><div>Pendentes</div></div>
+                            <div class="stat-card"><div class="stat-number">\${data.totalClientes||0}</div><div>Clientes</div></div>
+                            <div class="stat-card"><div class="stat-number">\${data.totalAdmins||0}</div><div>Administradores</div></div>
+                        \`;
+                        document.getElementById('pedidos-table').innerHTML = tablePedidos(data.pedidos || []);
+                        document.getElementById('contatos-table').innerHTML = tableContatos(data.contatos || []);
+                        carregarUsuarios();
+                        carregarAdmins();
+                    } catch(e) { console.error(e); }
+                }
+                
+                function formatarData(data) {
+                    if (!data) return '-';
+                    try { return new Date(data).toLocaleDateString('pt-MZ'); } catch(e) { return '-'; }
+                }
+                
+                function getStatusBadge(status) {
+                    const labels = { 'pendente':'Pendente', 'pago':'Pago', 'em_andamento':'Em andamento', 'concluido':'Concluído' };
+                    return \`<span class="badge-status \${status}">\${labels[status] || status}</span>\`;
+                }
+                
+                function tablePedidos(pedidos) {
+                    if(!pedidos || !pedidos.length) return '<p>Nenhum pedido</p>';
+                    return \`
+                        <table>
+                            <thead><tr><th>ID</th><th>Cliente</th><th>Serviço</th><th>Valor</th><th>Prazo</th><th>Arquivo</th><th>Status</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                \${pedidos.map(p => \`
+                                    <tr>
+                                        <td>\${p.id}</td>
+                                        <td>\${p.cliente}</td>
+                                        <td>\${p.nome_plano}</td>
+                                        <td>\${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</td>
+                                        <td>\${formatarData(p.prazo_entrega)}</td>
+                                        <td>\${p.arquivo_nome ? '📎 Sim' : '❌ Não'}</td>
+                                        <td>\${getStatusBadge(p.status)}</td>
+                                        <td>
+                                            <button class="btn-ver-detalhes" onclick="verDetalhes(\${p.id})">👁️ Detalhes</button>
+                                            <button class="btn btn-warning" onclick="alterarStatus(\${p.id})">Status</button>
+                                            <button class="btn btn-danger" onclick="excluirPedido(\${p.id})">🗑️</button>
+                                        </td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                function tableClientes(clientes) {
+                    if(!clientes || !clientes.length) return '<p>Nenhum cliente</p>';
+                    return \`
+                        <table>
+                            <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Email</th><th>Data</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                \${clientes.map(c => \`
+                                    <tr>
+                                        <td>\${c.id}</td>
+                                        <td>\${c.nome}</td>
+                                        <td>\${c.telefone}</td>
+                                        <td>\${c.email || '-'}</td>
+                                        <td>\${formatarData(c.created_at)}</td>
+                                        <td><button class="btn btn-danger" onclick="removerCliente(\${c.id})">Remover</button></td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                function tableAdmins(admins) {
+                    if(!admins || !admins.length) return '<p>Nenhum admin</p>';
+                    const adminIdAtual = parseInt(localStorage.getItem('adminId') || '0');
+                    return \`
+                        <p style="background:#fff3cd;padding:10px;border-radius:5px;margin-bottom:10px;">⚠️ Administrador ID 1 é protegido</p>
+                        <table>
+                            <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Data</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                \${admins.map(a => \`
+                                    <tr>
+                                        <td>\${a.id}\${a.id===1 ? ' 🔒' : ''}</td>
+                                        <td>\${a.nome}</td>
+                                        <td>\${a.telefone}</td>
+                                        <td>\${formatarData(a.created_at)}</td>
+                                        <td>\${(a.id!==1 && a.id!==adminIdAtual) ? \`<button class="btn btn-danger" onclick="removerAdmin(\${a.id})">Remover</button>\` : '-'}</td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                function tableContatos(contatos) {
+                    if(!contatos || !contatos.length) return '<p>Nenhuma mensagem</p>';
+                    return \`
+                        <table>
+                            <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Mensagem</th><th>Data</th></tr></thead>
+                            <tbody>
+                                \${contatos.map(c => \`
+                                    <tr>
+                                        <td>\${c.id}</td>
+                                        <td>\${c.nome}</td>
+                                        <td>\${c.telefone}</td>
+                                        <td style="max-width:300px;word-wrap:break-word;">\${(c.mensagem||'').substring(0,150)}\${(c.mensagem||'').length > 150 ? '...' : ''}</td>
+                                        <td>\${new Date(c.data_envio).toLocaleString()}</td>
+                                    </tr>
+                                \`).join('')}
+                            </tbody>
+                        </table>
+                    \`;
+                }
+                
+                async function verDetalhes(id) {
+                    const modal = document.getElementById('modalDetalhes');
+                    const content = document.getElementById('detalhesPedido');
+                    try {
+                        const data = await fetchWithAuth('/admin/api/dashboard');
+                        const pedido = (data.pedidos || []).find(p => p.id === id);
+                        if (!pedido) { content.innerHTML = '<p>Pedido não encontrado</p>'; modal.classList.add('active'); return; }
+                        
+                        let arquivoHtml = '<span style="color:#999;">Nenhum arquivo enviado</span>';
+                        if (pedido.arquivo_nome) {
+                            arquivoHtml = \`
+                                <a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">
+                                    📄 Baixar \${pedido.arquivo_original || pedido.arquivo_nome}
+                                </a>
+                            \`;
+                        }
+                        
+                        content.innerHTML = \`
+                            <table>
+                                <tr><td>ID</td><td><strong>#\${pedido.id}</strong></td></tr>
+                                <tr><td>Cliente</td><td><strong>\${pedido.cliente}</strong></td></tr>
+                                <tr><td>WhatsApp</td><td><strong>\${pedido.telefone}</strong></td></tr>
+                                <tr><td>Serviço</td><td><strong>\${pedido.nome_plano}</strong></td></tr>
+                                <tr><td>Valor</td><td><strong>\${parseFloat(pedido.preco||0).toLocaleString('pt-MZ')} MT</strong></td></tr>
+                                <tr><td>Descrição</td><td><strong style="white-space:pre-wrap;">\${pedido.descricao || pedido.tema || '-'}</strong></td></tr>
+                                <tr><td>Prazo</td><td><strong>\${formatarData(pedido.prazo_entrega) || 'Não definido'}</strong></td></tr>
+                                <tr><td>Arquivo</td><td>\${arquivoHtml}</td></tr>
+                                <tr><td>Status</td><td>\${getStatusBadge(pedido.status)}</td></tr>
+                                <tr><td>Data</td><td><strong>\${new Date(pedido.data_pedido).toLocaleString()}</strong></td></tr>
+                            </table>
+                        \`;
+                        modal.classList.add('active');
+                    } catch (error) {
+                        content.innerHTML = '<p>Erro ao carregar detalhes</p>';
+                        modal.classList.add('active');
+                    }
+                }
+                
+                function fecharModal() { document.getElementById('modalDetalhes').classList.remove('active'); }
+                document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharModal(); });
+                document.getElementById('modalDetalhes').addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) fecharModal();
+                });
+                
+                async function carregarUsuarios() {
+                    try {
+                        const data = await fetchWithAuth('/admin/api/usuarios');
+                        const clientes = (data.usuarios || []).filter(u => !u.is_admin);
+                        document.getElementById('usuarios-table').innerHTML = tableClientes(clientes);
+                    } catch(e) { console.error(e); }
+                }
+                
+                async function carregarAdmins() {
+                    try {
+                        const data = await fetchWithAuth('/admin/api/usuarios');
+                        const admins = (data.usuarios || []).filter(u => u.is_admin);
+                        document.getElementById('admins-table').innerHTML = tableAdmins(admins);
+                    } catch(e) { console.error(e); }
+                }
+                
+                async function criarAdmin() {
+                    const nome = document.getElementById('adminNomeInput').value;
+                    const telefone = document.getElementById('adminTelefoneInput').value;
+                    const senha = document.getElementById('adminSenhaInput').value;
+                    const confirmar = document.getElementById('adminConfirmarSenhaInput').value;
+                    const msgDiv = document.getElementById('adminMsg');
+                    
+                    if(!nome || !telefone || !senha || !confirmar) {
+                        msgDiv.innerHTML = '<div class="alert-error">❌ Preencha todos os campos</div>';
+                        return;
+                    }
+                    if(senha !== confirmar) {
+                        msgDiv.innerHTML = '<div class="alert-error">❌ As senhas não coincidem</div>';
+                        return;
+                    }
+                    if(senha.length < 6) {
+                        msgDiv.innerHTML = '<div class="alert-error">❌ A senha deve ter pelo menos 6 caracteres</div>';
+                        return;
+                    }
+                    
+                    msgDiv.innerHTML = '<div class="alert-success">⏳ Criando administrador...</div>';
+                    try {
+                        const data = await fetchWithAuth('/admin/api/criar-admin', {
+                            method:'POST',
+                            body:JSON.stringify({nome, telefone, senha, confirmarSenha:confirmar})
+                        });
+                        if(data.success) {
+                            msgDiv.innerHTML = \`<div class="alert-success">✅ \${data.message}</div>\`;
+                            document.getElementById('adminNomeInput').value = '';
+                            document.getElementById('adminTelefoneInput').value = '';
+                            document.getElementById('adminSenhaInput').value = '';
+                            document.getElementById('adminConfirmarSenhaInput').value = '';
+                            carregarAdmins();
+                            setTimeout(()=>msgDiv.innerHTML='', 5000);
+                        } else {
+                            msgDiv.innerHTML = \`<div class="alert-error">❌ \${data.error}</div>\`;
+                        }
+                    } catch(e) {
+                        msgDiv.innerHTML = '<div class="alert-error">❌ Erro de conexão</div>';
+                    }
+                }
+                
+                async function removerAdmin(id) {
+                    if(confirm('Remover este administrador?')) {
+                        const data = await fetchWithAuth('/admin/api/remover-admin/'+id, {method:'DELETE'});
+                        alert(data.success ? '✅ Removido!' : '❌ '+data.error);
+                        if(data.success) carregarAdmins();
+                    }
+                }
+                
+                async function removerCliente(id) {
+                    if(confirm('Remover este cliente?')) {
+                        const data = await fetchWithAuth('/admin/api/remover-cliente/'+id, {method:'DELETE'});
+                        alert(data.success ? '✅ Removido!' : '❌ '+data.error);
+                        if(data.success) carregarUsuarios();
+                    }
+                }
+                
+                async function alterarStatus(id) {
+                    const status = prompt('Status: pendente, pago, em_andamento, concluido');
+                    if(status) {
+                        const data = await fetchWithAuth('/admin/api/pedido/'+id+'/status', {
+                            method:'PUT',
+                            body:JSON.stringify({status})
+                        });
+                        alert(data.success ? '✅ Atualizado!' : '❌ '+data.error);
+                        if(data.success) loadDashboard();
+                    }
+                }
+                
+                async function excluirPedido(id) {
+                    if(confirm('Excluir pedido?')) {
+                        const data = await fetchWithAuth('/admin/api/pedido/'+id, {method:'DELETE'});
+                        alert(data.success ? '✅ Excluído!' : '❌ '+data.error);
+                        if(data.success) loadDashboard();
+                    }
+                }
+                
+                function showTab(tab) {
+                    document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+                    document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
+                    document.getElementById('tab-'+tab).classList.add('active');
+                    event.target.classList.add('active');
+                }
+                
+                function logout() { localStorage.clear(); window.location.href='/admin/login'; }
+                
+                loadDashboard();
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// ============================================
+// INICIAR SERVIDOR
+// ============================================
+initDatabase()
+    .then(function() {
+        app.listen(PORT, '0.0.0.0', function() {
+            console.log('\n✅ Servidor rodando na porta ' + PORT);
+            console.log('🌐 Site: http://localhost:' + PORT);
+            console.log('🔐 Admin: http://localhost:' + PORT + '/admin/login');
+            console.log('📱 APK disponível em: http://localhost:' + PORT + '/facilitaki.apk');
+            console.log('\n👑 Admin padrão: 840000000 / Admin123!@#');
+        });
     })
-    .catch(function(error) {
-        fecharLoading();
-        console.error('Erro no contato:', error);
-        mostrarToast('Erro de conexão. Tente novamente.', 'error');
+    .catch(function(err) {
+        console.error('❌ Erro ao iniciar servidor:', err);
+        process.exit(1);
     });
-}
-
-// ============================================
-// UTILITÁRIOS
-// ============================================
-function mostrarTermos() {
-    alert('TERMOS DE SERVIÇO\n\n' +
-        '1. O serviço será iniciado após o recebimento do comprovativo de pagamento da entrada de 50%\n\n' +
-        '2. O prazo de entrega começa a contar após o pagamento e recebimento de todos os materiais necessários\n\n' +
-        '3. Garantimos 99,9% de taxa de aprovação quando todas as instruções são seguidas\n\n' +
-        '4. Sua privacidade é totalmente respeitada. Não compartilhamos seus dados\n\n' +
-        '5. O cliente é responsável pelo conteúdo e uso do trabalho entregue');
-}
-
-function mostrarPrivacidade() {
-    alert('POLÍTICA DE PRIVACIDADE\n\n' +
-        '1. Seus dados são usados apenas para processar seus pedidos\n\n' +
-        '2. Não compartilhamos suas informações com terceiros\n\n' +
-        '3. Você pode solicitar a exclusão de seus dados a qualquer momento\n\n' +
-        '4. Utilizamos criptografia para proteger suas informações\n\n' +
-        '5. Seus arquivos são armazenados com segurança e excluídos após 90 dias');
-}
-
-function mostrarFAQ() {
-    alert('PERGUNTAS FREQUENTES\n\n' +
-        '❓ Como solicitar um serviço?\n' +
-        'R: Acesse sua conta > Dashboard > aba "Novo Pedido"\n\n' +
-        '❓ Como pagar?\n' +
-        'R: Aceitamos M-Pesa, e-Mola ou depósito bancário\n\n' +
-        '❓ Qual o prazo de entrega?\n' +
-        'R: Formatação: 24h | Trabalho de campo: 7 dias | Monografia: 3 meses\n\n' +
-        '❓ Como entrar em contato?\n' +
-        'R: WhatsApp: 86 728 6665 ou 84 728 6665');
-}
-
-// ============================================
-// DOWNLOAD APK
-// ============================================
-function registrarDownloadAPK() {
-    console.log('📱 Download APK iniciado');
-    mostrarToast('Baixando aplicativo Facilitaki...', 'success');
-    setTimeout(function() {
-        mostrarToast('📱 Aplicativo baixado com sucesso!', 'success');
-    }, 2000);
-}
