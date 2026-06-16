@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (CORRIGIDO - UPLOAD E DOWNLOAD DE ARQUIVOS)
+// server.js - Facilitaki Backend (CORRIGIDO - AUTENTICAÇÃO ADMIN)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -36,42 +36,44 @@ try {
 // ============================================
 // MIDDLEWARES
 // ============================================
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('.'));
 
+// Logger com dados limitados
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
 });
 
 // ============================================
-// CONFIGURAÇÃO DO MULTER - CORRIGIDA
+// CONFIGURAÇÃO DO MULTER
 // ============================================
 const uploadDir = path.join(__dirname, 'uploads');
 try {
     if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
         console.log('📁 Diretório uploads criado:', uploadDir);
-    } else {
-        console.log('📁 Diretório uploads já existe:', uploadDir);
     }
 } catch (error) {
     console.warn('⚠️ Não foi possível criar diretório uploads:', error.message);
 }
 
-// Configuração de storage com verificação
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // Garantir que o diretório existe
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        // Gerar nome único mantendo a extensão original
         const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const ext = path.extname(file.originalname);
         const filename = unique + ext;
@@ -82,7 +84,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const allowed = [
             'application/pdf',
@@ -92,9 +94,7 @@ const upload = multer({
             'application/vnd.ms-excel',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.ms-powerpoint',
-            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'application/rtf',
-            'application/vnd.oasis.opendocument.text'
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation'
         ];
         if (allowed.includes(file.mimetype)) {
             cb(null, true);
@@ -116,13 +116,27 @@ function generateAccessToken(user) {
     );
 }
 
+function generateAdminToken(admin) {
+    return jwt.sign(
+        { id: admin.id, nome: admin.nome, isAdmin: true },
+        JWT_SECRET,
+        { expiresIn: '1d' } // 24 horas
+    );
+}
+
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, error: 'Token não fornecido' });
+    
+    if (!token) {
+        return res.status(401).json({ success: false, error: 'Token não fornecido' });
+    }
     
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ success: false, error: 'Token inválido' });
+        if (err) {
+            console.error('❌ Erro ao verificar token:', err.message);
+            return res.status(403).json({ success: false, error: 'Token inválido ou expirado' });
+        }
         req.user = user;
         next();
     });
@@ -131,18 +145,28 @@ const authenticateToken = (req, res, next) => {
 const authenticateAdmin = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, error: 'Token não fornecido' });
+    
+    if (!token) {
+        console.log('❌ Token admin não fornecido');
+        return res.status(401).json({ success: false, error: 'Token não fornecido' });
+    }
     
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
+        console.log('🔐 Token admin verificado para:', decoded.nome);
+        
+        // Verificar se o usuário ainda é admin no banco
         const result = await pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [decoded.id]);
         if (result.rows.length === 0 || !result.rows[0].is_admin) {
+            console.log('❌ Usuário não é mais admin');
             return res.status(403).json({ success: false, error: 'Acesso negado' });
         }
+        
         req.user = decoded;
         next();
     } catch (err) {
-        return res.status(403).json({ success: false, error: 'Token inválido' });
+        console.error('❌ Erro ao verificar token admin:', err.message);
+        return res.status(403).json({ success: false, error: 'Token inválido ou expirado' });
     }
 };
 
@@ -174,7 +198,6 @@ async function initDatabase() {
             )
         `);
         
-        // DROP e RECREATE da tabela pedidos
         await pool.query(`DROP TABLE IF EXISTS pedidos CASCADE`);
         
         await pool.query(`
@@ -224,65 +247,6 @@ async function initDatabase() {
         console.error('❌ Erro ao inicializar banco:', error.message);
     }
 }
-
-// ============================================
-// ROTA DE REPARAR TABELA
-// ============================================
-app.get('/admin/reparar-tabela', async (req, res) => {
-    try {
-        const tableCheck = await pool.query(`
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'pedidos'
-            )
-        `);
-        
-        if (!tableCheck.rows[0].exists) {
-            await pool.query(`
-                CREATE TABLE pedidos (
-                    id SERIAL PRIMARY KEY,
-                    usuario_id INTEGER REFERENCES usuarios(id),
-                    cliente VARCHAR(100) NOT NULL,
-                    telefone VARCHAR(100) NOT NULL,
-                    descricao TEXT,
-                    tema TEXT,
-                    plano VARCHAR(50) NOT NULL,
-                    nome_plano VARCHAR(100) NOT NULL,
-                    preco DECIMAL(10,2) NOT NULL,
-                    metodo_pagamento VARCHAR(50) NOT NULL,
-                    arquivo_nome VARCHAR(255),
-                    arquivo_original VARCHAR(255),
-                    arquivo_tamanho BIGINT,
-                    prazo_entrega DATE,
-                    status VARCHAR(20) DEFAULT 'pendente',
-                    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            `);
-        }
-        
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Tabela Reparada</title>
-            <style>
-                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>✅ TABELA REPARADA!</h1>
-                    <p>Todas as colunas foram adicionadas com sucesso.</p>
-                    <a href="/">Voltar ao site</a>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        res.send(`Erro: ${error.message}`);
-    }
-});
 
 // ============================================
 // ROTAS PÚBLICAS
@@ -454,7 +418,7 @@ app.get('/api/meus-pedidos', authenticateToken, async (req, res) => {
 });
 
 // ============================================
-// ROTA DE UPLOAD - CORRIGIDA
+// ROTA DE UPLOAD
 // ============================================
 app.post('/api/pedidos/upload', 
     authenticateToken, 
@@ -462,9 +426,6 @@ app.post('/api/pedidos/upload',
     async (req, res) => {
     console.log('📤 UPLOAD RECEBIDO');
     console.log('Usuário ID:', req.user?.id);
-    console.log('Body:', req.body);
-    console.log('Arquivo:', req.file ? req.file.originalname : 'NENHUM');
-    console.log('Arquivo salvo em:', req.file ? req.file.path : 'NENHUM');
     
     try {
         const { 
@@ -479,7 +440,6 @@ app.post('/api/pedidos/upload',
             prazo 
         } = req.body;
         
-        // VALIDAÇÕES
         if (!cliente || cliente.trim().length < 2) {
             return res.status(400).json({ success: false, erro: 'Nome do cliente inválido' });
         }
@@ -507,7 +467,6 @@ app.post('/api/pedidos/upload',
             return res.status(400).json({ success: false, erro: 'Método de pagamento inválido' });
         }
         
-        // PROCESSAR ARQUIVO
         let arquivoNome = null;
         let arquivoOriginal = null;
         let arquivoTamanho = null;
@@ -517,10 +476,8 @@ app.post('/api/pedidos/upload',
             arquivoOriginal = req.file.originalname;
             arquivoTamanho = req.file.size;
             console.log('📎 Arquivo salvo como:', arquivoNome);
-            console.log('📊 Tamanho:', arquivoTamanho, 'bytes');
         }
         
-        // SALVAR NO BANCO
         const telefoneLimpo = telefone.toString().replace(/\D/g, '');
         const nomeCliente = cliente || req.user.nome;
         
@@ -565,7 +522,7 @@ app.post('/api/pedidos/upload',
 });
 
 // ============================================
-// ROTA PARA BAIXAR ARQUIVO - CORRIGIDA
+// ROTA PARA BAIXAR ARQUIVO
 // ============================================
 app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
     try {
@@ -582,10 +539,7 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
         }
         
         const pedido = result.rows[0];
-        console.log('📋 Pedido encontrado:', pedido.id, 'Cliente:', pedido.cliente);
-        console.log('📎 Arquivo no banco:', pedido.arquivo_nome);
         
-        // Verificar permissão
         if (pedido.usuario_id !== req.user.id) {
             const adminCheck = await pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.user.id]);
             if (adminCheck.rows.length === 0 || !adminCheck.rows[0].is_admin) {
@@ -597,25 +551,16 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
             return res.status(404).json({ success: false, erro: 'Arquivo não disponível' });
         }
         
-        // Verificar se o arquivo existe no disco
         const filePath = path.join(uploadDir, pedido.arquivo_nome);
-        console.log('📁 Caminho completo:', filePath);
         
         if (!fs.existsSync(filePath)) {
-            console.log('❌ Arquivo NÃO encontrado no disco');
-            
-            // Tentar encontrar o arquivo com outras extensões
+            // Tentar encontrar o arquivo com nome parcial
             const files = fs.readdirSync(uploadDir);
-            console.log('📂 Arquivos no diretório:', files);
-            
-            // Tentar encontrar por nome parcial
             const baseName = pedido.arquivo_nome.split('.')[0];
             const foundFile = files.find(f => f.startsWith(baseName));
             
             if (foundFile) {
                 const foundPath = path.join(uploadDir, foundFile);
-                console.log('✅ Arquivo encontrado com nome diferente:', foundFile);
-                
                 const stats = fs.statSync(foundPath);
                 const ext = path.extname(foundFile);
                 let contentType = 'application/octet-stream';
@@ -625,9 +570,7 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
                     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                     '.txt': 'text/plain',
                     '.xls': 'application/vnd.ms-excel',
-                    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    '.ppt': 'application/vnd.ms-powerpoint',
-                    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 };
                 if (mimeTypes[ext]) {
                     contentType = mimeTypes[ext];
@@ -643,17 +586,10 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
                 return;
             }
             
-            return res.status(404).json({ 
-                success: false, 
-                erro: 'Arquivo não encontrado no servidor',
-                debug: { arquivo: pedido.arquivo_nome, arquivos: files }
-            });
+            return res.status(404).json({ success: false, erro: 'Arquivo não encontrado no servidor' });
         }
         
-        // Arquivo encontrado, enviar
         const stats = fs.statSync(filePath);
-        console.log('📊 Tamanho do arquivo:', stats.size, 'bytes');
-        
         const ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome).toLowerCase();
         let contentType = 'application/octet-stream';
         const mimeTypes = {
@@ -662,9 +598,7 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
             '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             '.txt': 'text/plain',
             '.xls': 'application/vnd.ms-excel',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.ppt': 'application/vnd.ms-powerpoint',
-            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         };
         if (mimeTypes[ext]) {
             contentType = mimeTypes[ext];
@@ -674,19 +608,9 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, async (req, res) => {
         res.setHeader('Content-Length', stats.size);
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pedido.arquivo_original || pedido.arquivo_nome)}"`);
         res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
-        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
         
         const fileStream = fs.createReadStream(filePath);
         fileStream.pipe(res);
-        
-        fileStream.on('error', (error) => {
-            console.error('❌ Erro ao enviar arquivo:', error);
-            if (!res.headersSent) {
-                res.status(500).json({ success: false, erro: 'Erro ao enviar arquivo' });
-            }
-        });
-        
-        console.log('✅ Arquivo enviado com sucesso!');
         
     } catch (error) {
         console.error('❌ ERRO ao baixar arquivo:', error);
@@ -757,31 +681,44 @@ app.post('/api/contato', async (req, res) => {
 });
 
 // ============================================
-// ROTAS ADMIN
+// ROTAS ADMIN - CORRIGIDAS
 // ============================================
 app.post('/admin/api/login', async (req, res) => {
     try {
         const { usuario, senha } = req.body;
+        console.log('🔐 Tentativa de login admin:', usuario);
+        
+        if (!usuario || !senha) {
+            return res.status(400).json({ success: false, error: 'Preencha todos os campos' });
+        }
+        
         const result = await pool.query('SELECT * FROM usuarios WHERE (nome = $1 OR telefone = $1) AND is_admin = true', [usuario]);
         
         if (result.rows.length === 0) {
+            console.log('❌ Admin não encontrado:', usuario);
             return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
         }
         
         const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
         if (!valid) {
+            console.log('❌ Senha incorreta para:', usuario);
             return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
         }
         
-        const token = jwt.sign(
-            { id: result.rows[0].id, nome: result.rows[0].nome, isAdmin: true },
-            JWT_SECRET,
-            { expiresIn: '8h' }
-        );
+        const token = generateAdminToken(result.rows[0]);
+        console.log('✅ Admin logado com sucesso:', result.rows[0].nome);
         
-        res.json({ success: true, token, admin: { id: result.rows[0].id, nome: result.rows[0].nome } });
+        res.json({ 
+            success: true, 
+            token, 
+            admin: { 
+                id: result.rows[0].id, 
+                nome: result.rows[0].nome 
+            } 
+        });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        console.error('❌ Erro no login admin:', error);
+        res.status(500).json({ success: false, error: 'Erro interno do servidor' });
     }
 });
 
@@ -882,9 +819,6 @@ app.delete('/admin/api/remover-cliente/:id', authenticateAdmin, async (req, res)
     }
 });
 
-// ============================================
-// ROTA DASHBOARD
-// ============================================
 app.get('/admin/api/dashboard', authenticateAdmin, async (req, res) => {
     try {
         const pedidos = await pool.query(
@@ -949,7 +883,7 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, async (req, res) => {
 });
 
 // ============================================
-// PÁGINAS ADMIN (MANTIDAS IGUAIS)
+// PÁGINAS ADMIN
 // ============================================
 app.get('/admin/login', (req, res) => {
     res.send(`
@@ -960,43 +894,67 @@ app.get('/admin/login', (req, res) => {
             *{margin:0;padding:0;box-sizing:border-box}
             body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;justify-content:center;align-items:center}
             .container{background:#fff;padding:40px;border-radius:20px;width:400px;text-align:center}
-            input{width:100%;padding:12px;margin:10px 0;border:2px solid #ddd;border-radius:10px}
-            button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold}
+            h1{color:#333;margin-bottom:10px}
+            input{width:100%;padding:12px;margin:10px 0;border:2px solid #ddd;border-radius:10px;font-size:16px}
+            button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold;font-size:16px}
+            button:hover{background:#5a67d8}
             .error{color:#e74c3c;margin-top:10px}
             .info{margin-top:20px;padding:10px;background:#e8f4fd;border-radius:10px}
+            .loading{display:none;margin-top:10px;color:#667eea}
         </style>
         </head>
         <body>
             <div class="container">
                 <h1>🔐 Admin Login</h1>
+                <p style="color:#666;margin-bottom:20px;">Acesso restrito ao painel administrativo</p>
                 <input type="text" id="username" placeholder="Usuário ou WhatsApp">
-                <input type="password" id="password" placeholder="Senha">
-                <button onclick="login()">Entrar</button>
+                <input type="password" id="password" placeholder="Senha" onkeydown="if(event.key==='Enter') login()">
+                <button onclick="login()" id="btnLogin">Entrar</button>
+                <div id="loading" class="loading">⏳ Verificando credenciais...</div>
                 <div id="error" class="error"></div>
-                <div class="info">👑 Admin: 840000000 / Admin123!@#</div>
+                <div class="info">👑 Admin padrão: 840000000 / Admin123!@#</div>
             </div>
             <script>
                 async function login() {
-                    const username = document.getElementById('username').value;
+                    const username = document.getElementById('username').value.trim();
                     const password = document.getElementById('password').value;
                     const errorDiv = document.getElementById('error');
-                    if(!username || !password) { errorDiv.textContent = 'Preencha todos os campos'; return; }
+                    const btnLogin = document.getElementById('btnLogin');
+                    const loading = document.getElementById('loading');
+                    
+                    if(!username || !password) { 
+                        errorDiv.textContent = 'Preencha todos os campos'; 
+                        return; 
+                    }
+                    
+                    errorDiv.textContent = '';
+                    btnLogin.disabled = true;
+                    loading.style.display = 'block';
+                    
                     try {
                         const res = await fetch('/admin/api/login', {
                             method:'POST',
                             headers:{'Content-Type':'application/json'},
                             body:JSON.stringify({usuario:username, senha:password})
                         });
+                        
                         const data = await res.json();
+                        
                         if(data.success){
                             localStorage.setItem('adminToken', data.token);
                             localStorage.setItem('adminNome', data.admin.nome);
                             localStorage.setItem('adminId', data.admin.id);
                             window.location.href = '/admin/painel';
                         } else {
-                            errorDiv.textContent = data.error;
+                            errorDiv.textContent = data.error || 'Credenciais inválidas';
+                            btnLogin.disabled = false;
+                            loading.style.display = 'none';
                         }
-                    } catch(e) { errorDiv.textContent = 'Erro de conexão'; }
+                    } catch(e) { 
+                        errorDiv.textContent = 'Erro de conexão. Tente novamente.';
+                        btnLogin.disabled = false;
+                        loading.style.display = 'none';
+                    }
                 }
             </script>
         </body>
@@ -1004,9 +962,6 @@ app.get('/admin/login', (req, res) => {
     `);
 });
 
-// ============================================
-// PAINEL ADMIN - COM DEBUG DE ARQUIVOS
-// ============================================
 app.get('/admin/painel', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -1016,12 +971,14 @@ app.get('/admin/painel', (req, res) => {
             *{margin:0;padding:0;box-sizing:border-box}
             body{font-family:Arial;background:#f0f2f5;padding:20px}
             .header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+            .header h1{color:#fff}
             .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:20px}
             .stat-card{background:#fff;padding:20px;border-radius:10px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
             .stat-number{font-size:32px;font-weight:bold;color:#667eea}
             .tabs{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
-            .tab-btn{background:#fff;border:none;padding:12px 24px;border-radius:10px;cursor:pointer;font-weight:bold}
-            .tab-btn.active{background:#667eea;color:#fff}
+            .tab-btn{background:#fff;border:none;padding:12px 24px;border-radius:10px;cursor:pointer;font-weight:bold;border:2px solid transparent}
+            .tab-btn.active{background:#667eea;color:#fff;border-color:#667eea}
+            .tab-btn:hover{background:#e8edf9}
             .tab-content{display:none;background:#fff;border-radius:10px;padding:20px;overflow-x:auto}
             .tab-content.active{display:block}
             table{width:100%;border-collapse:collapse;font-size:14px}
@@ -1031,6 +988,7 @@ app.get('/admin/painel', (req, res) => {
             .btn-danger{background:#e74c3c;color:#fff}
             .btn-warning{background:#f39c12;color:#fff}
             .btn-primary{background:#667eea;color:#fff}
+            .btn-success{background:#27ae60;color:#fff}
             .logout-btn{background:#e74c3c;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer}
             .form-admin{background:#f8f9fa;padding:20px;border-radius:10px;margin-bottom:20px}
             .form-admin input{margin:8px 0;padding:10px;border:1px solid #ddd;border-radius:5px;width:100%}
@@ -1046,21 +1004,18 @@ app.get('/admin/painel', (req, res) => {
             .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
             .pedido-detalhes-modal.active{display:flex}
             .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
-            .pedido-detalhes-content h2{margin-bottom:1rem;color:#333}
             .pedido-detalhes-content table{width:100%;border-collapse:collapse}
             .pedido-detalhes-content td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top}
             .pedido-detalhes-content td:first-child{font-weight:600;color:#555;width:180px}
             .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
-            .arquivo-link:hover{text-decoration:underline}
-            .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
             .valor-destaque{font-size:1.2rem;color:#2563eb;font-weight:700}
-            .reparo-link{display:inline-block;margin-top:10px;padding:8px 16px;background:#f39c12;color:#fff;border-radius:5px;text-decoration:none;font-size:12px}
-            .debug-info{background:#f8f9fa;padding:10px;border-radius:5px;font-size:12px;color:#666;margin-top:5px}
+            .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
+            .reparo-link{display:inline-block;margin:5px;padding:8px 16px;background:#f39c12;color:#fff;border-radius:5px;text-decoration:none;font-size:12px}
         </style>
         </head>
         <body>
             <div class="header">
-                <div><h1>📊 Facilitaki Admin</h1><p>Bem-vindo, <span id="adminNome">Admin</span>!</p></div>
+                <div><h1>📊 Facilitaki Admin</h1><p style="opacity:0.8;">Bem-vindo, <span id="adminNome">Admin</span>!</p></div>
                 <button class="logout-btn" onclick="logout()">Sair</button>
             </div>
             <div class="stats" id="stats"></div>
@@ -1100,8 +1055,29 @@ app.get('/admin/painel', (req, res) => {
             </div>
 
             <script>
+                // Verificar token ao carregar
                 const token = localStorage.getItem('adminToken');
-                if(!token) window.location.href = '/admin/login';
+                if(!token) {
+                    window.location.href = '/admin/login';
+                }
+                
+                // Verificar se o token é válido
+                async function verificarToken() {
+                    try {
+                        const res = await fetch('/admin/api/dashboard', {
+                            headers: { 'Authorization': 'Bearer '+token }
+                        });
+                        if(res.status === 401 || res.status === 403) {
+                            localStorage.clear();
+                            window.location.href = '/admin/login';
+                        }
+                        return res;
+                    } catch(e) {
+                        console.error('Erro ao verificar token:', e);
+                        window.location.href = '/admin/login';
+                    }
+                }
+                
                 document.getElementById('adminNome').textContent = localStorage.getItem('adminNome') || 'Admin';
                 
                 async function fetchWithAuth(url, options={}) {
@@ -1113,7 +1089,10 @@ app.get('/admin/painel', (req, res) => {
                             ...(options.headers || {})
                         }
                     });
-                    if(res.status===401){ localStorage.clear(); window.location.href='/admin/login'; }
+                    if(res.status===401 || res.status===403){
+                        localStorage.clear();
+                        window.location.href='/admin/login';
+                    }
                     return res.json();
                 }
                 
@@ -1133,7 +1112,7 @@ app.get('/admin/painel', (req, res) => {
                     } catch(e) { 
                         console.error(e);
                         document.getElementById('pedidos-table').innerHTML = \`
-                            <p style="color:red;">❌ Erro ao carregar pedidos. Clique em <a href="/admin/reparar-tabela">Reparar Tabela</a></p>
+                            <p style="color:red;">❌ Erro ao carregar pedidos.</p>
                             <p style="color:#666;font-size:12px;">Erro: \${e.message}</p>
                         \`;
                     }
@@ -1306,9 +1285,6 @@ app.get('/admin/painel', (req, res) => {
                                 <tr><td>📊 Status</td><td>\${getStatusBadge(pedido.status)}</td></tr>
                                 <tr><td>📅 Data do Pedido</td><td><strong>\${formatarDataHora(pedido.data_pedido)}</strong></td></tr>
                             </table>
-                            <div class="debug-info">
-                                <strong>Debug:</strong> arquivo_nome=\${pedido.arquivo_nome || 'null'}
-                            </div>
                         \`;
                         modal.classList.add('active');
                     } catch (error) {
@@ -1424,9 +1400,13 @@ app.get('/admin/painel', (req, res) => {
                     event.target.classList.add('active');
                 }
                 
-                function logout() { localStorage.clear(); window.location.href='/admin/login'; }
+                function logout() { 
+                    localStorage.clear(); 
+                    window.location.href='/admin/login'; 
+                }
                 
-                loadDashboard();
+                // Verificar token e carregar dashboard
+                verificarToken().then(() => loadDashboard());
             </script>
         </body>
         </html>
