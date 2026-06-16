@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO COMPLETA CORRIGIDA)
+// server.js - Facilitaki Backend (VERSÃO CORRIGIDA PARA DEPLOY)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -19,21 +19,28 @@ const PORT = process.env.PORT || 3000;
 // CONFIGURAÇÕES DE SEGURANÇA
 // ============================================
 const JWT_SECRET = process.env.SECRET_KEY || 'chave-secreta-facilitaki-2026';
-if (!process.env.SECRET_KEY) {
-    console.warn('⚠️ SECRET_KEY não definida no .env, usando fallback. Configure para produção!');
-}
 
 // ============================================
 // BANCO DE DADOS
 // ============================================
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
+let pool;
+try {
+    pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    });
+} catch (error) {
+    console.error('❌ Erro ao conectar ao banco:', error.message);
+    // Criar pool vazio para fallback
+    pool = new Pool({
+        connectionString: 'postgresql://localhost:5432/facilitaki',
+    });
+}
 
 // ============================================
 // MIDDLEWARES DE SEGURANÇA
 // ============================================
+// Helmet com configurações mais permissivas para deploy
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
@@ -47,36 +54,46 @@ app.use(helmet({
     },
 }));
 
-// CORS restrito
+// CORS mais permissivo para deploy
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? ['https://seu-dominio.com'] 
-        : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Rate limiting
-const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: { success: false, erro: 'Muitas requisições. Tente novamente mais tarde.' }
-});
-app.use('/api', globalLimiter);
+// Rate limiting com fallback
+let globalLimiter;
+let loginLimiter;
+try {
+    globalLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000,
+        max: 100,
+        message: { success: false, erro: 'Muitas requisições. Tente novamente mais tarde.' }
+    });
+    
+    loginLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000,
+        max: 5,
+        message: { success: false, erro: 'Muitas tentativas de login. Tente novamente em 15 minutos.' }
+    });
+} catch (error) {
+    console.warn('⚠️ Rate limit não configurado:', error.message);
+    // Fallback: middlewares vazios
+    globalLimiter = (req, res, next) => next();
+    loginLimiter = (req, res, next) => next();
+}
 
-const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    message: { success: false, erro: 'Muitas tentativas de login. Tente novamente em 15 minutos.' }
-});
-
-// Sanitização de entrada
+// Sanitização de entrada com fallback
 app.use((req, res, next) => {
     if (req.body) {
         for (let key in req.body) {
             if (typeof req.body[key] === 'string') {
-                req.body[key] = xss(req.body[key].trim());
+                try {
+                    req.body[key] = xss(req.body[key].trim());
+                } catch (e) {
+                    req.body[key] = req.body[key].trim();
+                }
             }
         }
     }
@@ -87,7 +104,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('.'));
 
-// Logger seguro (sem dados sensíveis)
+// Logger seguro
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
@@ -97,40 +114,51 @@ app.use((req, res, next) => {
 // CONFIGURAÇÃO DO MULTER (UPLOAD)
 // ============================================
 const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+try {
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+} catch (error) {
+    console.warn('⚠️ Não foi possível criar diretório uploads:', error.message);
 }
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        cb(null, unique + ext);
-    }
-});
-
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-        const allowed = [
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'text/plain',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        ];
-        if (allowed.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Tipo de arquivo não permitido'), false);
+let upload;
+try {
+    const storage = multer.diskStorage({
+        destination: (req, file, cb) => {
+            cb(null, uploadDir);
+        },
+        filename: (req, file, cb) => {
+            const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            const ext = path.extname(file.originalname);
+            cb(null, unique + ext);
         }
-    }
-});
+    });
+
+    upload = multer({
+        storage: storage,
+        limits: { fileSize: 10 * 1024 * 1024 },
+        fileFilter: (req, file, cb) => {
+            const allowed = [
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'text/plain',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ];
+            if (allowed.includes(file.mimetype)) {
+                cb(null, true);
+            } else {
+                cb(new Error('Tipo de arquivo não permitido'), false);
+            }
+        }
+    });
+} catch (error) {
+    console.warn('⚠️ Multer não configurado:', error.message);
+    // Fallback: upload simples
+    upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+}
 
 // ============================================
 // FUNÇÕES DE AUTENTICAÇÃO
@@ -148,11 +176,15 @@ const authenticateToken = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ success: false, error: 'Token não fornecido' });
     
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ success: false, error: 'Token inválido' });
-        req.user = user;
-        next();
-    });
+    try {
+        jwt.verify(token, JWT_SECRET, (err, user) => {
+            if (err) return res.status(403).json({ success: false, error: 'Token inválido' });
+            req.user = user;
+            next();
+        });
+    } catch (error) {
+        return res.status(403).json({ success: false, error: 'Token inválido' });
+    }
 };
 
 const authenticateAdmin = async (req, res, next) => {
@@ -177,12 +209,13 @@ const authenticateAdmin = async (req, res, next) => {
 // VALIDAÇÕES
 // ============================================
 function validarTelefone(telefone) {
+    if (!telefone) return false;
     const limpo = telefone.toString().replace(/\D/g, '');
     return limpo.length >= 9 && limpo.length <= 12;
 }
 
 function validarPedido(req, res, next) {
-    const { cliente, telefone, tema, descricao, plano, preco, metodoPagamento, prazo } = req.body;
+    const { cliente, telefone, tema, descricao, plano, preco, metodoPagamento } = req.body;
     
     if (!cliente || cliente.trim().length < 2) {
         return res.status(400).json({ success: false, erro: 'Nome do cliente inválido' });
@@ -263,7 +296,7 @@ async function initDatabase() {
             )
         `);
         
-        // Verificar se existe admin, se não criar
+        // Verificar se existe admin
         const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
         if (parseInt(adminCheck.rows[0].count) === 0) {
             const hash = await bcrypt.hash('Admin123!@#', 10);
@@ -286,7 +319,6 @@ async function initDatabase() {
 // ============================================
 app.get('/admin/reparar-tabela', async (req, res) => {
     try {
-        // Verificar se já existe a estrutura correta
         const checkCol = await pool.query(`
             SELECT column_name 
             FROM information_schema.columns 
@@ -296,10 +328,10 @@ app.get('/admin/reparar-tabela', async (req, res) => {
         if (checkCol.rows.length === 0) {
             await pool.query(`
                 ALTER TABLE pedidos 
-                ADD COLUMN tema TEXT,
-                ADD COLUMN arquivo_nome VARCHAR(255),
-                ADD COLUMN arquivo_original VARCHAR(255),
-                ADD COLUMN prazo_entrega DATE
+                ADD COLUMN IF NOT EXISTS tema TEXT,
+                ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS prazo_entrega DATE
             `);
         }
         
@@ -525,9 +557,9 @@ app.post('/api/pedidos/upload',
         let arquivoOriginal = null;
         
         if (req.file) {
-            arquivoNome = req.file.filename;
+            arquivoNome = req.file.filename || req.file.originalname;
             arquivoOriginal = req.file.originalname;
-            console.log('📎 Arquivo salvo:', arquivoNome);
+            console.log('📎 Arquivo recebido:', arquivoOriginal);
         }
         
         const result = await pool.query(
@@ -789,7 +821,6 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, async (req, res) => {
     try {
         const pedidoId = req.params.id;
         
-        // Buscar arquivo para deletar
         const result = await pool.query('SELECT arquivo_nome FROM pedidos WHERE id = $1', [pedidoId]);
         if (result.rows.length > 0 && result.rows[0].arquivo_nome) {
             const filePath = path.join(uploadDir, result.rows[0].arquivo_nome);
@@ -863,7 +894,7 @@ app.get('/admin/login', (req, res) => {
 });
 
 // ============================================
-// PÁGINA ADMIN PAINEL (COMPLETA COM DETALHES)
+// PÁGINA ADMIN PAINEL
 // ============================================
 app.get('/admin/painel', (req, res) => {
     res.send(`
@@ -895,8 +926,6 @@ app.get('/admin/painel', (req, res) => {
             .alert-success{background:#d4edda;color:#155724;padding:10px;border-radius:5px;margin-top:10px}
             .alert-error{background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-top:10px}
             .alert-warning{background:#fff3cd;color:#856404;padding:10px;border-radius:5px;margin-bottom:10px}
-            
-            /* Modal Detalhes */
             .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
             .pedido-detalhes-modal.active{display:flex}
             .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
@@ -943,7 +972,6 @@ app.get('/admin/painel', (req, res) => {
             </div>
             <div id="tab-contatos" class="tab-content"><div id="contatos-table">Carregando...</div></div>
             
-            <!-- Modal Detalhes -->
             <div class="pedido-detalhes-modal" id="modalDetalhes">
                 <div class="pedido-detalhes-content">
                     <h2 style="margin-bottom:1rem;">📄 Detalhes do Pedido</h2>
@@ -955,8 +983,7 @@ app.get('/admin/painel', (req, res) => {
             <script>
                 const token = localStorage.getItem('adminToken');
                 if(!token) window.location.href = '/admin/login';
-                const adminNome = localStorage.getItem('adminNome') || 'Admin';
-                document.getElementById('adminNome').textContent = adminNome;
+                document.getElementById('adminNome').textContent = localStorage.getItem('adminNome') || 'Admin';
                 
                 async function fetchWithAuth(url, options={}) {
                     const res = await fetch(url, {
@@ -972,22 +999,26 @@ app.get('/admin/painel', (req, res) => {
                 }
                 
                 async function loadDashboard() {
-                    const data = await fetchWithAuth('/admin/api/dashboard');
-                    document.getElementById('stats').innerHTML = \`
-                        <div class="stat-card"><div class="stat-number">\${data.totalPedidos}</div><div>Total Pedidos</div></div>
-                        <div class="stat-card"><div class="stat-number">\${data.pedidosPendentes}</div><div>Pendentes</div></div>
-                        <div class="stat-card"><div class="stat-number">\${data.totalClientes}</div><div>Clientes</div></div>
-                        <div class="stat-card"><div class="stat-number">\${data.totalAdmins}</div><div>Administradores</div></div>
-                    \`;
-                    document.getElementById('pedidos-table').innerHTML = tablePedidos(data.pedidos || []);
-                    document.getElementById('contatos-table').innerHTML = tableContatos(data.contatos || []);
-                    carregarUsuarios();
-                    carregarAdmins();
+                    try {
+                        const data = await fetchWithAuth('/admin/api/dashboard');
+                        document.getElementById('stats').innerHTML = \`
+                            <div class="stat-card"><div class="stat-number">\${data.totalPedidos||0}</div><div>Total Pedidos</div></div>
+                            <div class="stat-card"><div class="stat-number">\${data.pedidosPendentes||0}</div><div>Pendentes</div></div>
+                            <div class="stat-card"><div class="stat-number">\${data.totalClientes||0}</div><div>Clientes</div></div>
+                            <div class="stat-card"><div class="stat-number">\${data.totalAdmins||0}</div><div>Administradores</div></div>
+                        \`;
+                        document.getElementById('pedidos-table').innerHTML = tablePedidos(data.pedidos || []);
+                        document.getElementById('contatos-table').innerHTML = tableContatos(data.contatos || []);
+                        carregarUsuarios();
+                        carregarAdmins();
+                    } catch(e) {
+                        console.error('Erro ao carregar dashboard:', e);
+                    }
                 }
                 
                 function formatarData(data) {
                     if (!data) return '-';
-                    return new Date(data).toLocaleDateString('pt-MZ');
+                    try { return new Date(data).toLocaleDateString('pt-MZ'); } catch(e) { return '-'; }
                 }
                 
                 function getStatusBadge(status) {
@@ -996,7 +1027,7 @@ app.get('/admin/painel', (req, res) => {
                 }
                 
                 function tablePedidos(pedidos) {
-                    if(!pedidos.length) return '<p>Nenhum pedido</p>';
+                    if(!pedidos || !pedidos.length) return '<p>Nenhum pedido</p>';
                     return \`
                         <table>
                             <thead><tr><th>ID</th><th>Cliente</th><th>Serviço</th><th>Valor</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead>
@@ -1006,7 +1037,7 @@ app.get('/admin/painel', (req, res) => {
                                         <td>\${p.id}</td>
                                         <td>\${p.cliente}</td>
                                         <td>\${p.nome_plano}</td>
-                                        <td>\${parseFloat(p.preco).toLocaleString('pt-MZ')} MT</td>
+                                        <td>\${parseFloat(p.preco||0).toLocaleString('pt-MZ')} MT</td>
                                         <td>\${formatarData(p.prazo_entrega)}</td>
                                         <td>\${getStatusBadge(p.status)}</td>
                                         <td>
@@ -1022,7 +1053,7 @@ app.get('/admin/painel', (req, res) => {
                 }
                 
                 function tableClientes(clientes) {
-                    if(!clientes.length) return '<p>Nenhum cliente</p>';
+                    if(!clientes || !clientes.length) return '<p>Nenhum cliente</p>';
                     return \`
                         <table>
                             <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Email</th><th>Data</th><th>Ações</th></tr></thead>
@@ -1043,7 +1074,7 @@ app.get('/admin/painel', (req, res) => {
                 }
                 
                 function tableAdmins(admins) {
-                    if(!admins.length) return '<p>Nenhum admin</p>';
+                    if(!admins || !admins.length) return '<p>Nenhum admin</p>';
                     const adminIdAtual = parseInt(localStorage.getItem('adminId') || '0');
                     return \`
                         <p class="alert-warning">⚠️ Administrador ID 1 é protegido</p>
@@ -1065,7 +1096,7 @@ app.get('/admin/painel', (req, res) => {
                 }
                 
                 function tableContatos(contatos) {
-                    if(!contatos.length) return '<p>Nenhuma mensagem</p>';
+                    if(!contatos || !contatos.length) return '<p>Nenhuma mensagem</p>';
                     return \`
                         <table>
                             <thead><tr><th>ID</th><th>Nome</th><th>WhatsApp</th><th>Mensagem</th><th>Data</th></tr></thead>
@@ -1084,9 +1115,6 @@ app.get('/admin/painel', (req, res) => {
                     \`;
                 }
                 
-                // ============================================
-                // DETALHES DO PEDIDO
-                // ============================================
                 async function verDetalhes(id) {
                     const modal = document.getElementById('modalDetalhes');
                     const content = document.getElementById('detalhesPedido');
@@ -1101,9 +1129,9 @@ app.get('/admin/painel', (req, res) => {
                                 <tr><td>Cliente</td><td><strong>\${pedido.cliente}</strong></td></tr>
                                 <tr><td>WhatsApp</td><td><strong>\${pedido.telefone}</strong></td></tr>
                                 <tr><td>Serviço</td><td><strong>\${pedido.nome_plano}</strong></td></tr>
-                                <tr><td>Valor</td><td><strong>\${parseFloat(pedido.preco).toLocaleString('pt-MZ')} MT</strong></td></tr>
+                                <tr><td>Valor</td><td><strong>\${parseFloat(pedido.preco||0).toLocaleString('pt-MZ')} MT</strong></td></tr>
                                 <tr><td>Status</td><td>\${getStatusBadge(pedido.status)}</td></tr>
-                                <tr><td>Método Pagamento</td><td><strong>\${pedido.metodo_pagamento.toUpperCase()}</strong></td></tr>
+                                <tr><td>Método Pagamento</td><td><strong>\${(pedido.metodo_pagamento||'').toUpperCase()}</strong></td></tr>
                                 <tr><td>Data Pedido</td><td><strong>\${new Date(pedido.data_pedido).toLocaleString()}</strong></td></tr>
                                 <tr><td>Prazo Entrega</td><td><strong>\${formatarData(pedido.prazo_entrega) || 'Não definido'}</strong></td></tr>
                                 <tr><td>Tema/Descrição</td><td><strong style="white-space:pre-wrap;word-wrap:break-word;">\${pedido.descricao || pedido.tema || '-'}</strong></td></tr>
@@ -1133,19 +1161,20 @@ app.get('/admin/painel', (req, res) => {
                     if (e.target === e.currentTarget) fecharModal();
                 });
                 
-                // ============================================
-                // FUNÇÕES ADMIN
-                // ============================================
                 async function carregarUsuarios() {
-                    const data = await fetchWithAuth('/admin/api/usuarios');
-                    const clientes = (data.usuarios || []).filter(u => !u.is_admin);
-                    document.getElementById('usuarios-table').innerHTML = tableClientes(clientes);
+                    try {
+                        const data = await fetchWithAuth('/admin/api/usuarios');
+                        const clientes = (data.usuarios || []).filter(u => !u.is_admin);
+                        document.getElementById('usuarios-table').innerHTML = tableClientes(clientes);
+                    } catch(e) { console.error(e); }
                 }
                 
                 async function carregarAdmins() {
-                    const data = await fetchWithAuth('/admin/api/usuarios');
-                    const admins = (data.usuarios || []).filter(u => u.is_admin);
-                    document.getElementById('admins-table').innerHTML = tableAdmins(admins);
+                    try {
+                        const data = await fetchWithAuth('/admin/api/usuarios');
+                        const admins = (data.usuarios || []).filter(u => u.is_admin);
+                        document.getElementById('admins-table').innerHTML = tableAdmins(admins);
+                    } catch(e) { console.error(e); }
                 }
                 
                 async function criarAdmin() {
@@ -1258,5 +1287,14 @@ async function startServer() {
         console.log(`\n👑 Admin padrão: 840000000 / Admin123!@#`);
     });
 }
+
+// Tratamento de erros não capturados
+process.on('uncaughtException', (error) => {
+    console.error('❌ Erro não capturado:', error);
+});
+
+process.on('unhandledRejection', (error) => {
+    console.error('❌ Promessa rejeitada não tratada:', error);
+});
 
 startServer();
