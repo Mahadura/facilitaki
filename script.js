@@ -155,19 +155,58 @@ function navegarPara(sectionId) {
 }
 
 // ============================================
-// AUTENTICAÇÃO
+// TOGGLE ENTRE LOGIN E CADASTRO (CORRIGIDO)
 // ============================================
-function atualizarHeaderLogado() {
-    const btnHeader = document.getElementById('btnLoginHeader');
-    if (btnHeader && usuarioLogado) {
-        btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
-        btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
+function mostrarCadastro() {
+    console.log('📝 Mostrando formulário de cadastro');
+    const formLogin = document.getElementById('formLogin');
+    const formCadastro = document.getElementById('formCadastro');
+    
+    if (formLogin) {
+        formLogin.style.display = 'none';
+    }
+    if (formCadastro) {
+        formCadastro.style.display = 'block';
+    }
+    
+    // Limpar mensagens anteriores
+    const msgDiv = document.getElementById('mensagemLogin');
+    if (msgDiv) {
+        msgDiv.innerHTML = '';
+        msgDiv.className = 'message';
     }
 }
 
+function mostrarLogin() {
+    console.log('📝 Mostrando formulário de login');
+    const formLogin = document.getElementById('formLogin');
+    const formCadastro = document.getElementById('formCadastro');
+    
+    if (formCadastro) {
+        formCadastro.style.display = 'none';
+    }
+    if (formLogin) {
+        formLogin.style.display = 'block';
+    }
+    
+    // Limpar mensagens anteriores
+    const msgDiv = document.getElementById('mensagemLogin');
+    if (msgDiv) {
+        msgDiv.innerHTML = '';
+        msgDiv.className = 'message';
+    }
+}
+
+// ============================================
+// TOAST NOTIFICATIONS
+// ============================================
 function mostrarToast(mensagem, tipo = 'info') {
     const container = document.getElementById('toastContainer');
-    if (!container) return;
+    if (!container) {
+        // Fallback: alert se o container não existir
+        alert(mensagem);
+        return;
+    }
     
     const toast = document.createElement('div');
     toast.className = `toast ${tipo}`;
@@ -191,6 +230,17 @@ function mostrarLoading(mensagem = 'Carregando...') {
 function fecharLoading() {
     const loading = document.getElementById('globalLoading');
     if (loading) loading.remove();
+}
+
+// ============================================
+// AUTENTICAÇÃO
+// ============================================
+function atualizarHeaderLogado() {
+    const btnHeader = document.getElementById('btnLoginHeader');
+    if (btnHeader && usuarioLogado) {
+        btnHeader.innerHTML = '<i class="fas fa-user"></i> Minha Conta';
+        btnHeader.setAttribute('onclick', "navegarPara('dashboard')");
+    }
 }
 
 // ============================================
@@ -291,20 +341,6 @@ function fazerLogout() {
     atualizarHeaderLogado();
     mostrarToast('Logout realizado com sucesso!', 'success');
     navegarPara('home');
-}
-
-function mostrarCadastro() {
-    const formLogin = document.getElementById('formLogin');
-    const formCadastro = document.getElementById('formCadastro');
-    if (formLogin) formLogin.style.display = 'none';
-    if (formCadastro) formCadastro.style.display = 'block';
-}
-
-function mostrarLogin() {
-    const formLogin = document.getElementById('formLogin');
-    const formCadastro = document.getElementById('formCadastro');
-    if (formCadastro) formCadastro.style.display = 'none';
-    if (formLogin) formLogin.style.display = 'block';
 }
 
 // ============================================
@@ -558,7 +594,7 @@ function renderizarPedidos(pedidos) {
         container.innerHTML = `<div class="empty-state">
             <i class="fas fa-inbox"></i>
             <p>Nenhum pedido encontrado</p>
-            <button class="btn-primary" onclick="document.querySelector('.tab-btn[data-tab=\"upload\"]').click()">
+            <button class="btn-primary" onclick="document.querySelector('.tab-btn[data-tab=\\"upload\\"]').click()">
                 Solicitar Serviço
             </button>
         </div>`;
@@ -611,7 +647,7 @@ function atualizarMetricas() {
 }
 
 // ============================================
-// DASHBOARD - UPLOAD (CRÍTICO)
+// DASHBOARD - UPLOAD
 // ============================================
 function atualizarPrecoUpload() {
     const servico = document.getElementById('uploadServico').value;
@@ -702,7 +738,6 @@ async function enviarUploadPedido() {
     const descricao = document.getElementById('uploadDescricao').value;
     const prazo = document.getElementById('uploadPrazo').value;
     
-    // Validações
     if (!servico) {
         mostrarToast('❌ Selecione um serviço', 'error');
         return;
@@ -731,7 +766,6 @@ async function enviarUploadPedido() {
     };
     const info = servicosInfo[servico];
     
-    // Preparar FormData
     const formData = new FormData();
     if (uploadArquivoSelecionado) {
         formData.append('arquivo', uploadArquivoSelecionado);
@@ -773,7 +807,6 @@ async function enviarUploadPedido() {
             
             mostrarToast('✅ Solicitação enviada com sucesso!', 'success');
             
-            // Limpar formulário
             document.getElementById('uploadServico').value = '';
             document.getElementById('uploadDescricao').value = '';
             document.getElementById('uploadPrazo').value = '';
@@ -787,7 +820,6 @@ async function enviarUploadPedido() {
                 el.classList.remove('active');
             });
             
-            // Redirecionar
             setTimeout(() => navegarPara('pagamento-sucesso'), 1500);
             carregarPedidos();
             carregarDadosFinanceiros();
@@ -867,7 +899,7 @@ async function carregarDadosFinanceiros() {
                             <div class="empty-state">
                                 <i class="fas fa-receipt"></i>
                                 <p>Nenhum pagamento registrado</p>
-                                <button class="btn-primary" onclick="document.querySelector('.tab-btn[data-tab=\"upload\"]').click()">
+                                <button class="btn-primary" onclick="document.querySelector('.tab-btn[data-tab=\\"upload\\"]').click()">
                                     Fazer primeiro pedido
                                 </button>
                             </div>
@@ -940,6 +972,15 @@ async function enviarContato() {
     }
     
     fecharLoading();
+}
+
+// ============================================
+// DOWNLOAD APK
+// ============================================
+function registrarDownloadAPK() {
+    console.log('📱 Download do APK iniciado');
+    // Adicionar analytics ou tracking aqui se necessário
+    mostrarToast('📱 Baixando aplicativo Facilitaki...', 'info');
 }
 
 // ============================================
