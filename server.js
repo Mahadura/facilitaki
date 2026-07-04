@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (COM ROTA DE ATUALIZAÇÃO DE ADMIN)
+// server.js - Facilitaki Backend (VERSÃO COMPLETA FUNCIONAL)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -15,10 +15,7 @@ const PORT = process.env.PORT || 3000;
 // ============================================
 // CONFIGURAÇÕES
 // ============================================
-const JWT_SECRET = process.env.SECRET_KEY;
-if (!JWT_SECRET) {
-    console.warn('⚠️ SECRET_KEY não definida, usando fallback apenas para desenvolvimento');
-}
+const JWT_SECRET = process.env.SECRET_KEY || 'facilitaki-super-secret-key-2024';
 
 // ============================================
 // BANCO DE DADOS
@@ -193,13 +190,14 @@ async function initDatabase() {
         `);
         
         // Adicionar colunas se não existirem
-        const columnsToAdd = ['descricao', 'tema', 'arquivo_nome', 'arquivo_original', 'prazo_entrega'];
-        for (const col of columnsToAdd) {
-            try {
-                await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS ${col} TEXT`);
-            } catch (e) {
-                // Coluna já existe ou erro ignorável
-            }
+        try {
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS descricao TEXT`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tema TEXT`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255)`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255)`);
+            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prazo_entrega DATE`);
+        } catch (e) {
+            console.log('⚠️ Colunas já existem:', e.message);
         }
         
         await pool.query(`
@@ -220,112 +218,10 @@ async function initDatabase() {
 }
 
 // ============================================
-// ROTA PARA CRIAR PRIMEIRO ADMIN
-// ============================================
-app.get('/admin/criar-primeiro-admin', async function(req, res) {
-    try {
-        // Verificar se já existe admin
-        const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
-        if (parseInt(adminCheck.rows[0].count) > 0) {
-            return res.send(`
-                <!DOCTYPE html>
-                <html>
-                <head><meta charset="UTF-8"><title>Admin já existe</title>
-                <style>
-                    body{font-family:Arial;background:#f59e0b;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                    a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-                </style>
-                </head>
-                <body>
-                    <div class="card">
-                        <h1>⚠️ ADMIN JÁ EXISTE</h1>
-                        <p>Já existe um administrador no sistema.</p>
-                        <a href="/admin/login">Ir para Login</a>
-                    </div>
-                </body>
-                </html>
-            `);
-        }
-        
-        // Verificar se as variáveis de ambiente estão definidas
-        const adminPhone = process.env.ADMIN_PHONE;
-        const adminName = process.env.ADMIN_NAME;
-        const adminPassword = process.env.ADMIN_PASSWORD;
-        
-        if (!adminPhone || !adminName || !adminPassword) {
-            return res.send(`
-                <!DOCTYPE html>
-                <html>
-                <head><meta charset="UTF-8"><title>Erro</title>
-                <style>
-                    body{font-family:Arial;background:#ef4444;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                    .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
-                </style>
-                </head>
-                <body>
-                    <div class="card">
-                        <h1>❌ ERRO</h1>
-                        <p>Variáveis de ambiente não configuradas!</p>
-                        <div class="info">
-                            <p><strong>Faltam:</strong></p>
-                            <ul style="text-align:left;">
-                                <li>${!adminPhone ? '❌ ADMIN_PHONE' : '✅ ADMIN_PHONE'}</li>
-                                <li>${!adminName ? '❌ ADMIN_NAME' : '✅ ADMIN_NAME'}</li>
-                                <li>${!adminPassword ? '❌ ADMIN_PASSWORD' : '✅ ADMIN_PASSWORD'}</li>
-                            </ul>
-                        </div>
-                        <p style="color:#666;font-size:12px;">Configure as variáveis no Render e redeploy.</p>
-                    </div>
-                </body>
-                </html>
-            `);
-        }
-        
-        // Criar admin com as credenciais do .env
-        const phoneClean = adminPhone.toString().replace(/\D/g, '');
-        const hash = await bcrypt.hash(adminPassword, 10);
-        await pool.query(
-            'INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) VALUES ($1, $2, $3, true)',
-            [adminName.trim(), phoneClean, hash]
-        );
-        
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Admin Criado</title>
-            <style>
-                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>✅ ADMIN CRIADO!</h1>
-                    <div class="info">
-                        <p><strong>Nome:</strong> ${adminName}</p>
-                        <p><strong>WhatsApp:</strong> ${phoneClean}</p>
-                        <p><strong>Senha:</strong> (definida no .env)</p>
-                    </div>
-                    <a href="/admin/login">🔐 Fazer Login</a>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        res.send('Erro: ' + error.message);
-    }
-});
-
-// ============================================
-// ROTA DE EMERGÊNCIA - ATUALIZAR ADMIN EXISTENTE
+// ROTA PARA ATUALIZAR ADMIN (EMERGÊNCIA)
 // ============================================
 app.get('/admin/atualizar-admin', async function(req, res) {
     try {
-        // Verifica se já existe admin
         const adminCheck = await pool.query('SELECT id, nome, telefone FROM usuarios WHERE is_admin = true LIMIT 1');
         
         if (adminCheck.rows.length === 0) {
@@ -351,13 +247,10 @@ app.get('/admin/atualizar-admin', async function(req, res) {
         }
         
         const admin = adminCheck.rows[0];
-        
-        // Pega as credenciais do .env
         const adminPhone = process.env.ADMIN_PHONE || '841234567';
         const adminName = process.env.ADMIN_NAME || 'Super Admin';
         const adminPassword = process.env.ADMIN_PASSWORD || '1234567';
         
-        // Valida senha
         if (!adminPassword || adminPassword.length < 6) {
             return res.send(`
                 <!DOCTYPE html>
@@ -372,21 +265,17 @@ app.get('/admin/atualizar-admin', async function(req, res) {
                     <div class="card">
                         <h1>❌ SENHA INVÁLIDA</h1>
                         <p>ADMIN_PASSWORD deve ter pelo menos 6 caracteres.</p>
-                        <p style="color:#666;font-size:12px;">Configure no .env e tente novamente.</p>
                     </div>
                 </body>
                 </html>
             `);
         }
         
-        // Atualiza o admin
         const phoneClean = adminPhone.toString().replace(/\D/g, '');
         const hash = await bcrypt.hash(adminPassword, 10);
         
         await pool.query(
-            `UPDATE usuarios 
-             SET nome = $1, telefone = $2, senha_hash = $3 
-             WHERE id = $4`,
+            `UPDATE usuarios SET nome = $1, telefone = $2, senha_hash = $3 WHERE id = $4`,
             [adminName.trim(), phoneClean, hash, admin.id]
         );
         
@@ -413,40 +302,6 @@ app.get('/admin/atualizar-admin', async function(req, res) {
                         <p><strong>Senha:</strong> (definida no .env)</p>
                     </div>
                     <a href="/admin/login">🔐 Fazer Login</a>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        res.send('Erro: ' + error.message);
-    }
-});
-
-// ============================================
-// ROTA DE REPARO
-// ============================================
-app.get('/admin/reparar-tabela', function(req, res) {
-    try {
-        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS descricao TEXT`);
-        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tema TEXT`);
-        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255)`);
-        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255)`);
-        pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prazo_entrega DATE`);
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Tabela Reparada</title>
-            <style>
-                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>✅ TABELA REPARADA!</h1>
-                    <p>Todas as colunas foram adicionadas com sucesso.</p>
-                    <a href="/">Voltar ao site</a>
                 </div>
             </body>
             </html>
@@ -711,7 +566,6 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
                 var pedido = result.rows[0];
                 console.log('📋 Pedido encontrado, arquivo:', pedido.arquivo_nome);
                 
-                // Verificar permissão
                 if (pedido.usuario_id !== req.user.id) {
                     pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.user.id])
                         .then(function(adminCheck) {
@@ -733,7 +587,6 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
             var filePath = path.join(uploadDir, pedido.arquivo_nome);
             console.log('📁 Caminho do arquivo:', filePath);
             
-            // Verificar se o arquivo existe
             if (!fs.existsSync(filePath)) {
                 console.log('❌ Arquivo não encontrado no disco');
                 return res.status(404).json({ success: false, erro: 'Arquivo não encontrado' });
@@ -742,7 +595,6 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
             var stats = fs.statSync(filePath);
             var ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome).toLowerCase();
             
-            // Definir Content-Type correto
             var contentType = 'application/octet-stream';
             var mimeTypes = {
                 '.pdf': 'application/pdf',
@@ -754,19 +606,16 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
                 contentType = mimeTypes[ext];
             }
             
-            // Nome do arquivo para download
             var fileName = pedido.arquivo_original || pedido.arquivo_nome;
             
             console.log('📤 Enviando arquivo:', fileName, 'Tamanho:', stats.size, 'bytes');
             
-            // Headers para download
             res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Length', stats.size);
             res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(fileName) + '"');
             res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
             res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
             
-            // Enviar arquivo
             res.sendFile(filePath, function(err) {
                 if (err) {
                     console.error('❌ Erro ao enviar arquivo:', err);
@@ -1030,55 +879,145 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, function(req, res) {
 });
 
 // ============================================
-// PAINEL ADMIN
+// PÁGINA DE LOGIN ADMIN
 // ============================================
-app.get('/admin/painel', function(req, res) {
-    // Verifica se o usuário está logado (token no localStorage)
-    // O frontend já redireciona se não tiver token
+app.get('/admin/login', function(req, res) {
     res.send(`
         <!DOCTYPE html>
         <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Admin Painel - Facilitaki</title>
-            <style>
-                *{margin:0;padding:0;box-sizing:border-box}
-                body{font-family:Arial;background:#f0f2f5;padding:20px}
-                .header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
-                .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:20px}
-                .stat-card{background:#fff;padding:20px;border-radius:10px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
-                .stat-number{font-size:32px;font-weight:bold;color:#667eea}
-                .tabs{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
-                .tab-btn{background:#fff;border:none;padding:12px 24px;border-radius:10px;cursor:pointer;font-weight:bold}
-                .tab-btn.active{background:#667eea;color:#fff}
-                .tab-content{display:none;background:#fff;border-radius:10px;padding:20px;overflow-x:auto}
-                .tab-content.active{display:block}
-                table{width:100%;border-collapse:collapse;font-size:14px}
-                th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #ddd}
-                th{background:#f8f9fa;font-weight:600}
-                .btn{padding:5px 12px;border:none;border-radius:5px;cursor:pointer;margin:2px;font-size:12px}
-                .btn-danger{background:#e74c3c;color:#fff}
-                .btn-warning{background:#f39c12;color:#fff}
-                .btn-primary{background:#667eea;color:#fff}
-                .logout-btn{background:#e74c3c;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer}
-                .form-admin{background:#f8f9fa;padding:20px;border-radius:10px;margin-bottom:20px}
-                .form-admin input{margin:8px 0;padding:10px;border:1px solid #ddd;border-radius:5px;width:100%}
-                .alert-success{background:#d4edda;color:#155724;padding:10px;border-radius:5px;margin-top:10px}
-                .alert-error{background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-top:10px}
-                .badge-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.75rem;font-weight:600}
-                .badge-status.pendente{background:#fef3c7;color:#92400e}
-                .badge-status.pago{background:#dbeafe;color:#1e40af}
-                .badge-status.em_andamento{background:#ede9fe;color:#5b21b6}
-                .badge-status.concluido{background:#d1fae5;color:#065f46}
-                .btn-ver-detalhes{padding:4px 12px;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer}
-                .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
-                .pedido-detalhes-modal.active{display:flex}
-                .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
-                .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
-                .pedido-detalhes-content td:first-child{font-weight:600;width:150px}
-                .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
-                .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
-            </style>
+        <head><meta charset="UTF-8"><title>Admin Login - Facilitaki</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;justify-content:center;align-items:center}
+            .container{background:#fff;padding:40px;border-radius:20px;width:400px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+            h1{color:#333;margin-bottom:10px}
+            .subtitle{color:#666;font-size:14px;margin-bottom:20px}
+            input{width:100%;padding:12px;margin:10px 0;border:2px solid #ddd;border-radius:10px;font-size:14px;transition:border 0.3s}
+            input:focus{outline:none;border-color:#667eea}
+            button{width:100%;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold;font-size:16px;transition:transform 0.2s}
+            button:hover{transform:scale(1.02)}
+            .error{color:#e74c3c;margin-top:10px;font-size:14px}
+            .contact-box{background:#fef3c7;padding:15px;border-radius:10px;margin-top:15px;border-left:4px solid #f59e0b;text-align:left}
+            .contact-box strong{color:#92400e}
+            .contact-box .phone{color:#667eea;font-weight:bold;font-size:16px}
+            .info{margin-top:20px;padding:15px;background:#e8f4fd;border-radius:10px;font-size:13px;color:#555}
+            .info code{background:#e0e0e0;padding:2px 6px;border-radius:4px;font-size:11px}
+        </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔐 Admin Login</h1>
+                <p class="subtitle">Acesse o painel administrativo do Facilitaki</p>
+                
+                <input type="text" id="username" placeholder="Usuário ou WhatsApp">
+                <input type="password" id="password" placeholder="Senha">
+                <button onclick="login()">Entrar</button>
+                <div id="error" class="error"></div>
+                
+                <div class="contact-box">
+                    <strong>📞 Se estiver com dificuldades de acessar o painel administrativo:</strong><br>
+                    <span>Contacte: <span class="phone">86 728 6665</span></span>
+                    <br><small style="color:#666;">(Segunda a Sexta, 8h às 17h)</small>
+                </div>
+                
+                <div class="info">
+                    <strong>🔑 Lembre-se:</strong> As credenciais são definidas no <code>.env</code>
+                </div>
+            </div>
+            <script>
+                async function login() {
+                    const username = document.getElementById('username').value;
+                    const password = document.getElementById('password').value;
+                    const errorDiv = document.getElementById('error');
+                    
+                    if(!username || !password) { 
+                        errorDiv.textContent = '⚠️ Preencha todos os campos'; 
+                        return; 
+                    }
+                    
+                    errorDiv.textContent = '⏳ Aguarde...';
+                    errorDiv.style.color = '#667eea';
+                    
+                    try {
+                        const res = await fetch('/admin/api/login', {
+                            method:'POST',
+                            headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({usuario:username, senha:password})
+                        });
+                        const data = await res.json();
+                        
+                        if(data.success){
+                            localStorage.setItem('adminToken', data.token);
+                            localStorage.setItem('adminNome', data.admin.nome);
+                            localStorage.setItem('adminId', data.admin.id);
+                            window.location.href = '/admin/painel';
+                        } else {
+                            errorDiv.textContent = '❌ ' + data.error;
+                            errorDiv.style.color = '#e74c3c';
+                        }
+                    } catch(e) { 
+                        errorDiv.textContent = '❌ Erro de conexão. Tente novamente.';
+                        errorDiv.style.color = '#e74c3c';
+                    }
+                }
+                
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        login();
+                    }
+                });
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// ============================================
+// PAINEL ADMIN
+// ============================================
+app.get('/admin/painel', function(req, res) {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><title>Admin Painel - Facilitaki</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{font-family:Arial;background:#f0f2f5;padding:20px}
+            .header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:20px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+            .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:20px}
+            .stat-card{background:#fff;padding:20px;border-radius:10px;text-align:center;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
+            .stat-number{font-size:32px;font-weight:bold;color:#667eea}
+            .tabs{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+            .tab-btn{background:#fff;border:none;padding:12px 24px;border-radius:10px;cursor:pointer;font-weight:bold}
+            .tab-btn.active{background:#667eea;color:#fff}
+            .tab-content{display:none;background:#fff;border-radius:10px;padding:20px;overflow-x:auto}
+            .tab-content.active{display:block}
+            table{width:100%;border-collapse:collapse;font-size:14px}
+            th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #ddd}
+            th{background:#f8f9fa;font-weight:600}
+            .btn{padding:5px 12px;border:none;border-radius:5px;cursor:pointer;margin:2px;font-size:12px}
+            .btn-danger{background:#e74c3c;color:#fff}
+            .btn-warning{background:#f39c12;color:#fff}
+            .btn-primary{background:#667eea;color:#fff}
+            .logout-btn{background:#e74c3c;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer}
+            .form-admin{background:#f8f9fa;padding:20px;border-radius:10px;margin-bottom:20px}
+            .form-admin input{margin:8px 0;padding:10px;border:1px solid #ddd;border-radius:5px;width:100%}
+            .alert-success{background:#d4edda;color:#155724;padding:10px;border-radius:5px;margin-top:10px}
+            .alert-error{background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-top:10px}
+            .badge-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.75rem;font-weight:600}
+            .badge-status.pendente{background:#fef3c7;color:#92400e}
+            .badge-status.pago{background:#dbeafe;color:#1e40af}
+            .badge-status.em_andamento{background:#ede9fe;color:#5b21b6}
+            .badge-status.concluido{background:#d1fae5;color:#065f46}
+            .btn-ver-detalhes{padding:4px 12px;background:#667eea;color:#fff;border:none;border-radius:5px;cursor:pointer}
+            .pedido-detalhes-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:none;justify-content:center;align-items:center;z-index:9999}
+            .pedido-detalhes-modal.active{display:flex}
+            .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
+            .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
+            .pedido-detalhes-content td:first-child{font-weight:600;width:150px}
+            .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
+            .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
+        </style>
         </head>
         <body>
             <div class="header">
@@ -1403,6 +1342,7 @@ app.get('/admin/painel', function(req, res) {
         </html>
     `);
 });
+
 // ============================================
 // TRATAMENTO DE ERROS
 // ============================================
@@ -1424,10 +1364,8 @@ initDatabase()
             console.log('🌐 Site: http://localhost:' + PORT);
             console.log('🔐 Admin: http://localhost:' + PORT + '/admin/login');
             console.log('📱 APK disponível em: http://localhost:' + PORT + '/facilitaki.apk');
-            console.log('\n⚠️ Rotas de Admin:');
-            console.log('   - /admin/criar-primeiro-admin (criar novo admin)');
-            console.log('   - /admin/atualizar-admin (atualizar admin existente)');
-            console.log('   - /admin/login (painel de login)');
+            console.log('\n⚠️ Para atualizar o admin:');
+            console.log('   Acesse: http://localhost:' + PORT + '/admin/atualizar-admin');
         });
     })
     .catch(function(err) {
