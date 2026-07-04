@@ -1264,11 +1264,6 @@ app.get('/admin/painel', function(req, res) {
                 <button class="tab-btn" onclick="showTab('admins')">👑 Administradores</button>
                 <button class="tab-btn" onclick="showTab('contatos')">📬 Contatos</button>
             </div>
-            <div style="margin-bottom:15px;display:flex;gap:10px;flex-wrap:wrap;">
-                <a href="/admin/ver-arquivos" class="diagnostic-link" target="_blank">🔍 Ver Arquivos (Diagnóstico)</a>
-                <a href="/admin/reparar-arquivos" class="diagnostic-link" target="_blank" style="background:#10b981;">🔧 Reparar Arquivos</a>
-                <a href="/admin/criar-pasta-uploads" class="diagnostic-link" target="_blank" style="background:#8b5cf6;">📁 Criar Pasta Uploads</a>
-            </div>
             <div id="tab-pedidos" class="tab-content active"><div id="pedidos-table">Carregando...</div></div>
             <div id="tab-usuarios" class="tab-content"><div id="usuarios-table">Carregando...</div></div>
             <div id="tab-admins" class="tab-content">
