@@ -1030,7 +1030,7 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, function(req, res) {
 });
 
 // ============================================
-// PÁGINA DE LOGIN ADMIN (COM CONTATO)
+// PÁGINA DE LOGIN ADMIN
 // ============================================
 app.get('/admin/login', function(req, res) {
     res.send(`
@@ -1048,15 +1048,11 @@ app.get('/admin/login', function(req, res) {
             button{width:100%;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:bold;font-size:16px;transition:transform 0.2s}
             button:hover{transform:scale(1.02)}
             .error{color:#e74c3c;margin-top:10px;font-size:14px}
-            .info{margin-top:20px;padding:15px;background:#e8f4fd;border-radius:10px;font-size:13px;color:#555}
-            .warning{color:#856404;background:#fff3cd;padding:12px;border-radius:5px;margin-top:10px;font-size:13px;border-left:4px solid #f59e0b}
-            .warning a{color:#667eea;font-weight:bold;text-decoration:none}
-            .warning a:hover{text-decoration:underline}
             .contact-box{background:#fef3c7;padding:15px;border-radius:10px;margin-top:15px;border-left:4px solid #f59e0b;text-align:left}
             .contact-box strong{color:#92400e}
             .contact-box .phone{color:#667eea;font-weight:bold;font-size:16px}
-            .env-info{background:#f0f0f0;padding:10px;border-radius:8px;margin-top:10px;font-size:12px;color:#666}
-            .env-info code{background:#e0e0e0;padding:2px 6px;border-radius:4px;font-size:11px}
+            .info{margin-top:20px;padding:15px;background:#e8f4fd;border-radius:10px;font-size:13px;color:#555}
+            .info code{background:#e0e0e0;padding:2px 6px;border-radius:4px;font-size:11px}
         </style>
         </head>
         <body>
@@ -1069,10 +1065,6 @@ app.get('/admin/login', function(req, res) {
                 <button onclick="login()">Entrar</button>
                 <div id="error" class="error"></div>
                 
-                <div class="warning">
-                    ⚠️ Se estiver com problemas, acesse: <a href="/admin/atualizar-admin">Atualizar Admin</a>
-                </div>
-                
                 <div class="contact-box">
                     <strong>📞 Se estiver com dificuldades de acessar o painel administrativo:</strong><br>
                     <span>Contacte: <span class="phone">86 728 6665</span></span>
@@ -1081,11 +1073,6 @@ app.get('/admin/login', function(req, res) {
                 
                 <div class="info">
                     <strong>🔑 Lembre-se:</strong> As credenciais são definidas no <code>.env</code>
-                </div>
-                
-                <div class="env-info">
-                    <strong>Variáveis necessárias:</strong><br>
-                    <code>ADMIN_PHONE</code> · <code>ADMIN_NAME</code> · <code>ADMIN_PASSWORD</code>
                 </div>
             </div>
             <script>
