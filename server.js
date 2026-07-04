@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO COMPLETA COM DOWNLOAD CORRIGIDO)
+// server.js - Facilitaki Backend (VERSÃO DEFINITIVA COM DOWNLOAD FIX)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -218,7 +218,7 @@ async function initDatabase() {
 }
 
 // ============================================
-// ROTA PARA ATUALIZAR ADMIN (EMERGÊNCIA)
+// ROTA PARA ATUALIZAR ADMIN
 // ============================================
 app.get('/admin/atualizar-admin', async function(req, res) {
     try {
@@ -550,32 +550,40 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), fun
 });
 
 // ============================================
-// ROTA PARA BAIXAR ARQUIVO (CORRIGIDA COM TOKEN VIA URL)
+// ROTA PARA BAIXAR ARQUIVO (MULTI-FORMATO)
 // ============================================
 app.get('/api/pedidos/:id/arquivo', function(req, res) {
     try {
         var pedidoId = req.params.id;
-        var token = req.query.token || req.headers['authorization']?.split(' ')[1];
         
-        console.log('📥 Download solicitado - Pedido:', pedidoId);
+        // Tenta pegar token de várias formas
+        var token = req.query.token || 
+                    req.headers['authorization']?.split(' ')[1] ||
+                    req.headers['x-access-token'] ||
+                    req.cookies?.token;
+        
+        console.log('📥 Download - Pedido:', pedidoId);
         console.log('🔑 Token:', token ? 'Presente' : 'Ausente');
         
-        // VERIFICAR TOKEN
         if (!token) {
             console.log('❌ Token não fornecido');
-            return res.status(401).json({ success: false, error: 'Token não fornecido' });
+            return res.status(401).json({ 
+                success: false, 
+                error: 'Token não fornecido. Faça login novamente.' 
+            });
         }
         
-        // VERIFICAR TOKEN VÁLIDO
         jwt.verify(token, JWT_SECRET, function(err, user) {
             if (err) {
                 console.log('❌ Token inválido:', err.message);
-                return res.status(403).json({ success: false, error: 'Token inválido' });
+                return res.status(403).json({ 
+                    success: false, 
+                    error: 'Token inválido ou expirado. Faça login novamente.' 
+                });
             }
             
             console.log('👤 Usuário autenticado:', user.id, user.nome);
             
-            // BUSCAR PEDIDO
             pool.query('SELECT arquivo_nome, arquivo_original, usuario_id FROM pedidos WHERE id = $1', [pedidoId])
                 .then(function(result) {
                     if (result.rows.length === 0) {
@@ -584,7 +592,7 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
                     
                     var pedido = result.rows[0];
                     
-                    // VERIFICAR PERMISSÃO
+                    // Verifica se o usuário é o dono do pedido OU é admin
                     if (pedido.usuario_id !== user.id) {
                         pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [user.id])
                             .then(function(adminCheck) {
@@ -633,7 +641,7 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
             res.setHeader('Content-Length', stats.size);
             res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(fileName) + '"');
             res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
-            res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+            res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length');
             
             res.sendFile(filePath, function(err) {
                 if (err) {
@@ -649,8 +657,41 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
         
     } catch (error) {
         console.error('❌ ERRO ao baixar arquivo:', error);
-        res.status(500).json({ success: false, erro: 'Erro interno do servidor' });
+        res.status(500).json({ success: false, erro: 'Erro interno do servidor: ' + error.message });
     }
+});
+
+// ============================================
+// ROTA DE DOWNLOAD COM REDIRECIONAMENTO (NOVA)
+// ============================================
+app.get('/download/:id', function(req, res) {
+    // Redireciona para a rota principal com token
+    var token = req.query.token;
+    var id = req.params.id;
+    
+    if (!token) {
+        return res.status(401).send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Erro</title>
+            <style>
+                body{font-family:Arial;background:#ef4444;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+            </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>❌ ERRO</h1>
+                    <p>Token não fornecido para download.</p>
+                    <a href="/admin/login">Voltar ao Login</a>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+    
+    res.redirect('/api/pedidos/' + id + '/arquivo?token=' + encodeURIComponent(token));
 });
 
 app.post('/api/contato', function(req, res) {
@@ -694,7 +735,7 @@ app.post('/admin/api/login', function(req, res) {
                         var token = jwt.sign(
                             { id: result.rows[0].id, nome: result.rows[0].nome, isAdmin: true },
                             JWT_SECRET,
-                            { expiresIn: '8h' }
+                            { expiresIn: '24h' }
                         );
                         
                         res.json({ success: true, token: token, admin: { id: result.rows[0].id, nome: result.rows[0].nome } });
@@ -992,7 +1033,7 @@ app.get('/admin/login', function(req, res) {
 });
 
 // ============================================
-// PAINEL ADMIN (COM DOWNLOAD CORRIGIDO)
+// PAINEL ADMIN (COM DOWNLOAD CORRIGIDO - VIA JANELA)
 // ============================================
 app.get('/admin/painel', function(req, res) {
     res.send(`
@@ -1034,9 +1075,11 @@ app.get('/admin/painel', function(req, res) {
             .pedido-detalhes-content{background:#fff;padding:2rem;border-radius:20px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto}
             .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
             .pedido-detalhes-content td:first-child{font-weight:600;width:150px}
-            .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
+            .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500;cursor:pointer}
             .arquivo-link:hover{text-decoration:underline}
             .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
+            .download-btn{display:inline-block;padding:6px 16px;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px;text-decoration:none}
+            .download-btn:hover{background:#1d4ed8}
         </style>
         </head>
         <body>
@@ -1219,14 +1262,15 @@ app.get('/admin/painel', function(req, res) {
                         
                         let arquivoHtml = '<span style="color:#999;">Nenhum arquivo enviado</span>';
                         if (pedido.arquivo_nome) {
-                            // PEGAR O TOKEN DO LOCALSTORAGE
                             const token = localStorage.getItem('adminToken');
+                            const fileName = pedido.arquivo_original || pedido.arquivo_nome;
+                            const downloadUrl = '/api/pedidos/' + pedido.id + '/arquivo?token=' + encodeURIComponent(token);
                             
-                            // CRIAR LINK COM TOKEN NA URL
                             arquivoHtml = \`
-                                <a href="/api/pedidos/\${pedido.id}/arquivo?token=\${token}" class="arquivo-link" target="_blank">
-                                    📄 Baixar \${pedido.arquivo_original || pedido.arquivo_nome}
+                                <a href="\${downloadUrl}" class="download-btn" target="_blank" onclick="baixarArquivo(\${pedido.id})">
+                                    📄 Baixar \${fileName}
                                 </a>
+                                <br><small style="color:#666;">Clique no botão para baixar o arquivo</small>
                             \`;
                         }
                         
@@ -1249,6 +1293,19 @@ app.get('/admin/painel', function(req, res) {
                         content.innerHTML = '<p>Erro ao carregar detalhes</p>';
                         modal.classList.add('active');
                     }
+                }
+                
+                // Função para baixar arquivo com token
+                function baixarArquivo(id) {
+                    const token = localStorage.getItem('adminToken');
+                    if (!token) {
+                        alert('❌ Token não encontrado. Faça login novamente.');
+                        window.location.href = '/admin/login';
+                        return;
+                    }
+                    
+                    const url = '/api/pedidos/' + id + '/arquivo?token=' + encodeURIComponent(token);
+                    window.open(url, '_blank');
                 }
                 
                 function fecharModal() { document.getElementById('modalDetalhes').classList.remove('active'); }
