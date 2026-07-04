@@ -1,6 +1,6 @@
 /* ============================================
-   FACILITAKI - STYLES COMPLETOS
-   Design System Moderno com Glassmorphism
+   FACILITAKI - STYLES COMPLETOS V2.2
+   CORRIGIDO - LOGIN/CADASTRO FUNCIONANDO
    ============================================ */
 
 * {
@@ -48,6 +48,7 @@
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.25);
+    --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.75rem;
@@ -57,6 +58,10 @@
     --transition-fast: 150ms ease;
     --transition-normal: 250ms ease;
     --transition-slow: 350ms ease;
+}
+
+html {
+    scroll-behavior: smooth;
 }
 
 body {
@@ -99,6 +104,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
 .header-comercial {
     background: rgba(30, 64, 175, 0.95);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     position: sticky;
     top: 0;
     z-index: 1000;
@@ -117,6 +123,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     justify-content: space-between;
     align-items: center;
     gap: 2rem;
+    padding: 0.75rem 0;
 }
 
 .logo-pro {
@@ -172,6 +179,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     align-items: center;
     gap: 0.5rem;
     font-weight: 500;
+    font-size: 0.9rem;
 }
 
 .nav-link:hover {
@@ -197,6 +205,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     border: 2px solid transparent;
     text-decoration: none;
     cursor: pointer;
+    font-size: 0.9rem;
 }
 
 .btn-login:hover {
@@ -213,6 +222,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     color: white;
     font-size: 1.5rem;
     cursor: pointer;
+    padding: 0.5rem;
 }
 
 /* ============================================
@@ -232,6 +242,17 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     from {
         opacity: 0;
         transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
     }
     to {
         opacity: 1;
@@ -521,6 +542,10 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     box-shadow: var(--shadow-lg);
 }
 
+.btn-comprar.recomendado {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
 /* ============================================
    BOTÕES
    ============================================ */
@@ -536,11 +561,19 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    text-decoration: none;
+    font-size: 1rem;
 }
 
 .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 
 .btn-primary.btn-block {
@@ -565,6 +598,8 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    text-decoration: none;
+    font-size: 1rem;
 }
 
 .btn-outline:hover {
@@ -587,11 +622,27 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     gap: 0.5rem;
     flex: 1;
     justify-content: center;
+    font-size: 1rem;
 }
 
 .btn-secondary:hover {
     background: var(--gray-300);
     transform: translateY(-2px);
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--primary-600);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.btn-link:hover {
+    color: var(--primary-700);
 }
 
 /* ============================================
@@ -619,6 +670,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     font-size: 1rem;
     transition: all var(--transition-fast);
     font-family: inherit;
+    background: white;
 }
 
 .form-group input:focus,
@@ -635,20 +687,31 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
 }
 
 /* ============================================
-   LOGIN/CADASTRO - 2º ASPECTO
+   LOGIN/CADASTRO - CORRIGIDO PARA FUNCIONAR
    ============================================ */
 .login-container {
-    max-width: 450px;
+    max-width: 500px;
     margin: 0 auto;
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.08);
 }
 
+/* ESTILOS BASE DOS FORMULÁRIOS DE LOGIN */
 .login-form {
-    background: white;
-    border-radius: var(--radius-2xl);
-    padding: 2rem;
-    box-shadow: var(--shadow-lg);
+    width: 100%;
     transition: all 0.4s ease;
-    animation: fadeInUp 0.5s ease;
+}
+
+/* FORMULÁRIO DE LOGIN - VISÍVEL POR PADRÃO */
+#formLogin {
+    display: block;
+}
+
+/* FORMULÁRIO DE CADASTRO - OCULTO POR PADRÃO */
+#formCadastro {
+    display: none;
 }
 
 .login-form .form-header {
@@ -659,7 +722,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
 .login-form .form-header i {
     font-size: 2.5rem;
     color: var(--primary-600);
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
 }
 
 .login-form .form-header h3 {
@@ -673,21 +736,41 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     font-size: 0.9rem;
 }
 
-#formLogin {
-    display: block !important;
+.login-form .form-group {
+    margin-bottom: 1.25rem;
 }
 
-#formLogin.active {
-    display: block !important;
+.login-form .form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--gray-700);
+    font-size: 0.9rem;
 }
 
-#formCadastro {
-    display: none !important;
+.login-form .form-group input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: var(--gray-50);
 }
 
-#formCadastro.active {
-    display: block !important;
-    animation: fadeInUp 0.5s ease;
+.login-form .form-group input:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.login-form .btn-block {
+    width: 100%;
+    padding: 0.875rem;
+    font-size: 1rem;
+    border-radius: 10px;
+    justify-content: center;
 }
 
 .form-footer {
@@ -727,6 +810,8 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     justify-content: space-between;
     align-items: center;
     color: white;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .welcome-section {
@@ -735,11 +820,27 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     gap: 1rem;
 }
 
+.user-avatar {
+    position: relative;
+}
+
 .user-avatar img {
     width: 60px;
     height: 60px;
     border-radius: 50%;
     border: 3px solid white;
+    object-fit: cover;
+}
+
+.online-status {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    background: #22c55e;
+    border-radius: 50%;
+    border: 2px solid white;
 }
 
 .welcome-text h2 {
@@ -751,6 +852,32 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
 .welcome-text p {
     font-size: 0.875rem;
     opacity: 0.8;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-notification,
+.btn-settings {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-notification:hover,
+.btn-settings:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
 }
 
 .metrics-grid {
@@ -784,11 +911,16 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .metric-icon i {
     font-size: 1.5rem;
     color: var(--primary-600);
+}
+
+.metric-info {
+    flex: 1;
 }
 
 .metric-value {
@@ -846,9 +978,62 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     display: block;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+/* ============================================
+   PEDIDOS LIST
+   ============================================ */
+.pedidos-filtros {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 2px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: 0 1rem;
+    transition: all var(--transition-fast);
+}
+
+.search-box:focus-within {
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-box i {
+    color: var(--gray-400);
+}
+
+.search-box input {
+    border: none;
+    padding: 0.75rem 0.75rem;
+    font-size: 0.9rem;
+    width: 100%;
+    background: transparent;
+}
+
+.search-box input:focus {
+    outline: none;
+}
+
+.filter-select {
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    font-size: 0.9rem;
+    background: white;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary-500);
 }
 
 .pedidos-list {
@@ -876,6 +1061,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     align-items: flex-start;
     margin-bottom: 0.75rem;
     flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
 .pedido-titulo {
@@ -888,11 +1074,22 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     border-radius: var(--radius-full);
     font-size: 0.7rem;
     font-weight: 600;
+    text-transform: capitalize;
 }
 
 .pedido-status.pendente {
     background: var(--warning-50);
     color: var(--warning-600);
+}
+
+.pedido-status.pago {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.pedido-status.em_andamento {
+    background: #dbeafe;
+    color: #1e40af;
 }
 
 .pedido-status.concluido {
@@ -908,20 +1105,39 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     gap: 1rem;
 }
 
+.pedido-detalhes {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: var(--gray-500);
+}
+
+.pedido-detalhes i {
+    margin-right: 0.25rem;
+}
+
 .pedido-valor {
     font-weight: 800;
     color: var(--primary-600);
+    font-size: 1.1rem;
 }
 
 .empty-state {
     text-align: center;
-    padding: 2rem;
+    padding: 3rem 1rem;
     color: var(--gray-400);
 }
 
 .empty-state i {
     font-size: 3rem;
     margin-bottom: 1rem;
+    color: var(--gray-300);
+}
+
+.empty-state p {
+    margin-bottom: 1rem;
+    font-size: 1rem;
 }
 
 /* ============================================
@@ -995,6 +1211,16 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     box-shadow: var(--shadow-lg);
 }
 
+.contato-form .form-group {
+    margin-bottom: 1.25rem;
+}
+
+.contato-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 .info-card {
     background: white;
     border-radius: var(--radius-xl);
@@ -1002,7 +1228,6 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     text-align: center;
     transition: all var(--transition-normal);
     border: 1px solid var(--gray-200);
-    margin-bottom: 1.5rem;
 }
 
 .info-card:hover {
@@ -1098,6 +1323,100 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     display: flex;
     gap: 1rem;
     margin-top: 1rem;
+}
+
+.resumo-pedido {
+    padding: 1rem;
+    background: var(--gray-50);
+    border-radius: var(--radius-lg);
+}
+
+.servico-resumo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.resumo-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+    border-bottom: 1px dashed var(--gray-200);
+}
+
+.resumo-item:last-child {
+    border-bottom: none;
+}
+
+.resumo-item span {
+    color: var(--gray-500);
+}
+
+.resumo-item strong {
+    color: var(--gray-800);
+}
+
+.instrucoes-pagamento-box {
+    background: var(--gray-50);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+}
+
+.instrucoes-pagamento-box h4 {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.instrucoes-pagamento-box ol {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.instrucoes-pagamento-box ol li {
+    margin-bottom: 0.5rem;
+    color: var(--gray-700);
+}
+
+.instrucoes-pagamento-box .alerta {
+    background: #fef3c7;
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    border-left: 4px solid #f59e0b;
+}
+
+.instrucoes-pagamento-box .alerta i {
+    color: #f59e0b;
+}
+
+.resumo-pagamento-box {
+    background: var(--gray-50);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+}
+
+.message.success {
+    background: #d1fae5;
+    border: 1px solid #a7f3d0;
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.message.success i {
+    font-size: 2.5rem;
+    color: #059669;
+    margin-bottom: 0.5rem;
+}
+
+.message.success h3 {
+    color: #065f46;
+}
+
+.message.success p {
+    color: #047857;
 }
 
 /* ============================================
@@ -1207,6 +1526,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     flex: 1;
     font-size: 0.9rem;
     color: #166534;
+    word-break: break-all;
 }
 
 .btn-remove-file {
@@ -1285,7 +1605,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     font-size: 1.1rem;
 }
 
-.resumo-item {
+.upload-resumo .resumo-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1293,15 +1613,15 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     border-bottom: 1px dashed #e0e0e0;
 }
 
-.resumo-item:last-child {
+.upload-resumo .resumo-item:last-child {
     border-bottom: none;
 }
 
-.resumo-item span {
+.upload-resumo .resumo-item span {
     color: #666;
 }
 
-.resumo-item strong {
+.upload-resumo .resumo-item strong {
     color: #333;
 }
 
@@ -1320,6 +1640,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     width: 18px;
     height: 18px;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .checkbox-label span {
@@ -1341,7 +1662,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
 }
 
 /* ============================================
-   LOGOUT - 3º ASPECTO
+   LOGOUT
    ============================================ */
 .logout-section {
     margin-top: 2rem;
@@ -1500,6 +1821,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     justify-content: center;
     align-items: center;
     z-index: 9999;
+    backdrop-filter: blur(4px);
 }
 
 .loading-content {
@@ -1525,7 +1847,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
 }
 
 /* ============================================
-   DOWNLOAD APLICATIVO - 4º ASPECTO
+   DOWNLOAD APLICATIVO
    ============================================ */
 .hero-apk-download {
     margin-top: 2rem;
@@ -1631,19 +1953,7 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     color: var(--success-500);
 }
 
-/* Link Aplicativo no Footer */
-.footer-links a i.fa-mobile-alt {
-    color: #60a5fa;
-    margin-right: 0.25rem;
-}
-
-.footer-links a:hover i.fa-mobile-alt {
-    color: white;
-}
-
-/* ============================================
-   BOTÃO FLUTUANTE APLICATIVO
-   ============================================ */
+/* Botão Flutuante APK */
 .btn-apk-float {
     position: fixed;
     bottom: 30px;
@@ -1684,19 +1994,19 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
     margin-top: 1px;
 }
 
+/* Link APK no Footer */
+.footer-links a i.fa-mobile-alt {
+    color: #60a5fa;
+    margin-right: 0.25rem;
+}
+
+.footer-links a:hover i.fa-mobile-alt {
+    color: white;
+}
+
 /* ============================================
    STATUS BADGES
    ============================================ */
-.pedido-status.pago {
-    background: #d1fae5;
-    color: #065f46;
-}
-
-.pedido-status.em_andamento {
-    background: #dbeafe;
-    color: #1e40af;
-}
-
 .status-pagamento.confirmado {
     color: #10b981;
     font-weight: 600;
@@ -1705,6 +2015,225 @@ h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); letter-spacing: -0.01em; }
 .status-pagamento.pendente {
     color: #f59e0b;
     font-weight: 600;
+}
+
+/* ============================================
+   FINANCEIRO
+   ============================================ */
+.financeiro-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.resumo-financeiro {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.financeiro-card {
+    background: white;
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    text-align: center;
+    border: 1px solid var(--gray-200);
+    transition: all var(--transition-normal);
+}
+
+.financeiro-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.financeiro-card .card-icon i {
+    font-size: 1.5rem;
+    color: var(--primary-600);
+}
+
+.financeiro-card h4 {
+    font-size: 0.875rem;
+    color: var(--gray-500);
+    margin: 0.5rem 0;
+}
+
+.valor-grande {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--primary-600);
+}
+
+.valor-grande.warning {
+    color: #f59e0b;
+}
+
+.valor-grande.success {
+    color: #10b981;
+}
+
+.historico-pagamentos {
+    background: white;
+    border-radius: var(--radius-2xl);
+    padding: 1.5rem;
+    border: 1px solid var(--gray-200);
+}
+
+.historico-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.historico-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-exportar {
+    padding: 0.5rem 1rem;
+    background: var(--gray-100);
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-exportar:hover {
+    background: var(--gray-200);
+}
+
+.tabela-historico {
+    overflow-x: auto;
+}
+
+.financeiro-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.financeiro-table thead th {
+    background: var(--gray-50);
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--gray-600);
+    border-bottom: 2px solid var(--gray-200);
+}
+
+.financeiro-table tbody td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.financeiro-table tbody tr:hover {
+    background: var(--gray-50);
+}
+
+.financeiro-table .empty-row td {
+    padding: 2rem;
+    text-align: center;
+}
+
+/* ============================================
+   PERFIL
+   ============================================ */
+.perfil-container {
+    background: white;
+    border-radius: var(--radius-2xl);
+    padding: 2rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.perfil-header {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.perfil-avatar-grande {
+    position: relative;
+}
+
+.perfil-avatar-grande img {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--primary-600);
+}
+
+.btn-mudar-avatar {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 32px;
+    height: 32px;
+    background: var(--primary-600);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-mudar-avatar:hover {
+    background: var(--primary-700);
+    transform: scale(1.1);
+}
+
+.perfil-info h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.membro-desde {
+    color: var(--gray-500);
+    font-size: 0.875rem;
+}
+
+.badge-verificado {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: #d1fae5;
+    color: #065f46;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
+
+.perfil-form {
+    max-width: 600px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
 }
 
 /* ============================================
@@ -1762,19 +2291,14 @@ footer {
     color: var(--gray-400);
     text-decoration: none;
     transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 .footer-links a:hover {
     color: white;
     padding-left: 5px;
-}
-
-.footer-bottom {
-    text-align: center;
-    padding: 1.5rem 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--gray-500);
-    font-size: 0.875rem;
 }
 
 .footer-social {
@@ -1794,6 +2318,30 @@ footer {
     transform: translateY(-2px);
 }
 
+.footer-bottom {
+    text-align: center;
+    padding: 1.5rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--gray-500);
+    font-size: 0.875rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.footer-safe {
+    color: var(--gray-500);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.footer-safe i {
+    color: var(--success-500);
+}
+
 /* ============================================
    ANIMAÇÕES
    ============================================ */
@@ -1806,6 +2354,54 @@ footer {
 .reveal.active {
     opacity: 1;
     transform: translateY(0);
+}
+
+/* ============================================
+   SCROLLBAR
+   ============================================ */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--gray-100);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-400);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-600);
+}
+
+/* ============================================
+   MENSAGENS
+   ============================================ */
+.message {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    text-align: center;
+}
+
+.message.success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.message.error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.message.info {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
 }
 
 /* ============================================
@@ -1832,15 +2428,20 @@ footer {
     .metrics-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+    .resumo-financeiro {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 @media (max-width: 768px) {
     .container {
         padding: 0 1rem;
     }
+    
     .mobile-menu-btn {
         display: block;
     }
+    
     .nav-menu {
         position: fixed;
         top: 70px;
@@ -1853,16 +2454,20 @@ footer {
         padding: 1rem;
         transition: left var(--transition-normal);
         z-index: 999;
+        gap: 0.25rem;
     }
     .nav-menu.active {
         left: 0;
     }
     .nav-link {
         justify-content: center;
+        padding: 0.75rem;
     }
+    
     .planos-container {
         grid-template-columns: 1fr;
     }
+    
     .dashboard-tabs {
         justify-content: center;
     }
@@ -1873,12 +2478,18 @@ footer {
         margin: 0;
         font-size: 1.25rem;
     }
+    .tab-btn {
+        padding: 0.75rem 1rem;
+    }
+    
     .contato-grid {
         grid-template-columns: 1fr;
     }
+    
     .metodos-pagamento {
         grid-template-columns: 1fr;
     }
+    
     .step-item {
         flex-direction: column;
         text-align: center;
@@ -1886,9 +2497,11 @@ footer {
     .step-number {
         margin: 0 auto;
     }
+    
     .checkout-actions {
         flex-direction: column;
     }
+    
     .upload-container {
         padding: 1rem;
     }
@@ -1902,6 +2515,7 @@ footer {
     .upload-area-large {
         padding: 1rem;
     }
+    
     .hero-apk-download {
         align-items: center;
     }
@@ -1911,6 +2525,7 @@ footer {
         justify-content: center;
         min-width: unset;
     }
+    
     .btn-apk-float {
         width: 50px;
         height: 50px;
@@ -1923,15 +2538,44 @@ footer {
     .btn-apk-float .btn-float-text {
         font-size: 0.4rem;
     }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .resumo-financeiro {
+        grid-template-columns: 1fr;
+    }
+    
+    .perfil-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .footer-bottom {
+        flex-direction: column;
+        text-align: center;
+    }
 }
 
 @media (max-width: 480px) {
+    .section {
+        padding: 3rem 0;
+    }
+    
     .stats-section {
         grid-template-columns: 1fr;
+        padding: 1.5rem;
     }
+    
     .metrics-grid {
         grid-template-columns: 1fr;
     }
+    
     .dashboard-header {
         flex-direction: column;
         text-align: center;
@@ -1939,15 +2583,21 @@ footer {
     .welcome-section {
         flex-direction: column;
     }
+    
     .checkout-step {
         padding: 1rem;
     }
+    
     .info-box {
         flex-direction: column;
         text-align: center;
     }
+    
+    .login-container {
+        padding: 1rem;
+    }
     .login-form {
-        padding: 1.5rem;
+        padding: 0;
     }
     .login-form .form-header i {
         font-size: 2rem;
@@ -1955,6 +2605,7 @@ footer {
     .login-form .form-header h3 {
         font-size: 1.25rem;
     }
+    
     .btn-apk i.fa-download {
         font-size: 1.25rem;
         padding: 0.35rem;
@@ -1969,6 +2620,7 @@ footer {
         font-size: 0.6rem;
         padding: 0.15rem 0.5rem;
     }
+    
     .btn-apk-float {
         width: 45px;
         height: 45px;
@@ -1978,22 +2630,28 @@ footer {
     .btn-apk-float i {
         font-size: 1rem;
     }
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: var(--gray-100);
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--primary-400);
-    border-radius: var(--radius-full);
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--primary-600);
+    .btn-apk-float .btn-float-text {
+        font-size: 0.35rem;
+    }
+    
+    .pedido-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .pedido-body {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .pedido-detalhes {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .financeiro-table {
+        font-size: 0.75rem;
+    }
+    .financeiro-table thead th,
+    .financeiro-table tbody td {
+        padding: 0.5rem;
+    }
 }
