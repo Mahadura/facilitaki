@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO FINAL COM ADMIN VIA ENV)
+// server.js - Facilitaki Backend (COM ROTA DE ATUALIZAÇÃO DE ADMIN)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -154,7 +154,7 @@ function validarTelefone(telefone) {
 }
 
 // ============================================
-// INICIALIZAÇÃO DO BANCO - ADMIN VIA ENV (SEGURO)
+// INICIALIZAÇÃO DO BANCO
 // ============================================
 async function initDatabase() {
     try {
@@ -212,75 +212,6 @@ async function initDatabase() {
             )
         `);
         
-        // --- CRIAÇÃO AUTOMÁTICA DO ADMIN VIA VARIÁVEIS DE AMBIENTE ---
-        // NENHUMA CREDENCIAL FICA NO CÓDIGO!
-        // TUDO VEM DO .env OU DAS VARIÁVEIS DO RENDER
-        
-        const adminCheck = await pool.query('SELECT COUNT(*) FROM usuarios WHERE is_admin = true');
-        
-        if (parseInt(adminCheck.rows[0].count) === 0) {
-            // LER CREDENCIAIS APENAS DAS VARIÁVEIS DE AMBIENTE
-            const adminPhone = process.env.ADMIN_PHONE;
-            const adminName = process.env.ADMIN_NAME;
-            const adminPassword = process.env.ADMIN_PASSWORD;
-            
-            // VALIDAR SE TODAS AS VARIÁVEIS FORAM DEFINIDAS
-            if (!adminPhone) {
-                console.error('❌ ADMIN_PHONE não definida no .env!');
-                console.error('❌ O administrador NÃO será criado.');
-                console.error('❌ Defina ADMIN_PHONE, ADMIN_NAME e ADMIN_PASSWORD no .env');
-            } else if (!adminName) {
-                console.error('❌ ADMIN_NAME não definida no .env!');
-                console.error('❌ O administrador NÃO será criado.');
-                console.error('❌ Defina ADMIN_NAME no .env');
-            } else if (!adminPassword) {
-                console.error('❌ ADMIN_PASSWORD não definida no .env!');
-                console.error('❌ O administrador NÃO será criado.');
-                console.error('❌ Defina ADMIN_PASSWORD no .env');
-            } else if (adminPassword.length < 6) {
-                console.error('❌ ADMIN_PASSWORD deve ter pelo menos 6 caracteres!');
-                console.error('❌ O administrador NÃO será criado.');
-            } else {
-                // VALIDAR TELEFONE (9 a 12 dígitos)
-                const phoneClean = adminPhone.toString().replace(/\D/g, '');
-                if (phoneClean.length < 9 || phoneClean.length > 12) {
-                    console.error('❌ ADMIN_PHONE inválido! Use 9 a 12 dígitos.');
-                    console.error('❌ O administrador NÃO será criado.');
-                } else {
-                    // CRIAR ADMIN COM AS CREDENCIAIS DO .ENV
-                    const hash = await bcrypt.hash(adminPassword, 10);
-                    await pool.query(
-                        `INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) 
-                         VALUES ($1, $2, $3, true)`,
-                        [adminName.trim(), phoneClean, hash]
-                    );
-                    
-                    console.log('✅ ==========================================');
-                    console.log('✅ ADMIN CRIADO COM SUCESSO!');
-                    console.log('✅ ==========================================');
-                    console.log(`   👤 Nome: ${adminName}`);
-                    console.log(`   📱 WhatsApp: ${phoneClean}`);
-                    console.log(`   🔑 Senha: (definida no .env - NÃO está no código!)`);
-                    console.log('✅ ==========================================');
-                    console.log('🔐 Acesse: /admin/login');
-                }
-            }
-        } else {
-            // ADMIN JÁ EXISTE - MOSTRAR INFORMAÇÕES (SEM A SENHA)
-            const adminResult = await pool.query(
-                'SELECT nome, telefone FROM usuarios WHERE is_admin = true LIMIT 1'
-            );
-            if (adminResult.rows.length > 0) {
-                console.log('✅ ==========================================');
-                console.log('✅ ADMIN JÁ EXISTE NO SISTEMA');
-                console.log('✅ ==========================================');
-                console.log(`   👤 Nome: ${adminResult.rows[0].nome}`);
-                console.log(`   📱 WhatsApp: ${adminResult.rows[0].telefone}`);
-                console.log(`   🔑 Senha: (definida no .env - NÃO está no código!)`);
-                console.log('✅ ==========================================');
-            }
-        }
-        
         console.log('✅ Banco inicializado com sucesso');
         
     } catch (error) {
@@ -289,7 +220,7 @@ async function initDatabase() {
 }
 
 // ============================================
-// ROTA PARA CRIAR PRIMEIRO ADMIN (VIA .ENV)
+// ROTA PARA CRIAR PRIMEIRO ADMIN
 // ============================================
 app.get('/admin/criar-primeiro-admin', async function(req, res) {
     try {
@@ -390,6 +321,108 @@ app.get('/admin/criar-primeiro-admin', async function(req, res) {
 });
 
 // ============================================
+// ROTA DE EMERGÊNCIA - ATUALIZAR ADMIN EXISTENTE
+// ============================================
+app.get('/admin/atualizar-admin', async function(req, res) {
+    try {
+        // Verifica se já existe admin
+        const adminCheck = await pool.query('SELECT id, nome, telefone FROM usuarios WHERE is_admin = true LIMIT 1');
+        
+        if (adminCheck.rows.length === 0) {
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>Erro</title>
+                <style>
+                    body{font-family:Arial;background:#ef4444;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                    a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+                </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>❌ NENHUM ADMIN ENCONTRADO</h1>
+                        <p>Use /admin/criar-primeiro-admin para criar um.</p>
+                        <a href="/admin/criar-primeiro-admin">Criar Admin</a>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+        
+        const admin = adminCheck.rows[0];
+        
+        // Pega as credenciais do .env
+        const adminPhone = process.env.ADMIN_PHONE || '841234567';
+        const adminName = process.env.ADMIN_NAME || 'Super Admin';
+        const adminPassword = process.env.ADMIN_PASSWORD || '1234567';
+        
+        // Valida senha
+        if (!adminPassword || adminPassword.length < 6) {
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>Erro</title>
+                <style>
+                    body{font-family:Arial;background:#ef4444;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>❌ SENHA INVÁLIDA</h1>
+                        <p>ADMIN_PASSWORD deve ter pelo menos 6 caracteres.</p>
+                        <p style="color:#666;font-size:12px;">Configure no .env e tente novamente.</p>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+        
+        // Atualiza o admin
+        const phoneClean = adminPhone.toString().replace(/\D/g, '');
+        const hash = await bcrypt.hash(adminPassword, 10);
+        
+        await pool.query(
+            `UPDATE usuarios 
+             SET nome = $1, telefone = $2, senha_hash = $3 
+             WHERE id = $4`,
+            [adminName.trim(), phoneClean, hash, admin.id]
+        );
+        
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Admin Atualizado</title>
+            <style>
+                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
+                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+                .old{color:#999;font-size:12px;text-decoration:line-through}
+                .new{color:#10b981;font-weight:bold}
+            </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>✅ ADMIN ATUALIZADO!</h1>
+                    <div class="info">
+                        <p><strong>ID:</strong> ${admin.id}</p>
+                        <p><strong>Nome:</strong> <span class="new">${adminName}</span> <span class="old">(era: ${admin.nome})</span></p>
+                        <p><strong>WhatsApp:</strong> <span class="new">${phoneClean}</span> <span class="old">(era: ${admin.telefone})</span></p>
+                        <p><strong>Senha:</strong> (definida no .env)</p>
+                    </div>
+                    <a href="/admin/login">🔐 Fazer Login</a>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        res.send('Erro: ' + error.message);
+    }
+});
+
+// ============================================
 // ROTA DE REPARO
 // ============================================
 app.get('/admin/reparar-tabela', function(req, res) {
@@ -424,7 +457,7 @@ app.get('/admin/reparar-tabela', function(req, res) {
 });
 
 // ============================================
-// ROTAS PÚBLICAS (mantidas do original)
+// ROTAS PÚBLICAS
 // ============================================
 app.get('/status', function(req, res) {
     res.json({ status: 'online', timestamp: new Date().toISOString() });
@@ -461,7 +494,7 @@ app.get('/api/apk-disponivel', function(req, res) {
 });
 
 // ============================================
-// ROTAS DE AUTENTICAÇÃO (mantidas do original)
+// ROTAS DE AUTENTICAÇÃO
 // ============================================
 app.post('/api/login', function(req, res) {
     try {
@@ -560,7 +593,7 @@ app.post('/api/cadastrar', function(req, res) {
 });
 
 // ============================================
-// ROTAS PROTEGIDAS (mantidas do original)
+// ROTAS PROTEGIDAS
 // ============================================
 app.get('/api/perfil', authenticateToken, function(req, res) {
     try {
@@ -767,7 +800,7 @@ app.post('/api/contato', function(req, res) {
 });
 
 // ============================================
-// ROTAS ADMIN (mantidas do original)
+// ROTAS ADMIN
 // ============================================
 app.post('/admin/api/login', function(req, res) {
     try {
@@ -997,7 +1030,7 @@ app.delete('/admin/api/pedido/:id', authenticateAdmin, function(req, res) {
 });
 
 // ============================================
-// PÁGINAS ADMIN (mantidas do original)
+// PÁGINAS ADMIN
 // ============================================
 app.get('/admin/login', function(req, res) {
     res.send(`
@@ -1023,7 +1056,7 @@ app.get('/admin/login', function(req, res) {
                 <input type="password" id="password" placeholder="Senha">
                 <button onclick="login()">Entrar</button>
                 <div id="error" class="error"></div>
-                <div class="warning">⚠️ Primeiro acesso? <a href="/admin/criar-primeiro-admin">Criar Administrador</a></div>
+                <div class="warning">⚠️ Se estiver com problemas, acesse: <a href="/admin/atualizar-admin">Atualizar Admin</a></div>
                 <div class="info">👑 As credenciais são definidas no .env</div>
             </div>
             <script>
@@ -1055,9 +1088,6 @@ app.get('/admin/login', function(req, res) {
     `);
 });
 
-// ============================================
-// PAINEL ADMIN (mantido do original)
-// ============================================
 app.get('/admin/painel', function(req, res) {
     res.send(`
         <!DOCTYPE html>
@@ -1447,10 +1477,10 @@ initDatabase()
             console.log('🌐 Site: http://localhost:' + PORT);
             console.log('🔐 Admin: http://localhost:' + PORT + '/admin/login');
             console.log('📱 APK disponível em: http://localhost:' + PORT + '/facilitaki.apk');
-            console.log('\n⚠️ Para criar o administrador:');
-            console.log('1. Configure ADMIN_PHONE, ADMIN_NAME e ADMIN_PASSWORD no .env');
-            console.log('2. Acesse: http://localhost:' + PORT + '/admin/criar-primeiro-admin');
-            console.log('3. Ou o sistema criará automaticamente se as variáveis estiverem definidas');
+            console.log('\n⚠️ Rotas de Admin:');
+            console.log('   - /admin/criar-primeiro-admin (criar novo admin)');
+            console.log('   - /admin/atualizar-admin (atualizar admin existente)');
+            console.log('   - /admin/login (painel de login)');
         });
     })
     .catch(function(err) {
