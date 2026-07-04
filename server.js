@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO DEFINITIVA COM DOWNLOAD FIX)
+// server.js - Facilitaki Backend (VERSÃO COMPLETA COM DIAGNÓSTICO)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -312,6 +312,137 @@ app.get('/admin/atualizar-admin', async function(req, res) {
 });
 
 // ============================================
+// ROTA DE DIAGNÓSTICO - VER ARQUIVOS
+// ============================================
+app.get('/admin/ver-arquivos', authenticateAdmin, function(req, res) {
+    try {
+        const uploadPath = path.join(__dirname, 'uploads');
+        
+        // Verificar se a pasta existe
+        if (!fs.existsSync(uploadPath)) {
+            return res.json({
+                success: false,
+                error: 'Pasta uploads não existe',
+                path: uploadPath
+            });
+        }
+        
+        // Listar arquivos
+        const files = fs.readdirSync(uploadPath);
+        
+        // Obter informações de cada arquivo
+        const fileDetails = files.map(file => {
+            const filePath = path.join(uploadPath, file);
+            const stats = fs.statSync(filePath);
+            return {
+                nome: file,
+                tamanho: stats.size,
+                tamanhoFormatado: (stats.size / 1024).toFixed(2) + ' KB',
+                modificado: stats.mtime
+            };
+        });
+        
+        // Buscar pedidos com arquivos
+        pool.query('SELECT id, cliente, arquivo_nome, arquivo_original FROM pedidos WHERE arquivo_nome IS NOT NULL')
+            .then(function(result) {
+                res.json({
+                    success: true,
+                    pasta_uploads: uploadPath,
+                    total_arquivos: files.length,
+                    arquivos: fileDetails,
+                    pedidos_com_arquivo: result.rows
+                });
+            });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+// ============================================
+// ROTA PARA RECRIAR PASTA UPLOADS
+// ============================================
+app.get('/admin/criar-pasta-uploads', authenticateAdmin, function(req, res) {
+    try {
+        const uploadPath = path.join(__dirname, 'uploads');
+        
+        // Criar pasta se não existir
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+            return res.json({
+                success: true,
+                message: 'Pasta uploads criada com sucesso!',
+                path: uploadPath
+            });
+        } else {
+            return res.json({
+                success: true,
+                message: 'Pasta uploads já existe!',
+                path: uploadPath,
+                arquivos: fs.readdirSync(uploadPath)
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// ============================================
+// ROTA PARA REPARAR ARQUIVOS - CORRIGE NOMES
+// ============================================
+app.get('/admin/reparar-arquivos', authenticateAdmin, async function(req, res) {
+    try {
+        // Buscar todos os pedidos com arquivo
+        const result = await pool.query('SELECT id, arquivo_nome, arquivo_original FROM pedidos WHERE arquivo_nome IS NOT NULL');
+        
+        const reparados = [];
+        const erros = [];
+        
+        for (const pedido of result.rows) {
+            const oldPath = path.join(uploadDir, pedido.arquivo_nome);
+            const ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome);
+            const newName = pedido.arquivo_nome.replace(/\.[^/.]+$/, '') + ext;
+            const newPath = path.join(uploadDir, newName);
+            
+            // Verificar se o arquivo existe no nome antigo
+            if (fs.existsSync(oldPath)) {
+                // Se o nome está diferente, renomear
+                if (oldPath !== newPath) {
+                    fs.renameSync(oldPath, newPath);
+                    await pool.query('UPDATE pedidos SET arquivo_nome = $1 WHERE id = $2', [newName, pedido.id]);
+                    reparados.push({ id: pedido.id, antigo: pedido.arquivo_nome, novo: newName });
+                }
+            } else {
+                // Verificar se existe com o novo nome
+                if (fs.existsSync(newPath)) {
+                    erros.push({ id: pedido.id, erro: 'Arquivo já está no nome correto', nome: newName });
+                } else {
+                    erros.push({ id: pedido.id, erro: 'Arquivo não encontrado', nome_esperado: pedido.arquivo_nome });
+                }
+            }
+        }
+        
+        res.json({
+            success: true,
+            reparados: reparados,
+            erros: erros,
+            total_pedidos: result.rows.length
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// ============================================
 // ROTAS PÚBLICAS
 // ============================================
 app.get('/status', function(req, res) {
@@ -516,7 +647,9 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), fun
         if (req.file) {
             arquivoNome = req.file.filename;
             arquivoOriginal = req.file.originalname;
-            console.log('📎 Arquivo salvo:', arquivoNome);
+            console.log('📎 Arquivo salvo como:', arquivoNome);
+            console.log('📎 Nome original:', arquivoOriginal);
+            console.log('📎 Caminho completo:', path.join(uploadDir, arquivoNome));
         }
         
         pool.query(
@@ -550,7 +683,7 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), fun
 });
 
 // ============================================
-// ROTA PARA BAIXAR ARQUIVO (MULTI-FORMATO)
+// ROTA PARA BAIXAR ARQUIVO (VERSÃO CORRIGIDA)
 // ============================================
 app.get('/api/pedidos/:id/arquivo', function(req, res) {
     try {
@@ -559,11 +692,28 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
         // Tenta pegar token de várias formas
         var token = req.query.token || 
                     req.headers['authorization']?.split(' ')[1] ||
-                    req.headers['x-access-token'] ||
-                    req.cookies?.token;
+                    req.headers['x-access-token'];
         
-        console.log('📥 Download - Pedido:', pedidoId);
+        console.log('📥 Download solicitado - Pedido:', pedidoId);
         console.log('🔑 Token:', token ? 'Presente' : 'Ausente');
+        console.log('📁 Pasta uploads:', uploadDir);
+        
+        // Verifica se a pasta uploads existe
+        if (!fs.existsSync(uploadDir)) {
+            console.log('❌ Pasta uploads NÃO EXISTE!');
+            return res.status(500).json({ 
+                success: false, 
+                erro: 'Pasta uploads não encontrada no servidor' 
+            });
+        }
+        
+        // Lista arquivos na pasta para debug
+        try {
+            const files = fs.readdirSync(uploadDir);
+            console.log('📂 Arquivos na pasta:', files);
+        } catch (e) {
+            console.log('❌ Erro ao listar arquivos:', e.message);
+        }
         
         if (!token) {
             console.log('❌ Token não fornecido');
@@ -591,6 +741,10 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
                     }
                     
                     var pedido = result.rows[0];
+                    console.log('📋 Pedido encontrado:');
+                    console.log('   - arquivo_nome:', pedido.arquivo_nome);
+                    console.log('   - arquivo_original:', pedido.arquivo_original);
+                    console.log('   - usuario_id:', pedido.usuario_id);
                     
                     // Verifica se o usuário é o dono do pedido OU é admin
                     if (pedido.usuario_id !== user.id) {
@@ -609,18 +763,62 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
         
         function enviarArquivo(pedido, res) {
             if (!pedido.arquivo_nome) {
-                return res.status(404).json({ success: false, erro: 'Arquivo não disponível' });
+                console.log('❌ arquivo_nome é null');
+                return res.status(404).json({ 
+                    success: false, 
+                    erro: 'Arquivo não disponível no banco de dados' 
+                });
             }
             
-            var filePath = path.join(uploadDir, pedido.arquivo_nome);
+            // Tenta encontrar o arquivo com diferentes extensões
+            const possiblePaths = [];
+            const baseName = pedido.arquivo_nome;
+            const ext = path.extname(pedido.arquivo_original || '');
             
-            if (!fs.existsSync(filePath)) {
-                console.log('❌ Arquivo não encontrado no disco');
-                return res.status(404).json({ success: false, erro: 'Arquivo não encontrado' });
+            // 1. Nome exato do banco
+            possiblePaths.push(path.join(uploadDir, baseName));
+            
+            // 2. Se tem extensão no original, tenta substituir
+            if (ext) {
+                const nameWithoutExt = baseName.replace(/\.[^/.]+$/, '');
+                possiblePaths.push(path.join(uploadDir, nameWithoutExt + ext));
+            }
+            
+            // 3. Tenta com .pdf se não tiver extensão
+            if (!ext || ext === '') {
+                possiblePaths.push(path.join(uploadDir, baseName + '.pdf'));
+                possiblePaths.push(path.join(uploadDir, baseName + '.docx'));
+                possiblePaths.push(path.join(uploadDir, baseName + '.doc'));
+                possiblePaths.push(path.join(uploadDir, baseName + '.txt'));
+            }
+            
+            console.log('🔍 Tentando encontrar arquivo...');
+            console.log('   Caminhos possíveis:', possiblePaths);
+            
+            let filePath = null;
+            for (const p of possiblePaths) {
+                if (fs.existsSync(p)) {
+                    filePath = p;
+                    console.log('✅ Arquivo encontrado em:', p);
+                    break;
+                }
+            }
+            
+            if (!filePath) {
+                console.log('❌ Arquivo não encontrado em nenhum dos caminhos');
+                return res.status(404).json({ 
+                    success: false, 
+                    erro: 'Arquivo não encontrado no servidor',
+                    debug: {
+                        arquivo_nome: pedido.arquivo_nome,
+                        arquivo_original: pedido.arquivo_original,
+                        caminhos_tentados: possiblePaths
+                    }
+                });
             }
             
             var stats = fs.statSync(filePath);
-            var ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome).toLowerCase();
+            var fileExt = path.extname(filePath).toLowerCase();
             
             var contentType = 'application/octet-stream';
             var mimeTypes = {
@@ -629,11 +827,11 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
                 '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 '.txt': 'text/plain'
             };
-            if (mimeTypes[ext]) {
-                contentType = mimeTypes[ext];
+            if (mimeTypes[fileExt]) {
+                contentType = mimeTypes[fileExt];
             }
             
-            var fileName = pedido.arquivo_original || pedido.arquivo_nome;
+            var fileName = pedido.arquivo_original || path.basename(filePath);
             
             console.log('📤 Enviando arquivo:', fileName, 'Tamanho:', stats.size, 'bytes');
             
@@ -657,41 +855,11 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
         
     } catch (error) {
         console.error('❌ ERRO ao baixar arquivo:', error);
-        res.status(500).json({ success: false, erro: 'Erro interno do servidor: ' + error.message });
+        res.status(500).json({ 
+            success: false, 
+            erro: 'Erro interno do servidor: ' + error.message 
+        });
     }
-});
-
-// ============================================
-// ROTA DE DOWNLOAD COM REDIRECIONAMENTO (NOVA)
-// ============================================
-app.get('/download/:id', function(req, res) {
-    // Redireciona para a rota principal com token
-    var token = req.query.token;
-    var id = req.params.id;
-    
-    if (!token) {
-        return res.status(401).send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Erro</title>
-            <style>
-                body{font-family:Arial;background:#ef4444;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>❌ ERRO</h1>
-                    <p>Token não fornecido para download.</p>
-                    <a href="/admin/login">Voltar ao Login</a>
-                </div>
-            </body>
-            </html>
-        `);
-    }
-    
-    res.redirect('/api/pedidos/' + id + '/arquivo?token=' + encodeURIComponent(token));
 });
 
 app.post('/api/contato', function(req, res) {
@@ -1033,7 +1201,7 @@ app.get('/admin/login', function(req, res) {
 });
 
 // ============================================
-// PAINEL ADMIN (COM DOWNLOAD CORRIGIDO - VIA JANELA)
+// PAINEL ADMIN
 // ============================================
 app.get('/admin/painel', function(req, res) {
     res.send(`
@@ -1080,6 +1248,8 @@ app.get('/admin/painel', function(req, res) {
             .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
             .download-btn{display:inline-block;padding:6px 16px;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px;text-decoration:none}
             .download-btn:hover{background:#1d4ed8}
+            .diagnostic-link{display:inline-block;padding:8px 16px;background:#f59e0b;color:#fff;border-radius:5px;text-decoration:none;font-size:12px;margin-top:10px}
+            .diagnostic-link:hover{background:#d97706}
         </style>
         </head>
         <body>
@@ -1093,6 +1263,11 @@ app.get('/admin/painel', function(req, res) {
                 <button class="tab-btn" onclick="showTab('usuarios')">👥 Usuários</button>
                 <button class="tab-btn" onclick="showTab('admins')">👑 Administradores</button>
                 <button class="tab-btn" onclick="showTab('contatos')">📬 Contatos</button>
+            </div>
+            <div style="margin-bottom:15px;display:flex;gap:10px;flex-wrap:wrap;">
+                <a href="/admin/ver-arquivos" class="diagnostic-link" target="_blank">🔍 Ver Arquivos (Diagnóstico)</a>
+                <a href="/admin/reparar-arquivos" class="diagnostic-link" target="_blank" style="background:#10b981;">🔧 Reparar Arquivos</a>
+                <a href="/admin/criar-pasta-uploads" class="diagnostic-link" target="_blank" style="background:#8b5cf6;">📁 Criar Pasta Uploads</a>
             </div>
             <div id="tab-pedidos" class="tab-content active"><div id="pedidos-table">Carregando...</div></div>
             <div id="tab-usuarios" class="tab-content"><div id="usuarios-table">Carregando...</div></div>
@@ -1295,7 +1470,6 @@ app.get('/admin/painel', function(req, res) {
                     }
                 }
                 
-                // Função para baixar arquivo com token
                 function baixarArquivo(id) {
                     const token = localStorage.getItem('adminToken');
                     if (!token) {
@@ -1447,6 +1621,10 @@ initDatabase()
             console.log('📱 APK disponível em: http://localhost:' + PORT + '/facilitaki.apk');
             console.log('\n⚠️ Para atualizar o admin:');
             console.log('   Acesse: http://localhost:' + PORT + '/admin/atualizar-admin');
+            console.log('\n🔍 Rotas de diagnóstico:');
+            console.log('   /admin/ver-arquivos - Ver arquivos na pasta uploads');
+            console.log('   /admin/reparar-arquivos - Reparar nomes de arquivos');
+            console.log('   /admin/criar-pasta-uploads - Criar pasta uploads');
         });
     })
     .catch(function(err) {
