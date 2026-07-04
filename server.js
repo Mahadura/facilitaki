@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO COMPLETA FUNCIONAL)
+// server.js - Facilitaki Backend (VERSÃO COMPLETA COM DOWNLOAD CORRIGIDO)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -550,34 +550,54 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), fun
 });
 
 // ============================================
-// ROTA PARA BAIXAR ARQUIVO
+// ROTA PARA BAIXAR ARQUIVO (CORRIGIDA COM TOKEN VIA URL)
 // ============================================
-app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
+app.get('/api/pedidos/:id/arquivo', function(req, res) {
     try {
         var pedidoId = req.params.id;
-        console.log('📥 Download solicitado - Pedido:', pedidoId);
+        var token = req.query.token || req.headers['authorization']?.split(' ')[1];
         
-        pool.query('SELECT arquivo_nome, arquivo_original, usuario_id FROM pedidos WHERE id = $1', [pedidoId])
-            .then(function(result) {
-                if (result.rows.length === 0) {
-                    return res.status(404).json({ success: false, erro: 'Pedido não encontrado' });
-                }
-                
-                var pedido = result.rows[0];
-                console.log('📋 Pedido encontrado, arquivo:', pedido.arquivo_nome);
-                
-                if (pedido.usuario_id !== req.user.id) {
-                    pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [req.user.id])
-                        .then(function(adminCheck) {
-                            if (adminCheck.rows.length === 0 || !adminCheck.rows[0].is_admin) {
-                                return res.status(403).json({ success: false, erro: 'Acesso negado' });
-                            }
-                            enviarArquivo(pedido, res);
-                        });
-                } else {
-                    enviarArquivo(pedido, res);
-                }
-            });
+        console.log('📥 Download solicitado - Pedido:', pedidoId);
+        console.log('🔑 Token:', token ? 'Presente' : 'Ausente');
+        
+        // VERIFICAR TOKEN
+        if (!token) {
+            console.log('❌ Token não fornecido');
+            return res.status(401).json({ success: false, error: 'Token não fornecido' });
+        }
+        
+        // VERIFICAR TOKEN VÁLIDO
+        jwt.verify(token, JWT_SECRET, function(err, user) {
+            if (err) {
+                console.log('❌ Token inválido:', err.message);
+                return res.status(403).json({ success: false, error: 'Token inválido' });
+            }
+            
+            console.log('👤 Usuário autenticado:', user.id, user.nome);
+            
+            // BUSCAR PEDIDO
+            pool.query('SELECT arquivo_nome, arquivo_original, usuario_id FROM pedidos WHERE id = $1', [pedidoId])
+                .then(function(result) {
+                    if (result.rows.length === 0) {
+                        return res.status(404).json({ success: false, erro: 'Pedido não encontrado' });
+                    }
+                    
+                    var pedido = result.rows[0];
+                    
+                    // VERIFICAR PERMISSÃO
+                    if (pedido.usuario_id !== user.id) {
+                        pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [user.id])
+                            .then(function(adminCheck) {
+                                if (adminCheck.rows.length === 0 || !adminCheck.rows[0].is_admin) {
+                                    return res.status(403).json({ success: false, erro: 'Acesso negado' });
+                                }
+                                enviarArquivo(pedido, res);
+                            });
+                    } else {
+                        enviarArquivo(pedido, res);
+                    }
+                });
+        });
         
         function enviarArquivo(pedido, res) {
             if (!pedido.arquivo_nome) {
@@ -585,7 +605,6 @@ app.get('/api/pedidos/:id/arquivo', authenticateToken, function(req, res) {
             }
             
             var filePath = path.join(uploadDir, pedido.arquivo_nome);
-            console.log('📁 Caminho do arquivo:', filePath);
             
             if (!fs.existsSync(filePath)) {
                 console.log('❌ Arquivo não encontrado no disco');
@@ -973,7 +992,7 @@ app.get('/admin/login', function(req, res) {
 });
 
 // ============================================
-// PAINEL ADMIN
+// PAINEL ADMIN (COM DOWNLOAD CORRIGIDO)
 // ============================================
 app.get('/admin/painel', function(req, res) {
     res.send(`
@@ -1016,6 +1035,7 @@ app.get('/admin/painel', function(req, res) {
             .pedido-detalhes-content td{padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top}
             .pedido-detalhes-content td:first-child{font-weight:600;width:150px}
             .arquivo-link{color:#2563eb;text-decoration:none;font-weight:500}
+            .arquivo-link:hover{text-decoration:underline}
             .btn-fechar-modal{margin-top:1rem;padding:10px 20px;background:#ef4444;color:#fff;border:none;border-radius:8px;cursor:pointer}
         </style>
         </head>
@@ -1199,8 +1219,12 @@ app.get('/admin/painel', function(req, res) {
                         
                         let arquivoHtml = '<span style="color:#999;">Nenhum arquivo enviado</span>';
                         if (pedido.arquivo_nome) {
+                            // PEGAR O TOKEN DO LOCALSTORAGE
+                            const token = localStorage.getItem('adminToken');
+                            
+                            // CRIAR LINK COM TOKEN NA URL
                             arquivoHtml = \`
-                                <a href="/api/pedidos/\${pedido.id}/arquivo" class="arquivo-link" target="_blank">
+                                <a href="/api/pedidos/\${pedido.id}/arquivo?token=\${token}" class="arquivo-link" target="_blank">
                                     📄 Baixar \${pedido.arquivo_original || pedido.arquivo_nome}
                                 </a>
                             \`;
