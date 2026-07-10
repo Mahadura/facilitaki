@@ -1,4 +1,4 @@
-// server.js - Facilitaki Backend (VERSÃO COMPLETA COM DIAGNÓSTICO)
+// server.js - Facilitaki Backend (VERSÃO COMPLETA COM NEON DATABASE)
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -18,24 +18,51 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.SECRET_KEY || 'facilitaki-super-secret-key-2024';
 
 // ============================================
-// BANCO DE DADOS
+// BANCO DE DADOS - NEON
 // ============================================
 let pool;
 try {
     pool = new Pool({
         connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        ssl: {
+            require: true,
+            rejectUnauthorized: false,
+        },
+        // Configurações otimizadas para Neon
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
     });
-    console.log('✅ Conectado ao banco de dados');
+    console.log('✅ Conectado ao Neon Database');
 } catch (error) {
-    console.error('❌ Erro ao conectar ao banco:', error.message);
+    console.error('❌ Erro ao conectar ao Neon:', error.message);
     process.exit(1);
 }
 
 // ============================================
+// KEEP-ALIVE PARA EVITAR AUTO-PAUSE DO NEON
+// ============================================
+async function keepAlive() {
+    try {
+        await pool.query('SELECT 1');
+        console.log('🔄 Neon keep-alive ping executado');
+    } catch (error) {
+        console.warn('⚠️ Erro no keep-alive:', error.message);
+    }
+}
+
+// Executa ping a cada 3 minutos para evitar auto-pause
+setInterval(keepAlive, 3 * 60 * 1000);
+
+// ============================================
 // MIDDLEWARES
 // ============================================
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    credentials: true,
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('.'));
@@ -71,13 +98,15 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
     fileFilter: function(req, file, cb) {
         const allowed = [
             'application/pdf',
             'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'text/plain'
+            'text/plain',
+            'image/jpeg',
+            'image/png'
         ];
         if (allowed.includes(file.mimetype)) {
             cb(null, true);
@@ -107,7 +136,7 @@ function authenticateToken(req, res, next) {
     
     jwt.verify(token, JWT_SECRET, function(err, user) {
         if (err) {
-            return res.status(403).json({ success: false, error: 'Token inválido' });
+            return res.status(403).json({ success: false, error: 'Token inválido ou expirado' });
         }
         req.user = user;
         next();
@@ -129,7 +158,7 @@ function authenticateAdmin(req, res, next) {
         pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [user.id])
             .then(function(result) {
                 if (result.rows.length === 0 || !result.rows[0].is_admin) {
-                    return res.status(403).json({ success: false, error: 'Acesso negado' });
+                    return res.status(403).json({ success: false, error: 'Acesso negado. Apenas administradores.' });
                 }
                 req.user = user;
                 next();
@@ -155,7 +184,7 @@ function validarTelefone(telefone) {
 // ============================================
 async function initDatabase() {
     try {
-        console.log('🔧 Inicializando banco...');
+        console.log('🔧 Inicializando banco Neon...');
         
         await pool.query(`
             CREATE TABLE IF NOT EXISTS usuarios (
@@ -172,7 +201,7 @@ async function initDatabase() {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS pedidos (
                 id SERIAL PRIMARY KEY,
-                usuario_id INTEGER REFERENCES usuarios(id),
+                usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
                 cliente VARCHAR(100) NOT NULL,
                 telefone VARCHAR(100) NOT NULL,
                 descricao TEXT,
@@ -189,17 +218,6 @@ async function initDatabase() {
             )
         `);
         
-        // Adicionar colunas se não existirem
-        try {
-            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS descricao TEXT`);
-            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tema TEXT`);
-            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_nome VARCHAR(255)`);
-            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS arquivo_original VARCHAR(255)`);
-            await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prazo_entrega DATE`);
-        } catch (e) {
-            console.log('⚠️ Colunas já existem:', e.message);
-        }
-        
         await pool.query(`
             CREATE TABLE IF NOT EXISTS contatos (
                 id SERIAL PRIMARY KEY,
@@ -210,10 +228,16 @@ async function initDatabase() {
             )
         `);
         
-        console.log('✅ Banco inicializado com sucesso');
+        // Verificar/criar índices para performance
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_pedidos_usuario_id ON pedidos(usuario_id)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_pedidos_status ON pedidos(status)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_usuarios_telefone ON usuarios(telefone)`);
+        
+        console.log('✅ Banco Neon inicializado com sucesso');
         
     } catch (error) {
-        console.error('❌ Erro ao inicializar banco:', error.message);
+        console.error('❌ Erro ao inicializar banco Neon:', error.message);
+        throw error;
     }
 }
 
@@ -224,29 +248,6 @@ app.get('/admin/atualizar-admin', async function(req, res) {
     try {
         const adminCheck = await pool.query('SELECT id, nome, telefone FROM usuarios WHERE is_admin = true LIMIT 1');
         
-        if (adminCheck.rows.length === 0) {
-            return res.send(`
-                <!DOCTYPE html>
-                <html>
-                <head><meta charset="UTF-8"><title>Erro</title>
-                <style>
-                    body{font-family:Arial;background:#ef4444;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                    a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-                </style>
-                </head>
-                <body>
-                    <div class="card">
-                        <h1>❌ NENHUM ADMIN ENCONTRADO</h1>
-                        <p>Use /admin/criar-primeiro-admin para criar um.</p>
-                        <a href="/admin/criar-primeiro-admin">Criar Admin</a>
-                    </div>
-                </body>
-                </html>
-            `);
-        }
-        
-        const admin = adminCheck.rows[0];
         const adminPhone = process.env.ADMIN_PHONE || '841234567';
         const adminName = process.env.ADMIN_NAME || 'Super Admin';
         const adminPassword = process.env.ADMIN_PASSWORD || '1234567';
@@ -274,171 +275,77 @@ app.get('/admin/atualizar-admin', async function(req, res) {
         const phoneClean = adminPhone.toString().replace(/\D/g, '');
         const hash = await bcrypt.hash(adminPassword, 10);
         
-        await pool.query(
-            `UPDATE usuarios SET nome = $1, telefone = $2, senha_hash = $3 WHERE id = $4`,
-            [adminName.trim(), phoneClean, hash, admin.id]
-        );
-        
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="UTF-8"><title>Admin Atualizado</title>
-            <style>
-                body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
-                .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
-                .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
-                a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
-                .old{color:#999;font-size:12px;text-decoration:line-through}
-                .new{color:#10b981;font-weight:bold}
-            </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>✅ ADMIN ATUALIZADO!</h1>
-                    <div class="info">
-                        <p><strong>ID:</strong> ${admin.id}</p>
-                        <p><strong>Nome:</strong> <span class="new">${adminName}</span> <span class="old">(era: ${admin.nome})</span></p>
-                        <p><strong>WhatsApp:</strong> <span class="new">${phoneClean}</span> <span class="old">(era: ${admin.telefone})</span></p>
-                        <p><strong>Senha:</strong> (definida no .env)</p>
+        if (adminCheck.rows.length === 0) {
+            // Criar novo admin
+            const result = await pool.query(
+                `INSERT INTO usuarios (nome, telefone, senha_hash, is_admin) 
+                 VALUES ($1, $2, $3, true) RETURNING id`,
+                [adminName.trim(), phoneClean, hash]
+            );
+            
+            res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>Admin Criado</title>
+                <style>
+                    body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                    .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
+                    a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+                </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>✅ ADMIN CRIADO!</h1>
+                        <div class="info">
+                            <p><strong>ID:</strong> ${result.rows[0].id}</p>
+                            <p><strong>Nome:</strong> ${adminName}</p>
+                            <p><strong>WhatsApp:</strong> ${phoneClean}</p>
+                            <p><strong>Senha:</strong> (definida no .env)</p>
+                        </div>
+                        <a href="/admin/login">🔐 Fazer Login</a>
                     </div>
-                    <a href="/admin/login">🔐 Fazer Login</a>
-                </div>
-            </body>
-            </html>
-        `);
+                </body>
+                </html>
+            `);
+        } else {
+            // Atualizar admin existente
+            const admin = adminCheck.rows[0];
+            await pool.query(
+                `UPDATE usuarios SET nome = $1, telefone = $2, senha_hash = $3 WHERE id = $4`,
+                [adminName.trim(), phoneClean, hash, admin.id]
+            );
+            
+            res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="UTF-8"><title>Admin Atualizado</title>
+                <style>
+                    body{font-family:Arial;background:#10b981;min-height:100vh;display:flex;justify-content:center;align-items:center}
+                    .card{background:#fff;padding:40px;border-radius:20px;text-align:center}
+                    .info{background:#f0f0f0;padding:15px;border-radius:10px;margin:20px 0;text-align:left}
+                    a{display:inline-block;margin-top:20px;padding:10px 20px;background:#667eea;color:#fff;text-decoration:none;border-radius:5px}
+                    .old{color:#999;font-size:12px;text-decoration:line-through}
+                    .new{color:#10b981;font-weight:bold}
+                </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>✅ ADMIN ATUALIZADO!</h1>
+                        <div class="info">
+                            <p><strong>ID:</strong> ${admin.id}</p>
+                            <p><strong>Nome:</strong> <span class="new">${adminName}</span> <span class="old">(era: ${admin.nome})</span></p>
+                            <p><strong>WhatsApp:</strong> <span class="new">${phoneClean}</span> <span class="old">(era: ${admin.telefone})</span></p>
+                            <p><strong>Senha:</strong> (definida no .env)</p>
+                        </div>
+                        <a href="/admin/login">🔐 Fazer Login</a>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
     } catch (error) {
         res.send('Erro: ' + error.message);
-    }
-});
-
-// ============================================
-// ROTA DE DIAGNÓSTICO - VER ARQUIVOS
-// ============================================
-app.get('/admin/ver-arquivos', authenticateAdmin, function(req, res) {
-    try {
-        const uploadPath = path.join(__dirname, 'uploads');
-        
-        // Verificar se a pasta existe
-        if (!fs.existsSync(uploadPath)) {
-            return res.json({
-                success: false,
-                error: 'Pasta uploads não existe',
-                path: uploadPath
-            });
-        }
-        
-        // Listar arquivos
-        const files = fs.readdirSync(uploadPath);
-        
-        // Obter informações de cada arquivo
-        const fileDetails = files.map(file => {
-            const filePath = path.join(uploadPath, file);
-            const stats = fs.statSync(filePath);
-            return {
-                nome: file,
-                tamanho: stats.size,
-                tamanhoFormatado: (stats.size / 1024).toFixed(2) + ' KB',
-                modificado: stats.mtime
-            };
-        });
-        
-        // Buscar pedidos com arquivos
-        pool.query('SELECT id, cliente, arquivo_nome, arquivo_original FROM pedidos WHERE arquivo_nome IS NOT NULL')
-            .then(function(result) {
-                res.json({
-                    success: true,
-                    pasta_uploads: uploadPath,
-                    total_arquivos: files.length,
-                    arquivos: fileDetails,
-                    pedidos_com_arquivo: result.rows
-                });
-            });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.message,
-            stack: error.stack
-        });
-    }
-});
-
-// ============================================
-// ROTA PARA RECRIAR PASTA UPLOADS
-// ============================================
-app.get('/admin/criar-pasta-uploads', authenticateAdmin, function(req, res) {
-    try {
-        const uploadPath = path.join(__dirname, 'uploads');
-        
-        // Criar pasta se não existir
-        if (!fs.existsSync(uploadPath)) {
-            fs.mkdirSync(uploadPath, { recursive: true });
-            return res.json({
-                success: true,
-                message: 'Pasta uploads criada com sucesso!',
-                path: uploadPath
-            });
-        } else {
-            return res.json({
-                success: true,
-                message: 'Pasta uploads já existe!',
-                path: uploadPath,
-                arquivos: fs.readdirSync(uploadPath)
-            });
-        }
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// ============================================
-// ROTA PARA REPARAR ARQUIVOS - CORRIGE NOMES
-// ============================================
-app.get('/admin/reparar-arquivos', authenticateAdmin, async function(req, res) {
-    try {
-        // Buscar todos os pedidos com arquivo
-        const result = await pool.query('SELECT id, arquivo_nome, arquivo_original FROM pedidos WHERE arquivo_nome IS NOT NULL');
-        
-        const reparados = [];
-        const erros = [];
-        
-        for (const pedido of result.rows) {
-            const oldPath = path.join(uploadDir, pedido.arquivo_nome);
-            const ext = path.extname(pedido.arquivo_original || pedido.arquivo_nome);
-            const newName = pedido.arquivo_nome.replace(/\.[^/.]+$/, '') + ext;
-            const newPath = path.join(uploadDir, newName);
-            
-            // Verificar se o arquivo existe no nome antigo
-            if (fs.existsSync(oldPath)) {
-                // Se o nome está diferente, renomear
-                if (oldPath !== newPath) {
-                    fs.renameSync(oldPath, newPath);
-                    await pool.query('UPDATE pedidos SET arquivo_nome = $1 WHERE id = $2', [newName, pedido.id]);
-                    reparados.push({ id: pedido.id, antigo: pedido.arquivo_nome, novo: newName });
-                }
-            } else {
-                // Verificar se existe com o novo nome
-                if (fs.existsSync(newPath)) {
-                    erros.push({ id: pedido.id, erro: 'Arquivo já está no nome correto', nome: newName });
-                } else {
-                    erros.push({ id: pedido.id, erro: 'Arquivo não encontrado', nome_esperado: pedido.arquivo_nome });
-                }
-            }
-        }
-        
-        res.json({
-            success: true,
-            reparados: reparados,
-            erros: erros,
-            total_pedidos: result.rows.length
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
     }
 });
 
@@ -446,7 +353,11 @@ app.get('/admin/reparar-arquivos', authenticateAdmin, async function(req, res) {
 // ROTAS PÚBLICAS
 // ============================================
 app.get('/status', function(req, res) {
-    res.json({ status: 'online', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'online', 
+        database: 'Neon',
+        timestamp: new Date().toISOString() 
+    });
 });
 
 app.get('/', function(req, res) {
@@ -683,36 +594,25 @@ app.post('/api/pedidos/upload', authenticateToken, upload.single('arquivo'), fun
 });
 
 // ============================================
-// ROTA PARA BAIXAR ARQUIVO (VERSÃO CORRIGIDA)
+// ROTA PARA BAIXAR ARQUIVO
 // ============================================
 app.get('/api/pedidos/:id/arquivo', function(req, res) {
     try {
         var pedidoId = req.params.id;
         
-        // Tenta pegar token de várias formas
         var token = req.query.token || 
                     req.headers['authorization']?.split(' ')[1] ||
                     req.headers['x-access-token'];
         
         console.log('📥 Download solicitado - Pedido:', pedidoId);
         console.log('🔑 Token:', token ? 'Presente' : 'Ausente');
-        console.log('📁 Pasta uploads:', uploadDir);
         
-        // Verifica se a pasta uploads existe
         if (!fs.existsSync(uploadDir)) {
             console.log('❌ Pasta uploads NÃO EXISTE!');
             return res.status(500).json({ 
                 success: false, 
                 erro: 'Pasta uploads não encontrada no servidor' 
             });
-        }
-        
-        // Lista arquivos na pasta para debug
-        try {
-            const files = fs.readdirSync(uploadDir);
-            console.log('📂 Arquivos na pasta:', files);
-        } catch (e) {
-            console.log('❌ Erro ao listar arquivos:', e.message);
         }
         
         if (!token) {
@@ -741,12 +641,7 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
                     }
                     
                     var pedido = result.rows[0];
-                    console.log('📋 Pedido encontrado:');
-                    console.log('   - arquivo_nome:', pedido.arquivo_nome);
-                    console.log('   - arquivo_original:', pedido.arquivo_original);
-                    console.log('   - usuario_id:', pedido.usuario_id);
                     
-                    // Verifica se o usuário é o dono do pedido OU é admin
                     if (pedido.usuario_id !== user.id) {
                         pool.query('SELECT is_admin FROM usuarios WHERE id = $1', [user.id])
                             .then(function(adminCheck) {
@@ -763,37 +658,29 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
         
         function enviarArquivo(pedido, res) {
             if (!pedido.arquivo_nome) {
-                console.log('❌ arquivo_nome é null');
                 return res.status(404).json({ 
                     success: false, 
                     erro: 'Arquivo não disponível no banco de dados' 
                 });
             }
             
-            // Tenta encontrar o arquivo com diferentes extensões
             const possiblePaths = [];
             const baseName = pedido.arquivo_nome;
             const ext = path.extname(pedido.arquivo_original || '');
             
-            // 1. Nome exato do banco
             possiblePaths.push(path.join(uploadDir, baseName));
             
-            // 2. Se tem extensão no original, tenta substituir
             if (ext) {
                 const nameWithoutExt = baseName.replace(/\.[^/.]+$/, '');
                 possiblePaths.push(path.join(uploadDir, nameWithoutExt + ext));
             }
             
-            // 3. Tenta com .pdf se não tiver extensão
             if (!ext || ext === '') {
                 possiblePaths.push(path.join(uploadDir, baseName + '.pdf'));
                 possiblePaths.push(path.join(uploadDir, baseName + '.docx'));
                 possiblePaths.push(path.join(uploadDir, baseName + '.doc'));
                 possiblePaths.push(path.join(uploadDir, baseName + '.txt'));
             }
-            
-            console.log('🔍 Tentando encontrar arquivo...');
-            console.log('   Caminhos possíveis:', possiblePaths);
             
             let filePath = null;
             for (const p of possiblePaths) {
@@ -805,15 +692,9 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
             }
             
             if (!filePath) {
-                console.log('❌ Arquivo não encontrado em nenhum dos caminhos');
                 return res.status(404).json({ 
                     success: false, 
-                    erro: 'Arquivo não encontrado no servidor',
-                    debug: {
-                        arquivo_nome: pedido.arquivo_nome,
-                        arquivo_original: pedido.arquivo_original,
-                        caminhos_tentados: possiblePaths
-                    }
+                    erro: 'Arquivo não encontrado no servidor'
                 });
             }
             
@@ -832,8 +713,6 @@ app.get('/api/pedidos/:id/arquivo', function(req, res) {
             }
             
             var fileName = pedido.arquivo_original || path.basename(filePath);
-            
-            console.log('📤 Enviando arquivo:', fileName, 'Tamanho:', stats.size, 'bytes');
             
             res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Length', stats.size);
@@ -1616,10 +1495,8 @@ initDatabase()
             console.log('📱 APK disponível em: http://localhost:' + PORT + '/facilitaki.apk');
             console.log('\n⚠️ Para atualizar o admin:');
             console.log('   Acesse: http://localhost:' + PORT + '/admin/atualizar-admin');
-            console.log('\n🔍 Rotas de diagnóstico:');
-            console.log('   /admin/ver-arquivos - Ver arquivos na pasta uploads');
-            console.log('   /admin/reparar-arquivos - Reparar nomes de arquivos');
-            console.log('   /admin/criar-pasta-uploads - Criar pasta uploads');
+            console.log('🗄️ Database: Neon PostgreSQL');
+            console.log('🔄 Keep-alive ativo (a cada 3 minutos)');
         });
     })
     .catch(function(err) {
